@@ -5,7 +5,9 @@ import scipy.sparse as sps
 import porepy as pp
 
 # Compute pressure reconstruction
-def subdomain_pressure(grid, data, parameter_keyword, subdomain_variable, nodal_method, p_recons_order):
+def subdomain_pressure(
+    grid, data, parameter_keyword, subdomain_variable, nodal_method, p_recons_order
+):
     """
     Reconstructs subdomain pressures given the nodal method reconstruction and the 
     reconstruction order. By default, it is assumed a conforming P1-reconstruction
@@ -31,14 +33,18 @@ def subdomain_pressure(grid, data, parameter_keyword, subdomain_variable, nodal_
         Coefficients of the reconstructed pressure for each element.
 
     """
-       
+
     # Compute nodal values of the pressure
     if nodal_method == "k-averaging":
-        p_nv = _compute_node_pressure_kav(grid, data, parameter_keyword, subdomain_variable)
+        p_nv = _compute_node_pressure_kav(
+            grid, data, parameter_keyword, subdomain_variable
+        )
     elif nodal_method == "mpfa-inverse":
-        p_nv = _compute_node_pressure_inv(grid, data, parameter_keyword, subdomain_variable)
+        p_nv = _compute_node_pressure_inv(
+            grid, data, parameter_keyword, subdomain_variable
+        )
     else:
-        raise NameError('Nodal reconstruction method not implemented')
+        raise NameError("Nodal reconstruction method not implemented")
 
     # Perform reconstruction for the given reconstruction order
     if p_recons_order == "1":
@@ -47,9 +53,10 @@ def subdomain_pressure(grid, data, parameter_keyword, subdomain_variable, nodal_
         p_cc = data[pp.STATE][subdomain_variable]
         coeffs = _p12_reconstruction(grid, p_nv, p_cc)
     else:
-        raise NameError('Pressure reconstruction order not implemented')
+        raise NameError("Pressure reconstruction order not implemented")
 
     return coeffs
+
 
 #%% Compute nodal values using inverse MPFA
 def _compute_node_pressure_inv(grid, data, parameter_keyword, subdomain_variable):
@@ -73,19 +80,19 @@ def _compute_node_pressure_inv(grid, data, parameter_keyword, subdomain_variable
         Values of the pressure at the grid nodes.
 
     """
-    
+
     # Renaming variables
     g = grid
     d = data
     kw_f = parameter_keyword
     sd_var = subdomain_variable
-    
+
     # Retrieving topological data
     nc = g.num_cells
     nf = g.num_faces
     nn = g.num_nodes
-    
-    # Perform reconstruction 
+
+    # Perform reconstruction
     # NOTE: This is the original implementation of Eirik
     cell_nodes = g.cell_nodes()
     cell_node_volumes = cell_nodes * sps.dia_matrix((g.cell_volumes, 0), (nc, nc))
@@ -93,13 +100,13 @@ def _compute_node_pressure_inv(grid, data, parameter_keyword, subdomain_variable
     cell_nodes_scaled = (
         sps.dia_matrix((1.0 / sum_cell_nodes, 0), (nn, nn)) * cell_node_volumes
     )
- 
+
     # Retrieving numerical fluxes
     if "darcy_flux" in d[pp.PARAMETERS][kw_f]:
         flux = d[pp.PARAMETERS][kw_f]["darcy_flux"]
     else:
         pp.fvutils.compute_darcy_flux(g, keyword=kw_f, data=d)
-        flux = d[pp.PARAMETERS][kw_f]["darcy_flux"]      
+        flux = d[pp.PARAMETERS][kw_f]["darcy_flux"]
     proj_flux = pp.RT0(kw_f).project_flux(g, flux, d)[: g.dim]
 
     loc_grad = np.zeros((g.dim, nc))
@@ -167,12 +174,11 @@ def _compute_node_pressure_kav(grid, data, parameter_keyword, subdomain_variable
     nodal_pressures : NumPy array
         Values of the pressure at the grid nodes.
 
-
     """
-    
-    #TODO: This does not take into account the values of the permeabilities
-    #This must be implemented ASAP
-    
+
+    # TODO: This does not take into account the values of the permeabilities
+    # This must be implemented ASAP
+
     # Renaming variables
     g = grid
     d = data
@@ -235,11 +241,11 @@ def _p1_reconstruction(grid, nodal_pressures):
         Coefficients of the reconstructed pressure for each element of the grid
 
     """
- 
+
     # Renaming variables
     g = grid
     p_nv = nodal_pressures
-       
+
     # TODO: Check what to do here to be consistent
     if g.dim == 0:
         return None
@@ -250,16 +256,16 @@ def _p1_reconstruction(grid, nodal_pressures):
     nodes_coor_cell = np.empty([g.dim, nodes_cell.shape[0], nodes_cell.shape[1]])
     for dim in range(g.dim):
         nodes_coor_cell[dim] = g.nodes[dim][nodes_cell]
-   
+
     # Assembling the local matrix for each cell
     lcl = np.ones(g.num_cells * (g.dim + 1))
     for dim in range(g.dim):
         lcl = np.column_stack([lcl, nodes_coor_cell[dim].flatten()])
     lcl = np.reshape(lcl, [g.num_cells, g.dim + 1, g.dim + 1])
-    
+
     # Looping through each element and inverting the local matrix
     coeffs = np.empty([g.num_cells, g.dim + 1])
-    vertices_pressures = p_nv[nodes_cell] # pressure at the vertices
+    vertices_pressures = p_nv[nodes_cell]  # pressure at the vertices
     for cell in range(g.num_cells):
         inv_local_matrix = np.linalg.inv(lcl[cell])
         vert_press_cell = vertices_pressures[cell]
@@ -295,13 +301,14 @@ def _p12_reconstruction(grid, nodal_pressures, cell_center_pressures):
     -------
     coeffs : NumPy array (cell numbers x (2*g.dim + 1))
         Coefficients of the reconstructed pressure for each element of the grid    
+    
     """
 
     # Renaming variables
     g = grid
     p_nv = nodal_pressures
     p_cc = cell_center_pressures
-    
+
     # TODO: Check what to do here to be consistent
     if g.dim == 0:
         return None
