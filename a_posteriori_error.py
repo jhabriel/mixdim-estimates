@@ -68,15 +68,23 @@ class PosterioriError:
 
     def _rotate_grid(self, g):
         """
-        Rotates grid to account for embedded fractures
+        Rotates grid to account for embedded fractures. 
+        
+        Note that the pressure and flux reconstruction use the rotated grids, 
+        where only the relevant dimensions are taken into account, e.g., a 
+        one-dimensional tilded fracture will be represented by a three-dimensional 
+        grid, where only the first dimension is used.
         
         Parameters
         ----------
-        g (PorePy object): Original grid
+        g : PorePy object
+            Original (unrotated) PorePy grid.
     
         Returns
         -------
-        g_rot (Porepy object): Rotated grid
+        g_rot : Porepy object
+            Rotated PorePy grid.
+            
         """
 
         # Copy grid to keep original one untouched
@@ -98,5 +106,9 @@ class PosterioriError:
             g_rot.face_normals[dim] = face_normals[dim]
             g_rot.face_centers[dim] = face_centers[dim]
             g_rot.nodes[dim] = nodes[dim]
+
+        # Add the rotation matrix and the effective dimensions to rotated grid
+        g_rot.rotation_matrix = R
+        g_rot.effective_dim = dim
 
         return g_rot
