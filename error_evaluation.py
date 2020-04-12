@@ -29,23 +29,29 @@ def diffusive_flux_sd(grid, data, pressure_coeffs, velocity_coeffs):
     None
    
     """
-    
+
     # Get quadpy elements
     quadpy_elements = _get_quadpy_elements(grid)
 
-    # Obtaining the error according to the reconstruction degree 
+    # Obtaining the error according to the reconstruction degree
     if pressure_coeffs.shape[1] == grid.dim + 1:
-        _diffusive_flux_error_sd_p1(grid, data, pressure_coeffs, velocity_coeffs, quadpy_elements)
-    else: 
-        _diffusive_flux_error_sd_p12(grid, data, pressure_coeffs, velocity_coeffs, quadpy_elements)
-    
+        _diffusive_flux_error_sd_p1(
+            grid, data, pressure_coeffs, velocity_coeffs, quadpy_elements
+        )
+    else:
+        _diffusive_flux_error_sd_p12(
+            grid, data, pressure_coeffs, velocity_coeffs, quadpy_elements
+        )
+
     return None
 
 
 #%% Computation of the diffusive flux error for P1,2 elements
-def _diffusive_flux_error_sd_p12(grid, data, pressure_coeffs, velocity_coeffs, quadpy_elements):
+def _diffusive_flux_error_sd_p12(
+    grid, data, pressure_coeffs, velocity_coeffs, quadpy_elements
+):
     """
-    Computes the subdomain's diffusive flux error for P1 pressure reconstruction
+    Computes the subdomain's diffusive flux error for P1,2 pressure reconstruction
 
     Parameters
     ----------
@@ -181,13 +187,15 @@ def _diffusive_flux_error_sd_p12(grid, data, pressure_coeffs, velocity_coeffs, q
     eta_DF = np.abs(int_1 + 2 * int_2 + int_3).flatten()
 
     # Create field in the data dictionary and store the error
-    data[pp.STATE]['error_DF'] = eta_DF
+    data[pp.STATE]["error_DF"] = eta_DF
 
     return None
 
 
 #%% Computation of the diffusive flux error for P1 elements
-def _diffusive_flux_error_sd_p1(grid, data, pressure_coeffs, velocity_coeffs, quadpy_elements):
+def _diffusive_flux_error_sd_p1(
+    grid, data, pressure_coeffs, velocity_coeffs, quadpy_elements
+):
     """
     Computes the subdomain's diffusive flux error for P1 pressure reconstruction
 
@@ -316,7 +324,7 @@ def _diffusive_flux_error_sd_p1(grid, data, pressure_coeffs, velocity_coeffs, qu
     eta_DF = np.abs(int_1 + 2 * int_2 + int_3).flatten()
 
     # Create field in the data dictionary and store the error
-    data[pp.STATE]['error_DF'] = eta_DF
+    data[pp.STATE]["error_DF"] = eta_DF
 
     return None
 

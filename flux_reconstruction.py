@@ -4,6 +4,11 @@ import numpy.matlib as matlib
 import scipy.sparse as sps
 import porepy as pp
 
+# TODO: Include contribution of projected mortar fluxes. This is not yet implemented,
+#       meaning that we're not currently conserving mass.
+#       We might take into account the case of fixed-dimensional grids, and only
+#       include the mortar fluxes if fractures are included in the grid bucket.
+
 
 def subdomain_velocity(grid, data, parameter_keyword):
     """
@@ -55,13 +60,13 @@ def subdomain_velocity(grid, data, parameter_keyword):
         Components of the reconstructed velocities evaluated at the cell centers.
     
     """
-   
-    # Renaming variables 
+
+    # Renaming variables
     g = grid
     d = data
     kw = parameter_keyword
-    coords = g.cell_centers.transpose() # cell centers coordinates
-    
+    coords = g.cell_centers.transpose()  # cell centers coordinates
+
     # Mappings
     cell_faces_map, _, _ = sps.find(g.cell_faces)
     cell_nodes_map, _, _ = sps.find(g.cell_nodes())
@@ -99,7 +104,7 @@ def subdomain_velocity(grid, data, parameter_keyword):
     # errors, but it might be useful for others
     cc_vel = np.zeros([g.num_cells, g.dim])
     for dim in range(g.dim):
-        cc_vel[:, dim] = coeffs[:, 0] * coords[:, dim] + coeffs[:, dim+1]
+        cc_vel[:, dim] = coeffs[:, 0] * coords[:, dim] + coeffs[:, dim + 1]
 
     return coeffs, cc_vel
 
@@ -108,21 +113,19 @@ def _get_opposite_side_nodes(grid):
     """
     Computes opposite side nodes for each face of each cell in the grid
 
-    The ouput is a two-dimensional array, 
-
     Parameters
     ----------
     grid : PorePy object
         Porepy grid object.
 
     Returns
-    ------
+    -------
     opposite_nodes : NumPy array (cell_numbers x (g.dim + 1))
-        Array where the rows represent the cell number, and the columns 
-        represent the opposite side node index of the face.
+        Rows represent the cell number and the columns represent the opposite 
+        side node index of the face.
+    
     """
-    
-    
+
     # Rename variable
     g = grid
 
@@ -147,7 +150,7 @@ def _get_opposite_side_nodes(grid):
 
 def _get_sign_normals(grid):
     """
-    Computes the sign of the face normals for each element in the grid
+    Computes sign of the face normals for each element in the grid
 
     Parameters
     ----------
@@ -161,8 +164,7 @@ def _get_sign_normals(grid):
         A value equal to -1 implies that the sign of the basis needs to be flipped
     
     """
-    
-    
+
     # We have to take care of the sign of the basis functions. The idea
     # is to create an array of signs "sign_normals" that will be multiplying
     # each edge basis function.
@@ -173,7 +175,7 @@ def _get_sign_normals(grid):
 
     # Rename variable
     g = grid
-    
+
     # Faces associated to each cell
     cell_faces_map, _, _ = sps.find(g.cell_faces)
     faces_cell = cell_faces_map.reshape(np.array([g.num_cells, g.dim + 1]))
