@@ -11,14 +11,14 @@ import scipy.sparse as sps
 import porepy as pp
 
 from a_posteriori_error import PosterioriError
-    
+
 #%% Define domain, fracture network, and construct grid bucket
 # Define start and endpoints of the fractures.
 pts = np.array([[0.25, 0.75], [0.25, 0.75]])
 # Connection between the points (that is, the fractures) are specified as a 2 x num_frac array
-connections = np.array([[0],[1]])
+connections = np.array([[0], [1]])
 # Set the domain to the unit square, specified as a dictionary
-domain = {'xmin': 0, 'xmax': 1, 'ymin': 0, 'ymax': 1}
+domain = {"xmin": 0, "xmax": 1, "ymin": 0, "ymax": 1}
 # Define a 2d fracture network
 network_2d = pp.FractureNetwork2d(pts, connections, domain)
 # Plot fracture
@@ -26,7 +26,7 @@ network_2d.plot()
 # Target lengths
 target_h_bound = 0.1
 target_h_fract = 0.05
-mesh_args = {'mesh_size_bound': target_h_bound, 'mesh_size_frac': target_h_fract}
+mesh_args = {"mesh_size_bound": target_h_bound, "mesh_size_frac": target_h_fract}
 # Construct grid bucket
 gb = network_2d.mesh(mesh_args)
 # Retrieve grids
@@ -38,7 +38,7 @@ pp.plot_grid(g_2d, plot_2d=True)
 # If you want to a setup which targets transport or mechanics problem,
 # rather use the keyword 'transport' or 'mechanics'.
 # For other usage, you will need to populate the parameter dictionary manually.
-parameter_keyword = 'flow'
+parameter_keyword = "flow"
 
 # Maximum dimension of grids represented in the grid bucket
 max_dim = gb.dim_max()
@@ -52,13 +52,13 @@ for g, d in gb:
     if g.dim == max_dim:
         kxx = np.ones(g.num_cells)
     else:  # g.dim == 1 or 0; note however that the permeability is not used in 0d domains
-        kxx =  np.ones(g.num_cells)
+        kxx = 5 * np.ones(g.num_cells)
 
     perm = pp.SecondOrderTensor(kxx)
 
     # Create a dictionary to override the default parameters.
     # NB: The permeability is associated wiht the keyword second_order_tensor.
-    specified_parameters = {'second_order_tensor': perm}
+    specified_parameters = {"second_order_tensor": perm}
 
     # Add boundary conditions for 2d problems
     if g.dim == max_dim:
@@ -73,17 +73,17 @@ for g, d in gb:
 
         # Define BoundaryCondition object
         bc_faces = np.hstack((left, right))
-        bc_type = bc_faces.size * ['dir']
+        bc_type = bc_faces.size * ["dir"]
         bc = pp.BoundaryCondition(g, faces=bc_faces, cond=bc_type)
 
         # Register the assigned value
-        specified_parameters['bc'] = bc
+        specified_parameters["bc"] = bc
 
         # Alse set the values - specified as vector of size g.num_faces
         bc_values = np.zeros(g.num_faces)
         bc_values[left] = 1
         bc_values[right] = 0
-        specified_parameters['bc_values'] = bc_values
+        specified_parameters["bc_values"] = bc_values
 
     # On 1d and 0d problems we set no boundary condition - in effect assigning Neumann conditions
 
@@ -97,7 +97,7 @@ for g, d in gb:
     # for one of the grids.
     # Note the nested dictionaries.
     if g.dim == max_dim:
-        print('The assigned parameters for the 2d grid are')
+        print("The assigned parameters for the 2d grid are")
         print(d[pp.PARAMETERS][parameter_keyword].keys())
 
 # Next loop over the edges (interfaces) in the
@@ -114,7 +114,7 @@ for e, d in gb.edges():
 
 
 #%% Primary variables and discretizations
-#We will use a multi-point flux approximation method on all subdomains
+# We will use a multi-point flux approximation method on all subdomains
 # Note that we need to provide the same keyword that we used when setting the parameters on the subdomain.
 # If we change to pp.Mpfa(keyword='foo'), the discretization will not get access to the parameters it needs
 subdomain_discretization = pp.Mpfa(keyword=parameter_keyword)
@@ -122,22 +122,24 @@ subdomain_discretization = pp.Mpfa(keyword=parameter_keyword)
 # On all subdomains, variables are identified by a string.
 # This need not be the same on all subdomains, even if the governing equations are the same,
 # but here we go for the simple option.
-subdomain_variable = 'pressure'
+subdomain_variable = "pressure"
 
 # Identifier of the discretization operator for each term.
 # In this case, this is seemingly too complex, but for, say, an advection-diffusion problem
 # we would need two discretizaiton objects (advection, diffusion) and one keyword
 # per operator
-subdomain_operator_keyword = 'diffusion'
+subdomain_operator_keyword = "diffusion"
 
 # Specify discertization objects on the interfaces / edges
 # Again give the parameter keyword, and also the discretizations used on the two neighboring
 # subdomains (this is needed to discretize the coupling terms)
-edge_discretization = pp.RobinCoupling(parameter_keyword, subdomain_discretization, subdomain_discretization)
+edge_discretization = pp.RobinCoupling(
+    parameter_keyword, subdomain_discretization, subdomain_discretization
+)
 # Variable name for the interface variable
-edge_variable = 'interface_flux'
+edge_variable = "interface_flux"
 # ... and we need a name for the discretization opertaor for each coupling term
-coupling_operator_keyword = 'interface_diffusion'
+coupling_operator_keyword = "interface_diffusion"
 
 # Loop over all subdomains in the GridBucket, assign parameters
 # Note that the data is stored in sub-dictionaries
@@ -150,7 +152,9 @@ for g, d in gb:
     # If the discretization is composed of several terms, they can be assigned
     # by multiple entries in the inner dictionary, e.g.
     #  {operator_keyword_1: method_1, operator_keyword_2: method_2, ...}
-    d[pp.DISCRETIZATION] = {subdomain_variable: {subdomain_operator_keyword: subdomain_discretization}}
+    d[pp.DISCRETIZATION] = {
+        subdomain_variable: {subdomain_operator_keyword: subdomain_discretization}
+    }
 
 # Next, loop over the edges
 for e, d in gb.edges():
@@ -195,11 +199,12 @@ assembler.distribute_variable(sol)
 
 #%% Obtaining the errors
 # The errors are stored in the dictionaries under pp.STATE
-PosterioriError(gb, parameter_keyword, subdomain_variable)
+PosterioriError(
+    gb, parameter_keyword, subdomain_variable, nodal_method="k-averaging", p_order="1"
+)
 
 #%% Write to vtk. Create a new exporter, to avoid interferring with the above grid illustration.
-exporter = pp.Exporter(gb, 'flow', folder_name="md_flow")
+exporter = pp.Exporter(gb, "flow", folder_name="md_flow")
 exporter.write_vtk()
 # Note that we only export the subdomain variable, not the one on the edge
-exporter.write_vtk([subdomain_variable, 'error_DF'])
-
+exporter.write_vtk([subdomain_variable, "error_DF"])

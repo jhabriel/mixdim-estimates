@@ -176,9 +176,6 @@ def _compute_node_pressure_kav(grid, data, parameter_keyword, subdomain_variable
 
     """
 
-    # TODO: This does not take into account the values of the permeabilities
-    # This must be implemented ASAP
-
     # Renaming variables
     g = grid
     d = data
@@ -189,14 +186,32 @@ def _compute_node_pressure_kav(grid, data, parameter_keyword, subdomain_variable
     nn = g.num_nodes
     nf = g.num_faces
 
-    # Performing reconstuction
-    p_cc = d[pp.STATE][sd_var]
-    p_cc_broad = matlib.repmat(p_cc, nn, 1)
-    vol_broad = g.cell_nodes().toarray() * matlib.repmat(g.cell_volumes, nn, 1)
-    num = np.sum(p_cc_broad * vol_broad, axis=1)
-    den = np.sum(vol_broad, axis=1)
-    nodal_pressures = num / den
+    # Retrieve permeability values
+    k = d[pp.PARAMETERS][kw_f]["second_order_tensor"].values
+    # TODO: For the moment, we assume kxx = kyy = kzz on each cell
+    # It would be nice to add the possibility to account for anisotropy
+    k_broad = matlib.repmat(k[0][0], nn, 1)  # broaden array with number of nodes
 
+    # Retrieve cell-centered pressures
+    p_cc = d[pp.STATE][sd_var]
+    p_cc_broad = matlib.repmat(p_cc, nn, 1)  # broaden array with number of nodes
+
+    # Create array of cell volumes. Note that the only the volumes of the cells
+    # that belongs to each nodal patch are nonzero
+    vol_broad = np.abs(g.cell_nodes().toarray() * matlib.repmat(g.cell_volumes, nn, 1))
+
+    # Obtain nodal pressures applying the following formula on each node w:
+    #
+    #   pn_w = \sum_{i=1}^m (pc_i k_i |V_i|)/(k_i |V_i|),
+    #
+    # where i is the cell index, m is the number of cells sharing the common
+    # node, pc_i is the cell-centered pressure, k_i is the cell permeability,
+    # and |V_i| is the cell volume. Note that this
+    numerator = np.sum(p_cc_broad * k_broad * vol_broad, axis=1)
+    denoninator = np.sum(k_broad * vol_broad, axis=1)
+    nodal_pressures = numerator / denoninator
+
+    # Deal with Dirichlet and Neumann boundary conditions
     bc = d[pp.PARAMETERS][kw_f]["bc"]
     bc_values = d[pp.PARAMETERS][kw_f]["bc_values"]
     external_dirichlet_boundary = np.logical_and(
