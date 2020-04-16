@@ -11,28 +11,98 @@ import scipy.sparse as sps
 import porepy as pp
 
 from a_posteriori_error import PosterioriError
+from flux_reconstruction import _get_sign_normals
+
+
+def fixed_dimensional_grid():
+    # Set the domain to the unit square, specified as a dictionary
+    domain = {"xmin": 0, "xmax": 1, "ymin": 0, "ymax": 1}
+    # Define a 2d fracture network
+    # network_2d = pp.FractureNetwork2d(pts, connections, domain)
+    network_2d = pp.FractureNetwork2d(None, None, domain)
+    # Plot fracture
+    network_2d.plot()
+    # Target lengths
+    target_h_bound = 0.5
+    target_h_fract = 0.5
+    mesh_args = {"mesh_size_bound": target_h_bound, "mesh_size_frac": target_h_fract}
+    # Construct grid bucket
+    gb = network_2d.mesh(mesh_args)
+
+    return gb
+
+
+def single_fracture():
+    pts = np.array([[0.5, 0.5], [0.4, 0.6]])
+    # Connection between the points (that is, the fractures) are specified as a 2 x num_frac array
+    connections = np.array([[0], [1]])
+    # Set the domain to the unit square, specified as a dictionary
+    domain = {"xmin": 0, "xmax": 1, "ymin": 0, "ymax": 1}
+    # Define a 2d fracture network
+    # network_2d = pp.FractureNetwork2d(pts, connections, domain)
+    network_2d = pp.FractureNetwork2d(pts, connections, domain)
+    # Plot fracture
+    network_2d.plot()
+    # Target lengths
+    target_h_bound = 0.5
+    target_h_fract = 0.5
+    mesh_args = {"mesh_size_bound": target_h_bound, "mesh_size_frac": target_h_fract}
+    # Construct grid bucket
+    gb = network_2d.mesh(mesh_args)
+
+    return gb
+
+
+def double_fracture():
+    pts = np.array([[0.4, 0.4, 0.6, 0.6], [0.4, 0.6, 0.4, 0.6]])
+    # Connection between the points (that is, the fractures) are specified as a 2 x num_frac array
+    connections = np.array([[0, 2], [1, 3]])
+    # Set the domain to the unit square, specified as a dictionary
+    domain = {"xmin": 0, "xmax": 1, "ymin": 0, "ymax": 1}
+    # Define a 2d fracture network
+    # network_2d = pp.FractureNetwork2d(pts, connections, domain)
+    network_2d = pp.FractureNetwork2d(pts, connections, domain)
+    # Plot fracture
+    network_2d.plot()
+    # Target lengths
+    target_h_bound = 0.5
+    target_h_fract = 0.5
+    mesh_args = {"mesh_size_bound": target_h_bound, "mesh_size_frac": target_h_fract}
+    # Construct grid bucket
+    gb = network_2d.mesh(mesh_args)
+
+    return gb
+
+
+def benchmark():
+
+    # Target lengths
+    target_h_fract = 0.5
+    mesh_args = {"mesh_size_frac": target_h_fract}
+
+    # Call from standard grids
+    gb = pp.grid_buckets_2d.benchmark_regular(mesh_args)
+
+    return gb
+
 
 #%% Define domain, fracture network, and construct grid bucket
-# Define start and endpoints of the fractures.
-pts = np.array([[0.25, 0.75], [0.25, 0.75]])
-# Connection between the points (that is, the fractures) are specified as a 2 x num_frac array
-connections = np.array([[0], [1]])
-# Set the domain to the unit square, specified as a dictionary
-domain = {"xmin": 0, "xmax": 1, "ymin": 0, "ymax": 1}
-# Define a 2d fracture network
-network_2d = pp.FractureNetwork2d(pts, connections, domain)
-# Plot fracture
-network_2d.plot()
-# Target lengths
-target_h_bound = 0.1
-target_h_fract = 0.05
-mesh_args = {"mesh_size_bound": target_h_bound, "mesh_size_frac": target_h_fract}
-# Construct grid bucket
-gb = network_2d.mesh(mesh_args)
-# Retrieve grids
-g_2d = gb.grids_of_dimension(2)[0]
-g_1d = gb.grids_of_dimension(1)[0]
-pp.plot_grid(g_2d, plot_2d=True)
+unfractured_domain = False
+single_frac = False
+double_frac = False
+benchmark_frac = True
+
+if unfractured_domain:
+    gb = fixed_dimensional_grid()
+elif single_frac:
+    gb = single_fracture()
+elif double_frac:
+    gb = double_fracture()
+elif benchmark_frac:
+    gb, _ = benchmark()
+
+pp.plot_grid(gb, alpha=0.05, info="F", size=[20, 20])
+pp.save_img("grid.pdf", gb, info="fc", alpha=0.1, figsize=(20, 20))
 
 #%%  Parameter assignment
 # If you want to a setup which targets transport or mechanics problem,
@@ -105,7 +175,7 @@ for e, d in gb.edges():
     # On edges in the GridBucket, there is currently no methods for default initialization.
 
     # Set the normal diffusivity parameter (the permeability-like transfer coefficient)
-    data = {"normal_diffusivity": 1}
+    data = {"normal_diffusivity": 0.01}
 
     # Add parameters: We again use keywords to identify sets of parameters.
     #
@@ -197,6 +267,9 @@ sol = sps.linalg.spsolve(A, b)
 # The solution vector is a global vector. Distribute it to the local grids and interfaces
 assembler.distribute_variable(sol)
 
+#%% Compute Darcy Fluxes
+pp.fvutils.compute_darcy_flux(gb, lam_name=edge_variable)
+
 #%% Obtaining the errors
 # The errors are stored in the dictionaries under pp.STATE
 PosterioriError(
@@ -208,3 +281,33 @@ exporter = pp.Exporter(gb, "flow", folder_name="md_flow")
 exporter.write_vtk()
 # Note that we only export the subdomain variable, not the one on the edge
 exporter.write_vtk([subdomain_variable, "error_DF"])
+
+
+# d_1d = gb.node_props(g_1d)
+# d_2d = gb.node_props(g_2d)
+# d_edge = gb.edge_props([g_1d, g_2d])
+# g_edge = d_edge["mortar_grid"]
+# mortar_flux = d_edge[pp.STATE]["interface_flux"]
+# darcy_flux  = d_2d[pp.PARAMETERS][parameter_keyword]["darcy_flux"]
+# projector = g_edge.mortar_to_master_int().toarray()
+
+# # To get the full fluxes
+# mortar_to_master_faces, _, _ = sps.find(g_edge.mortar_to_master_int())
+# mortar_contribution = np.zeros(g_2d.num_faces)
+# mortar_contribution[mortar_to_master_faces] = mortar_flux
+# full_flux = darcy_flux + mortar_contribution
+
+
+# #%% Testiing around...
+# g = g_2d
+# # Cell-wise arrays
+# cell_faces_map, _, _ = sps.find(g.cell_faces)
+# cell_nodes_map, _, _ = sps.find(g.cell_nodes())
+# faces_cell = cell_faces_map.reshape(np.array([g.num_cells, g.dim + 1]))
+# nodes_cell = cell_nodes_map.reshape(np.array([g.num_cells, g.dim + 1]))
+# #opp_nodes_cell = _get_opposite_side_nodes(g)
+# sign_normals_cell = _get_sign_normals(g)
+# vol_cell = g.cell_volumes
+# pp.fvutils.compute_darcy_flux(g, data=d)
+# df = d[pp.PARAMETERS][parameter_keyword]["darcy_flux"]
+# df_per_cell = df[faces_cell] * sign_normals_cell
