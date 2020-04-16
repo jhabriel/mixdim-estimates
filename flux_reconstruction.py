@@ -10,7 +10,7 @@ import porepy as pp
 #       include the mortar fluxes if fractures are included in the grid bucket.
 
 
-def subdomain_velocity(grid, data, parameter_keyword):
+def subdomain_velocity(grid_bucket, grid, unrot_grid, data, parameter_keyword):
     """
     Computes flux reconstruction using RT0 extension of normal fluxes
 
@@ -60,8 +60,13 @@ def subdomain_velocity(grid, data, parameter_keyword):
         Components of the reconstructed velocities evaluated at the cell centers.
     
     """
-
+    
+    #NOTE: When computing the Darcy fluxes, this must be done using the 
+    # grid bucket, not the indidual grids. This gives the right values of
+    # darcy fluxes.
+    
     # Renaming variables
+    gb = grid_bucket
     g = grid
     d = data
     kw = parameter_keyword
@@ -82,21 +87,30 @@ def subdomain_velocity(grid, data, parameter_keyword):
     for dim in range(g.dim):
         opp_nodes_coor_cell[dim] = g.nodes[dim][opp_nodes_cell]
 
-    # Retrieving numerical fluxes
+    # Retrieving subdomain fluxes
     if "darcy_flux" in d[pp.PARAMETERS][kw]:
-        fluxes = d[pp.PARAMETERS][kw]["darcy_flux"]
+        darcy_flux = d[pp.PARAMETERS][kw]["darcy_flux"]
     else:
-        pp.fvutils.compute_darcy_flux(g, keyword=kw, data=d)
-        fluxes = d[pp.PARAMETERS][kw]["darcy_flux"]
-    fluxes_cell = fluxes[faces_cell]
+        #TODO: Ask for edge_variable, i.e., lam_name keyword        
+        pp.fvutils.compute_darcy_flux(gb, lam_name="interface_flux")
+    
+    # Retrieving interface fluxes
+    mortar_flux = _get_interface_fluxes(gb, unrot_grid)
+        
+    # The full flux is composed by the darcy fluxes plus the projection
+    # of the adjacent lower-dimensional interface
+    # Note that we do not need to multiply the mortar fluxes by the sign of the
+    # normals. I'm not entirely sure about why, but it might be related to the
+    # sign convention of the mortar fluxes w.r.t. higher-dimensional grid
+    full_flux_cell = darcy_flux[faces_cell]*sign_normals_cell + mortar_flux[faces_cell]
 
     # Determining coefficients
     coeffs = np.empty([g.num_cells, g.dim + 1])
     alpha = 1 / (g.dim * vol_cell)
-    coeffs[:, 0] = alpha * np.sum(sign_normals_cell * fluxes_cell, axis=1)
+    coeffs[:, 0] = alpha * np.sum(full_flux_cell, axis=1)
     for dim in range(g.dim):
         coeffs[:, dim + 1] = -alpha * np.sum(
-            (sign_normals_cell * fluxes_cell * opp_nodes_coor_cell[dim]), axis=1
+            (full_flux_cell * opp_nodes_coor_cell[dim]), axis=1
         )
 
     # Evaluating velocities at the cell centers
@@ -107,6 +121,82 @@ def subdomain_velocity(grid, data, parameter_keyword):
         cc_vel[:, dim] = coeffs[:, 0] * coords[:, dim] + coeffs[:, dim + 1]
 
     return coeffs, cc_vel
+
+def interface_flux(grid_low, mortar_grid, data, parameter_keyword):
+    """
+    Computes reconstruction of mortar fluxes using P1 elements
+    
+
+    Parameters
+    ----------
+    grid_low : PorePy object
+        PorePy (subdomain) grid object. Note that this is the grid corresponding 
+        to the lower-dimensional neighboring subdomain, i.e., the slave.
+    mortar_grid : PorePy object
+        PorePy mortar grid object.
+    data : dictionary
+        Dictionary corresponding to the mortar grid.
+    parameter_keyword : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    None.
+
+    """
+    
+    pass
+
+def _get_interface_fluxes(grid_bucket, grid):
+    """
+    
+
+    Parameters
+    ----------
+    grid_bucket : TYPE
+        DESCRIPTION.
+    grid : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    mortar_contribution : TYPE
+        DESCRIPTION.
+
+    """
+
+    # Renaming variables
+    gb = grid_bucket
+    g = grid
+    
+    # Initialize mortar contribution array
+    mortar_contribution = np.zeros(g.num_faces)
+    
+    # Obtain lower dimensional neighboring nodes
+    # TODO: Check what happens in the case of multiple lower dimensional
+    # grids
+    g_lows = gb.node_neighbors(g, only_lower=True)
+
+    # We loop through all the lower dimensional adjacent interfaces to 
+    # the higher-dimensional map the mortar fluxes to the higher-dimensional
+    # subdomain
+    for g_low in g_lows:
+        
+        # Retrieve the dictionary and mortar grid of the corresponding edge
+        d_edge = gb.edge_props([g_low, g])
+        g_mortar = d_edge["mortar_grid"]
+        
+        # Obtain faces of the higher-dimesnional grid to which the mortar fluxes
+        # will be mapped to
+        mortar_to_master_faces, _, _ = sps.find(g_mortar.mortar_to_master_int())
+        
+        # Retrieve mortar fluxes
+        mortar_flux = d_edge[pp.STATE]["interface_flux"]
+
+        # Obtain mortar flux contribution associated to the individual interface
+        mortar_contribution[mortar_to_master_faces] += mortar_flux
+
+    return mortar_contribution
 
 
 def _get_opposite_side_nodes(grid):
