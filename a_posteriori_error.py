@@ -48,22 +48,37 @@ class PosterioriError:
 
         # Compute the errors on the subdomains by looping through the nodes
         for g, d in self.gb:
+            
+            if g.dim > 0 :
 
-            # Rotate grid to reference coordinate system
-            g_rot = self._rotate_grid(g)
-            # Get reconstructed pressure coefficients
-            p_coeffs = pressure_reconstruction.subdomain_pressure(
-                g_rot, d, self.kw, self.sdv, nodal_method, p_order
-            )
-            # Get reconstructed velocity coefficients
-            v_coeffs, _ = flux_reconstruction.subdomain_velocity(g_rot, d, self.kw)
-
-            # Compute different errors
-            error_evaluation.diffusive_flux_sd(g_rot, d, p_coeffs, v_coeffs)
+                # Rotate grid to reference coordinate system
+                g_rot = self._rotate_grid(g)
+                # Get reconstructed pressure coefficients
+                p_coeffs = pressure_reconstruction.subdomain_pressure(
+                    g_rot, d, self.kw, self.sdv, nodal_method, p_order
+                )
+                # Get reconstructed velocity coefficients
+                v_coeffs, _ = flux_reconstruction.subdomain_velocity(self.gb, g_rot, g,  d, self.kw)
+    
+                # Compute different errors
+                error_evaluation.diffusive_flux_sd(g_rot, d, p_coeffs, v_coeffs)
 
         # Compute the errors on the interfaces by looping through the edges
         for e, d in self.gb.edges():
-            # TODO: Calculate errors in the interfaces
+         
+            # # Retrieve neighboring grids and mortar grid   
+            # g_low, g_high = self.gb.nodes_of_edge(e)
+            # mortar_grid = d["mortar_grid"]
+            
+            # # We assume that the lower dimensional grid coincides geometrically
+            # # with the mortar grid. Hence, we rotate the g_low
+            # glow_rot = self.rotate(g_low)
+            
+            # # Get reconstructed interface fluxes
+            # lambda_coeffs = flux_reconstruction.interface_flux(glow_rot, mortar_grid, d, self.kw)
+            
+            
+            # # TODO: Calculate errors in the interfaces
             pass
 
     def _rotate_grid(self, g):
@@ -109,6 +124,6 @@ class PosterioriError:
 
         # Add the rotation matrix and the effective dimensions to rotated grid
         g_rot.rotation_matrix = R
-        g_rot.effective_dim = dim
+        #g_rot.effective_dim = dim
 
-        return g_rot
+        return g_rot 
