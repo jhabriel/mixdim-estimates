@@ -124,6 +124,6 @@ class PosterioriError:
 
         # Add the rotation matrix and the effective dimensions to rotated grid
         g_rot.rotation_matrix = R
-        g_rot.effective_dim = dim
+        #g_rot.effective_dim = dim
 
-        return g_rot
+        return g_rot 

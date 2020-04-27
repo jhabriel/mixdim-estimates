@@ -77,6 +77,10 @@ def _diffusive_flux_error_sd_p12(
     p_coeffs = pressure_coeffs
     q_coeffs = velocity_coeffs
     elements = quadpy_elements
+    
+    # Reshape elements for the 1d-case
+    if g.dim == 1:
+        elements = elements.reshape(g.dim + 1, g.num_cells)
 
     # Declaring integration methods
     if g.dim == 1:
@@ -223,6 +227,10 @@ def _diffusive_flux_error_sd_p1(
     p_coeffs = pressure_coeffs
     q_coeffs = velocity_coeffs
     elements = quadpy_elements
+    
+    # Reshape elements for the 1d-case
+    if g.dim == 1:
+        elements = elements.reshape(g.dim + 1, g.num_cells)
 
     # Declaring integration methods
     if g.dim == 1:

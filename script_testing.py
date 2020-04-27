@@ -7,12 +7,61 @@ Created on Sun Apr  5 03:32:13 2020
 """
 
 import numpy as np
+import numpy.matlib as matlib
 import scipy.sparse as sps
 import porepy as pp
+import quadpy as qp
 
 from a_posteriori_error import PosterioriError
 from flux_reconstruction import _get_sign_normals
+from error_evaluation import _get_quadpy_elements
 
+def rotate_grid(g):
+        """
+        Rotates grid to account for embedded fractures. 
+        
+        Note that the pressure and flux reconstruction use the rotated grids, 
+        where only the relevant dimensions are taken into account, e.g., a 
+        one-dimensional tilded fracture will be represented by a three-dimensional 
+        grid, where only the first dimension is used.
+        
+        Parameters
+        ----------
+        g : PorePy object
+            Original (unrotated) PorePy grid.
+    
+        Returns
+        -------
+        g_rot : Porepy object
+            Rotated PorePy grid.
+            
+        """
+
+        # Copy grid to keep original one untouched
+        g_rot = g.copy()
+
+        # Rotate grid
+        (
+            cell_centers,
+            face_normals,
+            face_centers,
+            R,
+            dim,
+            nodes,
+        ) = pp.map_geometry.map_grid(g_rot)
+
+        # Update rotated fields in the relevant dimension
+        for dim in range(g.dim):
+            g_rot.cell_centers[dim] = cell_centers[dim]
+            g_rot.face_normals[dim] = face_normals[dim]
+            g_rot.face_centers[dim] = face_centers[dim]
+            g_rot.nodes[dim] = nodes[dim]
+
+        # Add the rotation matrix and the effective dimensions to rotated grid
+        g_rot.rotation_matrix = R
+        g_rot.effective_dim = dim
+
+        return g_rot 
 
 def fixed_dimensional_grid():
     # Set the domain to the unit square, specified as a dictionary
@@ -33,7 +82,7 @@ def fixed_dimensional_grid():
 
 
 def single_fracture():
-    pts = np.array([[0.5, 0.5], [0.4, 0.6]])
+    pts = np.array([[0.5, 0.5], [0.25, 0.75]])
     # Connection between the points (that is, the fractures) are specified as a 2 x num_frac array
     connections = np.array([[0], [1]])
     # Set the domain to the unit square, specified as a dictionary
@@ -44,8 +93,8 @@ def single_fracture():
     # Plot fracture
     network_2d.plot()
     # Target lengths
-    target_h_bound = 0.5
-    target_h_fract = 0.5
+    target_h_bound = 0.25
+    target_h_fract = 0.25
     mesh_args = {"mesh_size_bound": target_h_bound, "mesh_size_frac": target_h_fract}
     # Construct grid bucket
     gb = network_2d.mesh(mesh_args)
@@ -65,11 +114,36 @@ def double_fracture():
     # Plot fracture
     network_2d.plot()
     # Target lengths
-    target_h_bound = 0.5
-    target_h_fract = 0.5
+    target_h_bound = 0.1
+    target_h_fract = 0.005
     mesh_args = {"mesh_size_bound": target_h_bound, "mesh_size_frac": target_h_fract}
     # Construct grid bucket
     gb = network_2d.mesh(mesh_args)
+
+    return gb
+
+def two_intersecting():
+
+    # Target lengths
+    target_h_bound = 0.5
+    target_h_fract = 0.025
+    mesh_args = {"mesh_size_bound": target_h_bound, "mesh_size_frac": target_h_fract}
+
+    # Call from standard grids
+    gb = pp.grid_buckets_2d.two_intersecting(mesh_args)
+
+    return gb
+
+def seven_fractures():
+    
+    # Target lengths
+    target_h_bound = 0.0125
+    target_h_fract = 0.0125
+    mesh_args = {"mesh_size_frac": target_h_fract, "mesh_size_bound": target_h_bound}
+    #mesh_args = {"mesh_size_frac": target_h_fract}
+
+    # Call from standard grids
+    gb, _ = pp.grid_buckets_2d.seven_fractures_one_L_intersection(mesh_args)
 
     return gb
 
@@ -77,11 +151,12 @@ def double_fracture():
 def benchmark():
 
     # Target lengths
-    target_h_fract = 0.5
-    mesh_args = {"mesh_size_frac": target_h_fract}
+    target_h_bound = 0.125
+    target_h_fract = 0.125
+    mesh_args = {"mesh_size_frac": target_h_fract, "mesh_size_bound": target_h_bound}
 
     # Call from standard grids
-    gb = pp.grid_buckets_2d.benchmark_regular(mesh_args)
+    gb, _ = pp.grid_buckets_2d.benchmark_regular(mesh_args)
 
     return gb
 
@@ -90,7 +165,10 @@ def benchmark():
 unfractured_domain = False
 single_frac = False
 double_frac = False
-benchmark_frac = True
+two_intersec_frac = False
+seven_frac = True
+benchmark_frac = False
+
 
 if unfractured_domain:
     gb = fixed_dimensional_grid()
@@ -98,11 +176,15 @@ elif single_frac:
     gb = single_fracture()
 elif double_frac:
     gb = double_fracture()
+elif two_intersec_frac:
+    gb = two_intersecting()
+elif seven_frac:
+    gb = seven_fractures()
 elif benchmark_frac:
-    gb, _ = benchmark()
+    gb = benchmark()
 
-pp.plot_grid(gb, alpha=0.05, info="F", size=[20, 20])
-pp.save_img("grid.pdf", gb, info="fc", alpha=0.1, figsize=(20, 20))
+#pp.plot_grid(gb, alpha=0.05, info="FC", size=[20, 20])
+#pp.save_img("grid.pdf", gb, info="fc", alpha=0.1, figsize=(20, 20))
 
 #%%  Parameter assignment
 # If you want to a setup which targets transport or mechanics problem,
@@ -122,7 +204,7 @@ for g, d in gb:
     if g.dim == max_dim:
         kxx = np.ones(g.num_cells)
     else:  # g.dim == 1 or 0; note however that the permeability is not used in 0d domains
-        kxx = 5 * np.ones(g.num_cells)
+        kxx = np.ones(g.num_cells)
 
     perm = pp.SecondOrderTensor(kxx)
 
@@ -135,8 +217,9 @@ for g, d in gb:
         # Dirichlet conditions on top and bottom
         # Note that the y-coordinates of the face centers are stored in the
         # second row (0-offset) of g.face_centers
+        bbox = gb.bounding_box()
         left = np.where(np.abs(g.face_centers[0]) < 1e-5)[0]
-        right = np.where(np.abs(g.face_centers[0] - 1) < 1e-5)[0]
+        right = np.where(np.abs(g.face_centers[0] - bbox[1][0]) < 1e-5)[0]
 
         # On the left and right boundaries, we set homogeneous Neumann conditions
         # Neumann conditions are set by default, so there is no need to do anything
@@ -175,7 +258,7 @@ for e, d in gb.edges():
     # On edges in the GridBucket, there is currently no methods for default initialization.
 
     # Set the normal diffusivity parameter (the permeability-like transfer coefficient)
-    data = {"normal_diffusivity": 0.01}
+    data = {"normal_diffusivity": 1}
 
     # Add parameters: We again use keywords to identify sets of parameters.
     #
@@ -206,6 +289,7 @@ subdomain_operator_keyword = "diffusion"
 edge_discretization = pp.RobinCoupling(
     parameter_keyword, subdomain_discretization, subdomain_discretization
 )
+#edge_discretization = pp.FluxPressureContinuity(parameter_keyword, subdomain_discretization)
 # Variable name for the interface variable
 edge_variable = "interface_flux"
 # ... and we need a name for the discretization opertaor for each coupling term
@@ -273,7 +357,7 @@ pp.fvutils.compute_darcy_flux(gb, lam_name=edge_variable)
 #%% Obtaining the errors
 # The errors are stored in the dictionaries under pp.STATE
 PosterioriError(
-    gb, parameter_keyword, subdomain_variable, nodal_method="k-averaging", p_order="1"
+    gb, parameter_keyword, subdomain_variable, nodal_method="mpfa-inverse", p_order="1"
 )
 
 #%% Write to vtk. Create a new exporter, to avoid interferring with the above grid illustration.
@@ -283,31 +367,18 @@ exporter.write_vtk()
 exporter.write_vtk([subdomain_variable, "error_DF"])
 
 
-# d_1d = gb.node_props(g_1d)
-# d_2d = gb.node_props(g_2d)
-# d_edge = gb.edge_props([g_1d, g_2d])
-# g_edge = d_edge["mortar_grid"]
-# mortar_flux = d_edge[pp.STATE]["interface_flux"]
-# darcy_flux  = d_2d[pp.PARAMETERS][parameter_keyword]["darcy_flux"]
-# projector = g_edge.mortar_to_master_int().toarray()
+#%% Get global error
 
-# # To get the full fluxes
-# mortar_to_master_faces, _, _ = sps.find(g_edge.mortar_to_master_int())
-# mortar_contribution = np.zeros(g_2d.num_faces)
-# mortar_contribution[mortar_to_master_faces] = mortar_flux
-# full_flux = darcy_flux + mortar_contribution
+global_error = 0
+
+for g, d in gb:
+    if g.dim > 0:
+        global_error += d[pp.STATE]["error_DF"].sum()
+
+print("The global error is:", global_error)
 
 
-# #%% Testiing around...
-# g = g_2d
-# # Cell-wise arrays
-# cell_faces_map, _, _ = sps.find(g.cell_faces)
-# cell_nodes_map, _, _ = sps.find(g.cell_nodes())
-# faces_cell = cell_faces_map.reshape(np.array([g.num_cells, g.dim + 1]))
-# nodes_cell = cell_nodes_map.reshape(np.array([g.num_cells, g.dim + 1]))
-# #opp_nodes_cell = _get_opposite_side_nodes(g)
-# sign_normals_cell = _get_sign_normals(g)
-# vol_cell = g.cell_volumes
-# pp.fvutils.compute_darcy_flux(g, data=d)
-# df = d[pp.PARAMETERS][parameter_keyword]["darcy_flux"]
-# df_per_cell = df[faces_cell] * sign_normals_cell
+
+
+
+
