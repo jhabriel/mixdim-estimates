@@ -12,56 +12,10 @@ import scipy.sparse as sps
 import porepy as pp
 import quadpy as qp
 
-from a_posteriori_error import PosterioriError
+from a_posteriori_error import estimate_error, compute_global_error, compute_subdomain_error
 from flux_reconstruction import _get_sign_normals
 from error_evaluation import _get_quadpy_elements
 
-def rotate_grid(g):
-        """
-        Rotates grid to account for embedded fractures. 
-        
-        Note that the pressure and flux reconstruction use the rotated grids, 
-        where only the relevant dimensions are taken into account, e.g., a 
-        one-dimensional tilded fracture will be represented by a three-dimensional 
-        grid, where only the first dimension is used.
-        
-        Parameters
-        ----------
-        g : PorePy object
-            Original (unrotated) PorePy grid.
-    
-        Returns
-        -------
-        g_rot : Porepy object
-            Rotated PorePy grid.
-            
-        """
-
-        # Copy grid to keep original one untouched
-        g_rot = g.copy()
-
-        # Rotate grid
-        (
-            cell_centers,
-            face_normals,
-            face_centers,
-            R,
-            dim,
-            nodes,
-        ) = pp.map_geometry.map_grid(g_rot)
-
-        # Update rotated fields in the relevant dimension
-        for dim in range(g.dim):
-            g_rot.cell_centers[dim] = cell_centers[dim]
-            g_rot.face_normals[dim] = face_normals[dim]
-            g_rot.face_centers[dim] = face_centers[dim]
-            g_rot.nodes[dim] = nodes[dim]
-
-        # Add the rotation matrix and the effective dimensions to rotated grid
-        g_rot.rotation_matrix = R
-        g_rot.effective_dim = dim
-
-        return g_rot 
 
 def fixed_dimensional_grid():
     # Set the domain to the unit square, specified as a dictionary
@@ -72,8 +26,8 @@ def fixed_dimensional_grid():
     # Plot fracture
     network_2d.plot()
     # Target lengths
-    target_h_bound = 0.5
-    target_h_fract = 0.5
+    target_h_bound = 0.1
+    target_h_fract = 0.1
     mesh_args = {"mesh_size_bound": target_h_bound, "mesh_size_frac": target_h_fract}
     # Construct grid bucket
     gb = network_2d.mesh(mesh_args)
@@ -93,8 +47,8 @@ def single_fracture():
     # Plot fracture
     network_2d.plot()
     # Target lengths
-    target_h_bound = 0.25
-    target_h_fract = 0.25
+    target_h_bound = 0.02
+    target_h_fract = 0.02
     mesh_args = {"mesh_size_bound": target_h_bound, "mesh_size_frac": target_h_fract}
     # Construct grid bucket
     gb = network_2d.mesh(mesh_args)
@@ -122,6 +76,7 @@ def double_fracture():
 
     return gb
 
+
 def two_intersecting():
 
     # Target lengths
@@ -134,13 +89,15 @@ def two_intersecting():
 
     return gb
 
+
 def seven_fractures():
-    
+
     # Target lengths
-    target_h_bound = 0.0125
-    target_h_fract = 0.0125
+    h = 0.05
+    target_h_bound = h
+    target_h_fract = h
     mesh_args = {"mesh_size_frac": target_h_fract, "mesh_size_bound": target_h_bound}
-    #mesh_args = {"mesh_size_frac": target_h_fract}
+    # mesh_args = {"mesh_size_frac": target_h_fract}
 
     # Call from standard grids
     gb, _ = pp.grid_buckets_2d.seven_fractures_one_L_intersection(mesh_args)
@@ -163,10 +120,10 @@ def benchmark():
 
 #%% Define domain, fracture network, and construct grid bucket
 unfractured_domain = False
-single_frac = False
+single_frac = True
 double_frac = False
 two_intersec_frac = False
-seven_frac = True
+seven_frac = False
 benchmark_frac = False
 
 
@@ -183,8 +140,8 @@ elif seven_frac:
 elif benchmark_frac:
     gb = benchmark()
 
-#pp.plot_grid(gb, alpha=0.05, info="FC", size=[20, 20])
-#pp.save_img("grid.pdf", gb, info="fc", alpha=0.1, figsize=(20, 20))
+#pp.plot_grid(gb, alpha=0.05, info="FN", size=[20, 20])
+#pp.save_img("grid.pdf", gb.grids_of_dimension(2)[0], info="n", alpha=0.1, figsize=(20, 20))
 
 #%%  Parameter assignment
 # If you want to a setup which targets transport or mechanics problem,
@@ -237,6 +194,14 @@ for g, d in gb:
         bc_values[left] = 1
         bc_values[right] = 0
         specified_parameters["bc_values"] = bc_values
+    
+    elif g.dim == 1 and single_frac == True:
+        # bc_faces = g.get_all_boundary_faces()
+        # bc_type = bc_faces.size * ["dir"]
+        # bc = pp.BoundaryCondition(g, faces=bc_faces, cond=bc_type)
+        # # Register the assigned value
+        # specified_parameters["bc"] = bc
+        pass
 
     # On 1d and 0d problems we set no boundary condition - in effect assigning Neumann conditions
 
@@ -289,7 +254,7 @@ subdomain_operator_keyword = "diffusion"
 edge_discretization = pp.RobinCoupling(
     parameter_keyword, subdomain_discretization, subdomain_discretization
 )
-#edge_discretization = pp.FluxPressureContinuity(parameter_keyword, subdomain_discretization)
+# edge_discretization = pp.FluxPressureContinuity(parameter_keyword, subdomain_discretization)
 # Variable name for the interface variable
 edge_variable = "interface_flux"
 # ... and we need a name for the discretization opertaor for each coupling term
@@ -351,14 +316,18 @@ sol = sps.linalg.spsolve(A, b)
 # The solution vector is a global vector. Distribute it to the local grids and interfaces
 assembler.distribute_variable(sol)
 
-#%% Compute Darcy Fluxes
-pp.fvutils.compute_darcy_flux(gb, lam_name=edge_variable)
 
-#%% Obtaining the errors
-# The errors are stored in the dictionaries under pp.STATE
-PosterioriError(
-    gb, parameter_keyword, subdomain_variable, nodal_method="mpfa-inverse", p_order="1"
-)
+if not unfractured_domain:
+    # Compute Darcy Fluxes
+    pp.fvutils.compute_darcy_flux(gb, lam_name=edge_variable)
+
+    # Obtaining the errors
+    # The errors are stored in the dictionaries under pp.STATE
+    estimate_error(gb, lam_name=edge_variable, nodal_method="flux-inverse")
+else:
+    g_mono = gb.grids_of_dimension(2)[0]
+    d_mono = gb.node_props(g_mono)
+    estimate_error(g_mono, data=d_mono)
 
 #%% Write to vtk. Create a new exporter, to avoid interferring with the above grid illustration.
 exporter = pp.Exporter(gb, "flow", folder_name="md_flow")
@@ -368,17 +337,13 @@ exporter.write_vtk([subdomain_variable, "error_DF"])
 
 
 #%% Get global error
-
-global_error = 0
-
-for g, d in gb:
-    if g.dim > 0:
-        global_error += d[pp.STATE]["error_DF"].sum()
-
-print("The global error is:", global_error)
-
-
-
-
+global_error = compute_global_error(gb)
+g_2d = gb.grids_of_dimension(2)[0]
+g_1d = gb.grids_of_dimension(1)[0]
+d_2d = gb.node_props(g_2d)
+d_1d = gb.node_props(g_1d)
+print('The global error is: ', compute_global_error(gb))
+print('The error in the 2d grid is: ', compute_subdomain_error(g_2d, d_2d))
+print('The error in the 1d grid is: ', compute_subdomain_error(g_1d, d_1d))
 
 
