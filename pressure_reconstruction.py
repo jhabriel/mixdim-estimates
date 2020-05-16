@@ -353,7 +353,7 @@ def _compute_node_pressure_kavg(g, d, kw, p_name):
 
     # Obtain nodal pressures applying the following formula on each node w:
     #
-    #   pn_w = \sum_{i=1}^m (pc_i k_i |V_i|)/(k_i |V_i|),
+    #   pn_w = \sum_{i=1}^m (pc_i k_i |V_i|) / \sum_{i=1}^m (k_i |V_i|),
     #
     # where i is the cell index, m is the number of cells sharing the common
     # node, pc_i is the cell-centered pressure, k_i is the cell permeability,
