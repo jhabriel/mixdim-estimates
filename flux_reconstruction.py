@@ -4,15 +4,13 @@ import numpy.matlib as matlib
 import scipy.sparse as sps
 import porepy as pp
 
-# TODO: Include contribution of projected mortar fluxes. This is not yet implemented,
-#       meaning that we're not currently conserving mass.
-#       We might take into account the case of fixed-dimensional grids, and only
-#       include the mortar fluxes if fractures are included in the grid bucket.
+from porepy.grids.grid_bucket import GridBucket
 
 
-def subdomain_velocity(grid_bucket, grid, unrot_grid, data, parameter_keyword):
+def subdomain_velocity(gb, g, g_rot, d, kw, lam_name):
     """
-    Computes flux reconstruction using RT0 extension of normal fluxes
+    Computes mixed-dimensional flux reconstruction using RT0 extension of 
+    normal full fluxes
 
     The output array contains the coefficients satisfying the
     following velocity fields depending on the dimensionality of the problem:
@@ -44,13 +42,19 @@ def subdomain_velocity(grid_bucket, grid, unrot_grid, data, parameter_keyword):
 
     Parameters
     ----------
-    grid : PorePy object
-        Porepy grid object.
-    data : dictionary 
-        Dicitionary containing the parameters.
-    parameter_keyword : string
-        Keyword referring to the problem type.
-
+    gb : PorePy object
+        Grid bucket
+    g : PorePy object
+        Grid
+    g_rot : PorePy object
+        Rotated grid (for the case of g < gb.dim_max())
+    d : dictionary 
+        Data dictionary corresponding to the grid g
+    kw : Keyword
+        Name of the problem
+    lam_name : Keyword
+        Name of the edge variable
+    
     Returns
     ------
     coeffs : NumPy array (cell_numbers x (g.dim+1))
@@ -61,16 +65,106 @@ def subdomain_velocity(grid_bucket, grid, unrot_grid, data, parameter_keyword):
     
     """
 
-    # NOTE: When computing the Darcy fluxes, this must be done using the
-    # grid bucket, not the indidual grids. This gives the right values of
-    # darcy fluxes.
+    # Mappings
+    cell_faces_map, _, _ = sps.find(g_rot.cell_faces)
+    cell_nodes_map, _, _ = sps.find(g_rot.cell_nodes())
 
-    # Renaming variables
-    gb = grid_bucket
-    g = grid
-    d = data
-    kw = parameter_keyword
-    coords = g.cell_centers.transpose()  # cell centers coordinates
+    # Cell-wise arrays
+    faces_cell = cell_faces_map.reshape(np.array([g_rot.num_cells, g.dim + 1]))
+    nodes_cell = cell_nodes_map.reshape(np.array([g_rot.num_cells, g.dim + 1]))
+    opp_nodes_cell = _get_opposite_side_nodes(g_rot)
+    sign_normals_cell = _get_sign_normals(g_rot)
+    vol_cell = g_rot.cell_volumes
+
+    # Opposite side nodes for RT0 extension of normal fluxes
+    opp_nodes_coor_cell = np.empty(
+        [g_rot.dim, nodes_cell.shape[0], nodes_cell.shape[1]]
+    )
+    for dim in range(g.dim):
+        opp_nodes_coor_cell[dim] = g_rot.nodes[dim][opp_nodes_cell]
+
+    # Obtain the mixed-dimensional full flux. That is, the darcy flux + the
+    # mortar projection of the lower-dimensional neighboring interfaces
+    if "full_flux" in d[pp.PARAMETERS][kw]:
+        full_flux = d[pp.PARAMETERS][kw]["full_flux"]
+    else:
+        raise ("Full flux must be computed first")
+
+    # Local full flux divergence
+    full_flux_local_div = (sign_normals_cell * full_flux[faces_cell]).sum(axis=1)
+
+    # Check if mass conservation is satisfied on a cell basis, in order to do
+    # this, we check on a local basis, if the divergence of the flux equals
+    # the sum of internal and external source terms
+    ext_src = d[pp.PARAMETERS][kw]["source"]
+    int_src = _internal_source_term_contribution(gb, g, lam_name)
+    np.testing.assert_almost_equal(
+        full_flux_local_div,
+        ext_src + int_src,
+        decimal=7,
+        err_msg="Error estimates only implemented for local mass-conservative methods",
+    )
+
+    # Determining coefficients
+    coeffs = np.empty([g_rot.num_cells, g_rot.dim + 1])
+    alpha = 1 / (g.dim * vol_cell)
+    coeffs[:, 0] = alpha * np.sum(sign_normals_cell * full_flux[faces_cell], axis=1)
+    for dim in range(g_rot.dim):
+        coeffs[:, dim + 1] = -alpha * np.sum(
+            (sign_normals_cell * full_flux[faces_cell] * opp_nodes_coor_cell[dim]),
+            axis=1,
+        )
+
+    # Check if the reconstructed evaluated at the face centers normal fluxes
+    # match the numerical ones
+    recons_flux = _get_reconstructed_face_fluxes(g_rot, coeffs)
+    np.testing.assert_almost_equal(
+        recons_flux, full_flux, decimal=8, err_msg="Flux reconstruction has failed"
+    )
+
+    return coeffs
+
+
+def interface_fluxes(d_e):
+    
+    g_m = d_e['mortar_grid']    
+    
+    return None
+
+
+
+def mono_grid_velocity(g, d, kw, p_name, sd_operator_name):
+    """
+    Computes flux reconstruction in the case of mono-dimensional grids
+
+    Parameters
+    ----------
+    g : PorePy object
+        PorePy grid object
+    d : Dictionary
+        Data dictionary
+    kw : Keyword
+        Name of the problem, e.g., flow
+    p_name: Keyword
+        Grid variable, e.g., pressure
+    sd_operator_name : Keyword
+        Grid operator name, e.g., diffusion
+
+    Returns
+    -------
+    coeffs : NumPy array (cell_numbers x (g.dim+1))
+        Coefficients of the reconstructed velocity for each element.
+        
+    cc_vel: Numpy array (cell numbers x g.dim)
+        Components of the reconstructed velocities evaluated at the cell centers.
+
+    """
+
+    # Retrieve subdomain discretization
+    discr = d["discretization"][p_name][sd_operator_name]
+
+    # Check if the scheme if is fv
+    is_fv = issubclass(type(discr), pp.FVElliptic)
 
     # Mappings
     cell_faces_map, _, _ = sps.find(g.cell_faces)
@@ -83,73 +177,52 @@ def subdomain_velocity(grid_bucket, grid, unrot_grid, data, parameter_keyword):
     sign_normals_cell = _get_sign_normals(g)
     vol_cell = g.cell_volumes
 
-    # Index of faces for flattening purposes
-    idx = np.array(
-        [np.where(faces_cell.flatten() == x)[0][0] for x in range(g.num_faces)]
-    )
-
     # Opposite side nodes
     opp_nodes_coor_cell = np.empty([g.dim, nodes_cell.shape[0], nodes_cell.shape[1]])
     for dim in range(g.dim):
         opp_nodes_coor_cell[dim] = g.nodes[dim][opp_nodes_cell]
 
-    # Retrieving subdomain fluxes
-    if "darcy_flux" in d[pp.PARAMETERS][kw]:
-        darcy_flux = d[pp.PARAMETERS][kw]["darcy_flux"]
+    # Retrieving darcy fluxes
+    if is_fv:
+        if "darcy_flux" in d[pp.PARAMETERS][kw]:
+            darcy_flux = d[pp.PARAMETERS][kw]["darcy_flux"]
+        else:
+            pp.fvutils.compute_darcy_flux(g, data=d)
     else:
-        # TODO: Ask for edge_variable, i.e., lam_name keyword
-        pp.fvutils.compute_darcy_flux(gb, lam_name="interface_flux")
+        darcy_flux = discr.extract_flux(g, d[pp.STATE][p_name], d)
 
-    # Retrieving interface fluxes
-    mortar_flux = _get_mortar_flux_contribution(gb, unrot_grid)
-    if g.dim == 2:
-        global mortars
-        mortars = mortar_flux
+    # Fluxes for each cell
+    flux_cell = sign_normals_cell * darcy_flux[faces_cell]
 
-    # The full flux is composed by the darcy fluxes plus the projection
-    # of the adjacent lower-dimensional interface
-    # Note that we do not need to multiply the mortar fluxes by the sign of the
-    # normals. I'm not entirely sure about why, but it might be related to the
-    # sign convention of the mortar fluxes w.r.t. higher-dimensional grid
-    full_flux_cell = (
-        sign_normals_cell * darcy_flux[faces_cell] + mortar_flux[faces_cell]
-    )
-    full_flux = full_flux_cell.flatten()[idx]  # flattened version
-
-    # This is the flux that should be used to perform the reconstruction
-    # Note that, after the reconstruction, we will have that the reconstructuted
-    # fluxes actually match full_flux, not this flux.        
-    art_flux_cell = sign_normals_cell * (darcy_flux[faces_cell] + mortar_flux[faces_cell])
-    
     # Check if mass conservation is satisfied on a cell basis
-    ext_src = d[pp.PARAMETERS][kw]["source"]
-    int_src = _internal_source_term_contribution(grid_bucket, unrot_grid) 
+    src = d[pp.PARAMETERS][kw]["source"]
     np.testing.assert_almost_equal(
-        full_flux_cell.sum(axis=1),
-        ext_src + int_src,
+        flux_cell.sum(axis=1),
+        src,
         decimal=7,
-        err_msg="Local mass conservation is not satisfied",
+        err_msg="Error estimates only implemented for local mass-conservative methods",
     )
 
     # Determining coefficients
     coeffs = np.empty([g.num_cells, g.dim + 1])
     alpha = 1 / (g.dim * vol_cell)
-    coeffs[:, 0] = alpha * np.sum(art_flux_cell, axis=1)
+    coeffs[:, 0] = alpha * np.sum(flux_cell, axis=1)
     for dim in range(g.dim):
         coeffs[:, dim + 1] = -alpha * np.sum(
-            (art_flux_cell * opp_nodes_coor_cell[dim]), axis=1
+            (flux_cell * opp_nodes_coor_cell[dim]), axis=1
         )
 
     # Check if the reconstructed normal velocities evaluated at the face centers
     # match the numerical ones
     recons_flux = _get_reconstructed_face_fluxes(g, coeffs)
     np.testing.assert_almost_equal(
-        recons_flux, full_flux, decimal=8, err_msg="Flux reconstruction has failed"
+        recons_flux, darcy_flux, decimal=8, err_msg="Flux reconstruction has failed"
     )
 
     # Evaluating velocities at the cell centers
     # NOTE: This is not necessary for the purpose of evaluating the a posteriori
     # errors, but it might be useful for others
+    coords = g.cell_centers.transpose()
     cc_vel = np.zeros([g.num_cells, g.dim])
     for dim in range(g.dim):
         cc_vel[:, dim] = coeffs[:, 0] * coords[:, dim] + coeffs[:, dim + 1]
@@ -157,57 +230,304 @@ def subdomain_velocity(grid_bucket, grid, unrot_grid, data, parameter_keyword):
     return coeffs, cc_vel
 
 
-def _internal_source_term_contribution(grid_bucket, grid):
+def compute_full_flux_fv(
+    gb, keyword, sd_operator_name, p_name, lam_name,
+):
+    """
+    Computes full flux over all faces for all the subdomains of the grid bucket.
+    The full flux is composed by the Darcy flux plus the projection of the 
+    lower-dimensional neighboring mortar fluxes. This function should be used
+    for finite-volume discretization schemes
+
+    Parameter:
+    gb: grid bucket with the following data fields for all nodes/grids:
+        'flux': Internal discretization of fluxes.
+        'bound_flux': Discretization of boundary fluxes.
+        'pressure': Pressure values for each cell of the grid (overwritten by p_name).
+        'bc_val': Boundary condition values.
+            and the following edge property field for all connected grids:
+        'coupling_flux': Discretization of the coupling fluxes.
+    keyword (str): defaults to 'flow'. The parameter keyword used to obtain the
+        data necessary to compute the fluxes.
+    keyword_store (str): defaults to keyword. The parameter keyword determining
+        where the data will be stored.
+    d_name (str): defaults to 'darcy_flux'. The parameter name which the computed
+        darcy_flux will be stored by in the dictionary.
+    p_name (str): defaults to 'pressure'. The keyword that the pressure
+        field is stored by in the dictionary.
+    lam_name (str): defaults to 'mortar_solution'. The keyword that the mortar flux
+        field is stored by in the dictionary.
+
+    Returns:
+        gb, the same grid bucket with the added field 'full_flux' added to all
+        node data fields. 
+    """
+
+    # Compute fluxes from pressures internal to the subdomain, and for global
+    # boundary conditions.
+    for g, d in gb:
+
+        # Compute Darcy flux
+        if g.dim > 0:
+            parameter_dictionary = d[pp.PARAMETERS][keyword]
+            matrix_dictionary = d[pp.DISCRETIZATION_MATRICES][keyword]
+            darcy_flux = (
+                matrix_dictionary["flux"] * d[pp.STATE][p_name]
+                + matrix_dictionary["bound_flux"] * parameter_dictionary["bc_values"]
+            )
+
+            d[pp.PARAMETERS][keyword]["full_flux"] = darcy_flux
+
+    # Add the contribution of the mortar fluxes for each edge associated
+    # to a given subdomain
+    for e, d in gb.edges():
+
+        g_m = d["mortar_grid"]
+        g_h = gb.nodes_of_edge(e)[1]
+        d_h = gb.node_props(g_h)
+
+        # The mapping mortar_to_hat_bc contains is composed of a mapping to
+        # faces on the higher-dimensional grid, and computation of the induced
+        # fluxes.
+        bound_flux = d_h[pp.DISCRETIZATION_MATRICES][keyword]["bound_flux"]
+        induced_flux = bound_flux * g_m.mortar_to_master_int() * d[pp.STATE][lam_name]
+
+        d_h[pp.PARAMETERS][keyword]["full_flux"] += induced_flux
+
+
+def compute_full_flux_rt0(
+    gb, keyword, sd_operator_name, p_name, lam_name,
+):
+    """
+    Computes full flux over all faces for all the subdomains of the grid bucket.
+    The full flux is composed by the Darcy flux plus the projection of the 
+    lower-dimensional neighboring mortar fluxes. This function should be used
+    for finite-element discretization schemes
+
+    Parameter:
+    gb: grid bucket with the following data fields for all nodes/grids:
+        'flux': Internal discretization of fluxes.
+        'bound_flux': Discretization of boundary fluxes.
+        'pressure': Pressure values for each cell of the grid (overwritten by p_name).
+        'bc_val': Boundary condition values.
+            and the following edge property field for all connected grids:
+        'coupling_flux': Discretization of the coupling fluxes.
+    keyword (str): defaults to 'flow'. The parameter keyword used to obtain the
+        data necessary to compute the fluxes.
+    keyword_store (str): defaults to keyword. The parameter keyword determining
+        where the data will be stored.
+    d_name (str): defaults to 'darcy_flux'. The parameter name which the computed
+        darcy_flux will be stored by in the dictionary.
+    p_name (str): defaults to 'pressure'. The keyword that the pressure
+        field is stored by in the dictionary.
+    lam_name (str): defaults to 'mortar_solution'. The keyword that the mortar flux
+        field is stored by in the dictionary.
+
+    Returns:
+        gb, the same grid bucket with the added field 'full_flux' added to all
+        node data fields. 
+    """
+
+    # Loop through all the subdomains
+    for g, d in gb:
+
+        # Retrieve subdomain discretization
+        discr = d[pp.DISCRETIZATION][p_name][sd_operator_name]
+
+        # Retrieve darcy flux from the solution array
+        darcy_flux = discr.extract_flux(g, d[pp.STATE][p_name], d)
+
+        # we need to recover the flux from the mortar variable before
+        # the projection, only lower dimensional edges need to be considered.
+        induced_flux = np.zeros(darcy_flux.size)
+        faces = g.tags["fracture_faces"]
+        if np.any(faces):
+            # recover the sign of the flux, since the mortar is assumed
+            # to point from the higher to the lower dimensional problem
+            _, indices = np.unique(g.cell_faces.indices, return_index=True)
+            sign = sps.diags(g.cell_faces.data[indices], 0)
+
+            for _, d_e in gb.edges_of_node(g):
+                g_m = d_e["mortar_grid"]
+                if g_m.dim == g.dim:
+                    continue
+                # project the mortar variable back to the higher dimensional
+                # subdomain
+                induced_flux += (
+                    sign * g_m.master_to_mortar_avg().T * d_e[pp.STATE][lam_name]
+                )
+
+        d[pp.PARAMETERS][keyword]["full_flux"] = darcy_flux + induced_flux
+
+
+def compute_full_flux(gb, kw, sd_operator_name, p_name, lam_name):
+    """
+    Computes full flux for the entire grid bucket. The full flux is composed 
+    of the subdomain Darcy flux, plus the projection of the lower dimensional 
+    neighboring interface (mortar) fluxes associated with such subdomain.
+
+    Parameters
+    ----------
+    gb : PorePy Object
+        GridBucket object.
+    kw : Keyword
+        Problem keyword, i.e., flow.
+    sd_operator_name : Keyword
+        Subdomain operator name, i.e., diffusion.
+    p_name : Keyword
+        Subdomain variable name, i.e., pressure.
+    lam_name : Keyword
+        Edge variable, i.e., mortar solution.
+
+    Returns
+    -------
+    None. 
     
-    # Renaming variables
-    gb = grid_bucket
-    g = grid
+    The data dicitionary of each subdomain is updated with the field 
+    d[pp.PARAMETERS][kw]["full_flux"], which is an NumPy array of length
+    g.num_faces.
+
+    """
+
+    # Loop through all the nodes from the grid bucket
+    for g, d in gb:
+
+        if g.dim > 0:  # full-flux only makes sense for g.dim > 0
+
+            # Retrieve subdomain discretization
+            discr = d[pp.DISCRETIZATION][p_name][sd_operator_name]
+
+            # Boolean variable for checking is the scheme is FV
+            is_fv = issubclass(type(discr), pp.FVElliptic)
+
+            if is_fv:  # fvm-schemes
+
+                # Compute Darcy flux
+                parameter_dictionary = d[pp.PARAMETERS][kw]
+                matrix_dictionary = d[pp.DISCRETIZATION_MATRICES][kw]
+                darcy_flux = (
+                    matrix_dictionary["flux"] * d[pp.STATE][p_name]
+                    + matrix_dictionary["bound_flux"]
+                    * parameter_dictionary["bc_values"]
+                )
+
+                # Add the contribution of the mortar fluxes for each edge associated
+                # to the higher-dimensional subdomain g
+                induced_flux = np.zeros(darcy_flux.size)
+                faces = g.tags["fracture_faces"]
+                if np.any(faces):
+
+                    for _, d_e in gb.edges_of_node(g):
+                        g_m = d_e["mortar_grid"]
+                        if g_m.dim == g.dim:
+                            continue
+                        # project the mortar variable back to the higher dimensional
+                        # subdomain
+                        induced_flux += (
+                            matrix_dictionary["bound_flux"]
+                            * g_m.mortar_to_master_int()
+                            * d_e[pp.STATE][lam_name]
+                        )
+
+                # Store in data dictionary
+                d[pp.PARAMETERS][kw]["full_flux"] = darcy_flux + induced_flux
+
+            else:  # fem-schemes
+
+                # Retrieve Darcy flux from the solution array
+                darcy_flux = discr.extract_flux(g, d[pp.STATE][p_name], d)
+
+                # We need to recover the flux from the mortar variable before
+                # the projection, only lower dimensional edges need to be considered.
+                induced_flux = np.zeros(darcy_flux.size)
+                faces = g.tags["fracture_faces"]
+                if np.any(faces):
+                    # recover the sign of the flux, since the mortar is assumed
+                    # to point from the higher to the lower dimensional problem
+                    _, indices = np.unique(g.cell_faces.indices, return_index=True)
+                    sign = sps.diags(g.cell_faces.data[indices], 0)
+
+                    for _, d_e in gb.edges_of_node(g):
+                        g_m = d_e["mortar_grid"]
+                        if g_m.dim == g.dim:
+                            continue
+                        # project the mortar variable back to the higher dimensional
+                        # subdomain
+                        induced_flux += (
+                            sign
+                            * g_m.master_to_mortar_avg().T
+                            * d_e[pp.STATE][lam_name]
+                        )
+
+                # Store in data dictionary
+                d[pp.PARAMETERS][kw]["full_flux"] = darcy_flux + induced_flux
+
+    return
+
+
+def _internal_source_term_contribution(gb, g, lam_name):
+    """
+    Obtain flux contribution from higher-dimensional neighboring interfaces
+    to lower-dimensional subdomains in the form of internal source terms
     
+    Parameters
+    ----------
+    gb : PorePy object
+        PorePy grid bucket object.
+    grid : PorePy object
+        Porepy grid object.
+    lam_name : Keyword
+        Name of the edge variable
+
+    Returns
+    -------
+    int_source : NumPy array (g.num_cells)
+        Flux contribution from higher-dimensional neighboring interfaces to the
+        lower-dimensional grid g, in the form of source term
+
+    """
+
     # Initialize internal source term
     int_source = np.zeros(g.num_cells)
-    
+
     # Obtain higher dimensional neighboring nodes
     g_highs = gb.node_neighbors(g, only_higher=True)
-    
+
     # We loop through all the higher dimensional adjacent interfaces to the
     # lower-dimensional subdomain to map the mortar fluxes to internal source
     # terms
     for g_high in g_highs:
-        
+
         # Retrieve the dictionary and mortar grid of the corresponding edge
         d_edge = gb.edge_props([g, g_high])
         g_mortar = d_edge["mortar_grid"]
 
         # Retrieve mortar fluxes
-        mortar_flux = d_edge[pp.STATE]["interface_flux"]
-        
+        mortar_flux = d_edge[pp.STATE][lam_name]
+
         # Obtain source term contribution associated to the neighboring interface
         int_source = g_mortar.mortar_to_slave_int() * mortar_flux
-        
+
     return int_source
 
 
-def _get_mortar_flux_contribution(grid_bucket, grid):
+def _get_mortar_flux_contribution(gb, g):
     """
+    Obtain mortar flux contribution from lower-dimensional neighboring interfaces
     
-
     Parameters
     ----------
-    grid_bucket : TYPE
-        DESCRIPTION.
-    grid : TYPE
-        DESCRIPTION.
+    gb : PorePy object
+        PorePy grid bucket object.
+    grid : PorePy object
+        Porepy grid object.
 
     Returns
     -------
-    mortar_contribution : TYPE
-        DESCRIPTION.
+    mortar_contribution : NumPy array (g.num_faces)
+        Flux contribution from the interfaces to the higher-dimensional grid g.
 
     """
-
-    # Renaming variables
-    gb = grid_bucket
-    g = grid
 
     # Initialize mortar contribution array
     mortar_contribution = np.zeros(g.num_faces)
@@ -237,14 +557,18 @@ def _get_mortar_flux_contribution(grid_bucket, grid):
     return mortar_contribution
 
 
-def _get_reconstructed_face_fluxes(grid, coeff):
+# -------------------------------------------------------------------------- #
+#                      Assert/Testing related functions                      #
+# -------------------------------------------------------------------------- #
+def _get_reconstructed_face_fluxes(g, coeff):
     """
     Obtain reconstructed fluxes at the cell centers for a given mesh
 
     Parameters
     ----------
-    g : TYPE
-        DESCRIPTION.
+    g : PorePy object
+        PorePy grid object. Note that for mixed-dimensional grids, this will
+        correspond to the rotated grid object.
     coeff : TYPE
         DESCRIPTION.
 
@@ -254,9 +578,6 @@ def _get_reconstructed_face_fluxes(grid, coeff):
         DESCRIPTION.
 
     """
-
-    # Rename variables
-    g = grid  # this is the rotated grid
 
     # Mappings
     cell_faces_map, _, _ = sps.find(g.cell_faces)
@@ -291,14 +612,18 @@ def _get_reconstructed_face_fluxes(grid, coeff):
     return out
 
 
-def _get_opposite_side_nodes(grid):
+# -------------------------------------------------------------------------- #
+#                           Utility functions                                #
+# -------------------------------------------------------------------------- #
+def _get_opposite_side_nodes(g):
     """
     Computes opposite side nodes for each face of each cell in the grid
 
     Parameters
     ----------
-    grid : PorePy object
-        Porepy grid object.
+    g : PorePy object
+        Porepy grid object. Note that for mixed-dimensional grids, this will
+        correspond to the rotated grid object.
 
     Returns
     -------
@@ -307,9 +632,6 @@ def _get_opposite_side_nodes(grid):
         side node index of the face.
     
     """
-
-    # Rename variable
-    g = grid
 
     # Retrieving toplogical data
     cell_faces_map, _, _ = sps.find(g.cell_faces)
@@ -330,14 +652,15 @@ def _get_opposite_side_nodes(grid):
     return opposite_nodes
 
 
-def _get_sign_normals(grid):
+def _get_sign_normals(g):
     """
     Computes sign of the face normals for each element in the grid
 
     Parameters
     ----------
-    grid : PorePy object
-        Porepy grid object.
+    g : PorePy object
+        Porepy grid object. Note that for mixed-dimensional grids, this will
+        correspond to the rotated grid object.
 
     Returns
     -------
@@ -354,9 +677,6 @@ def _get_sign_normals(grid):
     #   (1) Compute the local outter normal (lon) vector for each cell
     #   (2) For every face of each cell, compare if lon == global normal vector.
     #       If they're not, then we need to flip the sign of lon for that face
-
-    # Rename variable
-    g = grid
 
     # Faces associated to each cell
     cell_faces_map, _, _ = sps.find(g.cell_faces)

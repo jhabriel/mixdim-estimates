@@ -1,78 +1,130 @@
-# Importing modules
 import numpy as np
 import numpy.matlib as matlib
 import scipy.sparse as sps
 import porepy as pp
 
-# Compute pressure reconstruction
-def subdomain_pressure(
-    grid, data, parameter_keyword, subdomain_variable, nodal_method, p_recons_order
-):
+
+
+
+def subdomain_pressure(gb, g, d, kw, sd_operator_name, p_name, lam_name, nodal_method, p_order):
     """
     Reconstructs subdomain pressures given the nodal method reconstruction and the 
-    reconstruction order. By default, it is assumed a conforming P1-reconstruction
-    from nodal values obtained using a permeability-weighted average.
+    reconstruction order.
 
     Parameters
     ----------
-    grid : PorePy object
+    gb : PorePy object
+        PorePy grid bucket object
+    g : PorePy object
         Porepy grid object
-    data : dictionary 
-        Dicitionary containing the parameters
-    subdomain_variable : string
-        Keyword for the subdomain variable
-    nodal_method : string
-        Nodal reconstruction method: Either 'k-averaging' or 'mpfa-inverse'
-    p_recons_order : string
-        Pressure reconstruction order. Use '1' for P1 elements or '1.5' for P1 
+    d : dictionary 
+        Dictionary containing the parameters
+    sd_operator_name    
+    p_name : keyword
+        Name of the subdomain variable
+    lam_name : keyword
+        Name of the edge variable
+    nodal_method : keyword
+        Name of the nodal reconstruction method: Either flux-inverse' or 'k-averaging'
+    p_order : keyword
+        Name of the pressure reconstruction order. Use '1' for P1 elements or '1.5' for P1 
         elements enriched with purely parabolic terms.
 
     Returns
     -------
     coeffs : NumPy array
-        Coefficients of the reconstructed pressure for each element.
+        Coefficients of the reconstructed pressure for each cell.
 
     """
 
     # Compute nodal values of the pressure
-    if nodal_method == "k-averaging":
-        p_nv = _compute_node_pressure_kav(
-            grid, data, parameter_keyword, subdomain_variable
-        )
-    elif nodal_method == "mpfa-inverse":
-        p_nv = _compute_node_pressure_inv(
-            grid, data, parameter_keyword, subdomain_variable
-        )
+    if nodal_method == "flux-inverse":
+        p_nv = _compute_node_pressure_invflux(g, d, kw, sd_operator_name, p_name)
+    elif nodal_method == "k-averaging":
+        p_nv = _compute_node_pressure_kavg(g, d, kw, p_name)
     else:
-        raise NameError("Nodal reconstruction method not implemented")
+        raise NameError("Nodal pressure reconstruction method not implemented")
 
     # Perform reconstruction for the given reconstruction order
-    if p_recons_order == "1":
-        coeffs = _p1_reconstruction(grid, p_nv)
-    elif p_recons_order == "1.5":
-        p_cc = data[pp.STATE][subdomain_variable]
-        coeffs = _p12_reconstruction(grid, p_nv, p_cc)
+    if p_order == "1":
+        coeffs = _p1_reconstruction(g, p_nv)
+    elif p_order == "1.5":
+        p_cc = d[pp.STATE][p_name]
+        coeffs = _p12_reconstruction(g, p_nv, p_cc)
     else:
         raise NameError("Pressure reconstruction order not implemented")
+
+    
+    d[pp.STATE]["p_coeff"] = coeffs
+    
+    return coeffs
+
+
+def mono_grid_pressure(g, d, kw, p_name, nodal_method, p_order):
+    """
+    Reconstructs grid pressures given the nodal method reconstruction and the 
+    reconstruction order.
+
+    Parameters
+    ----------
+    g : PorePy object
+        Porepy grid object
+    d : dictionary 
+        Dictionary containing the parameters
+    p_name : keyword
+        Name of the subdomain variable
+    nodal_method : keyword
+        Name of the nodal reconstruction method: Either flux-inverse' or 'k-averaging'
+    p_order : keyword
+        Name of the pressure reconstruction order. Use '1' for P1 elements or '1.5' for P1 
+        elements enriched with purely parabolic terms.
+
+    Returns
+    -------
+    coeffs : NumPy array
+        Coefficients of the reconstructed pressure for each cell.
+
+    """
+    # Compute nodal values of the pressure
+    if nodal_method == "flux-inverse":
+        p_nv = _compute_node_pressure_invflux_mono(g, d, kw, p_name)
+    elif nodal_method == "k_averaging":
+        p_nv = _compute_node_pressure_kavg(g, d, kw, p_name)
+    else:
+        raise NameError("Nodal pressure reconstruction method not implemented")
+
+    # Perform reconstruction for the given reconstruction order
+    if p_order == "1":
+        coeffs = _p1_reconstruction(g, p_nv)
+    elif p_order == "1.5":
+        p_cc = d[pp.STATE][p_name]
+        coeffs = _p12_reconstruction(g, p_nv, p_cc)
+    else:
+        raise NameError("Pressure reconstruction order not implemented")
+
+    d[pp.STATE]["p_coeff"] = coeffs
 
     return coeffs
 
 
-#%% Compute nodal values using inverse MPFA
-def _compute_node_pressure_inv(grid, data, parameter_keyword, subdomain_variable):
+def _compute_node_pressure_invflux(g, d, kw, sd_operator_name, p_name):
     """
-    Computes nodal pressure values using the inverse mpfa technique
+    Computes nodal pressure values using the inverse of the flux
 
     Parameters
     ----------
-    grid : PorePy object
+    gb : PorePy object
+        PorePy grid bucket object
+    g : PorePy object
         Porepy grid object
-    data : dictionary 
+    d : dictionary 
         Dicitionary containing the parameters
-    parameter_keyword : string
+    kw : keyword
         Keyword referring to the problem type
-    subdomain_variable : string
+    p_name : keyword
         Keyword for the subdomain variable
+    lam_name : keyword
+        Name of the edge variable
 
     Returns
     -------
@@ -81,11 +133,111 @@ def _compute_node_pressure_inv(grid, data, parameter_keyword, subdomain_variable
 
     """
 
-    # Renaming variables
-    g = grid
-    d = data
-    kw_f = parameter_keyword
-    sd_var = subdomain_variable
+    # Retrieving topological data
+    nc = g.num_cells
+    nf = g.num_faces
+    nn = g.num_nodes
+
+    # Retrieve subdomain discretization
+    discr = d[pp.DISCRETIZATION][p_name][sd_operator_name]
+
+    # Boolean variable for checking is the scheme is FV
+    is_fv = issubclass(type(discr), pp.FVElliptic)
+    
+    # Retrieve pressure from the dictionary
+    if is_fv:
+        p = d[pp.STATE][p_name]
+    else:
+        p = discr.extract_pressure(g, d[pp.STATE][p_name], d)
+
+    # Perform reconstruction
+    # NOTE: This is the original implementation of Eirik
+    cell_nodes = g.cell_nodes()
+    cell_node_volumes = cell_nodes * sps.dia_matrix((g.cell_volumes, 0), (nc, nc))
+    sum_cell_nodes = cell_node_volumes * np.ones(nc)
+    cell_nodes_scaled = (
+        sps.dia_matrix((1.0 / sum_cell_nodes, 0), (nn, nn)) * cell_node_volumes
+    )
+
+    # Retrieving numerical fluxes
+    if "full_flux" in d[pp.PARAMETERS][kw]:
+        flux = d[pp.PARAMETERS][kw]["full_flux"]
+    else:
+        raise('Full flux must be computed first')
+
+    # Project fluxes
+    proj_flux = pp.RT0(kw).project_flux(g, flux, d)[: g.dim]
+
+    # Obtaining local gradients
+    loc_grad = np.zeros((g.dim, nc))
+    perm = d[pp.PARAMETERS][kw]["second_order_tensor"].values
+    for ci in range(nc):
+        loc_grad[: g.dim, ci] = -np.linalg.inv(perm[: g.dim, : g.dim, ci]).dot(
+            proj_flux[:, ci]
+        )
+
+    # Obtaining nodal pressures
+    cell_nodes_map, _, _ = sps.find(g.cell_nodes())
+    cell_node_matrix = cell_nodes_map.reshape(np.array([g.num_cells, g.dim + 1]))
+    nodal_pressures = np.zeros(nn)
+
+    for col in range(g.dim + 1):
+        nodes = cell_node_matrix[:, col]
+        dist = g.nodes[: g.dim, nodes] - g.cell_centers[: g.dim]
+        scaling = cell_nodes_scaled[nodes, np.arange(nc)]
+        contribution = (
+            np.asarray(scaling)
+            * (p + np.sum(dist * loc_grad, axis=0))
+        ).ravel()
+        nodal_pressures += np.bincount(nodes, weights=contribution, minlength=nn)
+
+    # Treatment of boundary conditions
+    bc = d[pp.PARAMETERS][kw]["bc"]
+    bc_values = d[pp.PARAMETERS][kw]["bc_values"]
+
+    external_dirichlet_boundary = np.logical_and(
+        bc.is_dir, g.tags["domain_boundary_faces"]
+    )
+
+    face_vec = np.zeros(nf)
+    face_vec[external_dirichlet_boundary] = 1
+    num_dir_face_of_node = g.face_nodes * face_vec
+    is_dir_node = num_dir_face_of_node > 0
+    face_vec *= 0
+    face_vec[external_dirichlet_boundary] = bc_values[external_dirichlet_boundary]
+
+    node_val_dir = g.face_nodes * face_vec
+
+    node_val_dir[is_dir_node] /= num_dir_face_of_node[is_dir_node]
+    nodal_pressures[is_dir_node] = node_val_dir[is_dir_node]
+
+    # Save in the dictionary
+    d[pp.STATE]["node_pressure"] = nodal_pressures
+
+    return nodal_pressures
+
+
+def _compute_node_pressure_invflux_mono(g, d, kw, p_name):
+    """
+    Computes nodal pressure values using the inverse of the flux
+
+    Parameters
+    ----------
+    g : PorePy object
+        Porepy grid object
+    d : dictionary 
+        Dicitionary containing the parameters
+    kw : keyword
+        Keyword referring to the problem type
+    p_name : keyword
+        Keyword for the subdomain variable
+
+    Returns
+    -------
+    nodal_pressures : NumPy array
+        Values of the pressure at the grid nodes.
+
+    """
 
     # Retrieving topological data
     nc = g.num_cells
@@ -102,21 +254,23 @@ def _compute_node_pressure_inv(grid, data, parameter_keyword, subdomain_variable
     )
 
     # Retrieving numerical fluxes
-    if "darcy_flux" in d[pp.PARAMETERS][kw_f]:
-        flux = d[pp.PARAMETERS][kw_f]["darcy_flux"]
+    if "darcy_flux" in d[pp.PARAMETERS][kw]:
+        flux = d[pp.PARAMETERS][kw]["darcy_flux"]
     else:
-        pp.fvutils.compute_darcy_flux(g, keyword=kw_f, data=d)
-        flux = d[pp.PARAMETERS][kw_f]["darcy_flux"]
-    proj_flux = pp.RT0(kw_f).project_flux(g, flux, d)[: g.dim]
+        raise('Darcy fluxes must be computed first')
 
+    # Project fluxes
+    proj_flux = pp.RT0(kw).project_flux(g, flux, d)[: g.dim]
+
+    # Obtaining local gradients
     loc_grad = np.zeros((g.dim, nc))
-    perm = d[pp.PARAMETERS][kw_f]["second_order_tensor"].values
-
+    perm = d[pp.PARAMETERS][kw]["second_order_tensor"].values
     for ci in range(nc):
         loc_grad[: g.dim, ci] = -np.linalg.inv(perm[: g.dim, : g.dim, ci]).dot(
             proj_flux[:, ci]
         )
 
+    # Obtaining nodal pressures
     cell_nodes_map, _, _ = sps.find(g.cell_nodes())
     cell_node_matrix = cell_nodes_map.reshape(np.array([g.num_cells, g.dim + 1]))
     nodal_pressures = np.zeros(nn)
@@ -127,12 +281,13 @@ def _compute_node_pressure_inv(grid, data, parameter_keyword, subdomain_variable
         scaling = cell_nodes_scaled[nodes, np.arange(nc)]
         contribution = (
             np.asarray(scaling)
-            * (d[pp.STATE][sd_var] + np.sum(dist * loc_grad, axis=0))
+            * (d[pp.STATE][p_name] + np.sum(dist * loc_grad, axis=0))
         ).ravel()
         nodal_pressures += np.bincount(nodes, weights=contribution, minlength=nn)
 
-    bc = d[pp.PARAMETERS][kw_f]["bc"]
-    bc_values = d[pp.PARAMETERS][kw_f]["bc_values"]
+    # Treatment of boundary conditions
+    bc = d[pp.PARAMETERS][kw]["bc"]
+    bc_values = d[pp.PARAMETERS][kw]["bc_values"]
 
     external_dirichlet_boundary = np.logical_and(
         bc.is_dir, g.tags["domain_boundary_faces"]
@@ -150,23 +305,25 @@ def _compute_node_pressure_inv(grid, data, parameter_keyword, subdomain_variable
     node_val_dir[is_dir_node] /= num_dir_face_of_node[is_dir_node]
     nodal_pressures[is_dir_node] = node_val_dir[is_dir_node]
 
+    # Save in the dictionary
+    d[pp.STATE]["node_pressure"] = nodal_pressures
+    
     return nodal_pressures
 
 
-#%% Compute nodal values using k-averaging
-def _compute_node_pressure_kav(grid, data, parameter_keyword, subdomain_variable):
+def _compute_node_pressure_kavg(g, d, kw, p_name):
     """
     Computes nodal pressure values using k-averaging in a patch
 
     Parameters
     ----------
-    grid : PorePy object
+    g : PorePy object
         Porepy grid object
-    data : dictionary 
+    d : dictionary 
         Dicitionary containing the parameters
-    parameter_keyword : string
+    kw : string
         Keyword referring to the problem type
-    subdomain_variable : string
+    p_name : string
         Keyword for the subdomain variable
 
     Returns
@@ -176,24 +333,18 @@ def _compute_node_pressure_kav(grid, data, parameter_keyword, subdomain_variable
 
     """
 
-    # Renaming variables
-    g = grid
-    d = data
-    kw_f = parameter_keyword
-    sd_var = subdomain_variable
-
     # Topological data
     nn = g.num_nodes
     nf = g.num_faces
 
     # Retrieve permeability values
-    k = d[pp.PARAMETERS][kw_f]["second_order_tensor"].values
+    k = d[pp.PARAMETERS][kw]["second_order_tensor"].values
     # TODO: For the moment, we assume kxx = kyy = kzz on each cell
     # It would be nice to add the possibility to account for anisotropy
     k_broad = matlib.repmat(k[0][0], nn, 1)  # broaden array with number of nodes
 
     # Retrieve cell-centered pressures
-    p_cc = d[pp.STATE][sd_var]
+    p_cc = d[pp.STATE][p_name]
     p_cc_broad = matlib.repmat(p_cc, nn, 1)  # broaden array with number of nodes
 
     # Create array of cell volumes. Note that the only the volumes of the cells
@@ -202,7 +353,7 @@ def _compute_node_pressure_kav(grid, data, parameter_keyword, subdomain_variable
 
     # Obtain nodal pressures applying the following formula on each node w:
     #
-    #   pn_w = \sum_{i=1}^m (pc_i k_i |V_i|)/(k_i |V_i|),
+    #   pn_w = \sum_{i=1}^m (pc_i k_i |V_i|) / \sum_{i=1}^m (k_i |V_i|),
     #
     # where i is the cell index, m is the number of cells sharing the common
     # node, pc_i is the cell-centered pressure, k_i is the cell permeability,
@@ -212,8 +363,8 @@ def _compute_node_pressure_kav(grid, data, parameter_keyword, subdomain_variable
     nodal_pressures = numerator / denoninator
 
     # Deal with Dirichlet and Neumann boundary conditions
-    bc = d[pp.PARAMETERS][kw_f]["bc"]
-    bc_values = d[pp.PARAMETERS][kw_f]["bc_values"]
+    bc = d[pp.PARAMETERS][kw]["bc"]
+    bc_values = d[pp.PARAMETERS][kw]["bc_values"]
     external_dirichlet_boundary = np.logical_and(
         bc.is_dir, g.tags["domain_boundary_faces"]
     )
@@ -227,11 +378,13 @@ def _compute_node_pressure_kav(grid, data, parameter_keyword, subdomain_variable
     node_val_dir[is_dir_node] /= num_dir_face_of_node[is_dir_node]
     nodal_pressures[is_dir_node] = node_val_dir[is_dir_node]
 
+    # Save in the dictionary
+    d[pp.STATE]["node_pressure"] = nodal_pressures
+
     return nodal_pressures
 
 
-#%% Compute P1 pressure reconstruction
-def _p1_reconstruction(grid, nodal_pressures):
+def _p1_reconstruction(g, p_nv):
     """
     Computes pressure reconstruction using P1 elements. The ouput is an array
     containing the coefficients needed for the linear reconstruction.
@@ -245,9 +398,9 @@ def _p1_reconstruction(grid, nodal_pressures):
 
     Parameters
     ----------
-    grid : PorePy object
+    g : PorePy object
         Porepy grid object
-    nodal_pressures : NumPy array
+    p_nv : NumPy array
         Values of the pressure at the grid nodes.
 
     Returns
@@ -256,10 +409,6 @@ def _p1_reconstruction(grid, nodal_pressures):
         Coefficients of the reconstructed pressure for each element of the grid
 
     """
-
-    # Renaming variables
-    g = grid
-    p_nv = nodal_pressures
 
     # TODO: Check what to do here to be consistent
     if g.dim == 0:
@@ -289,8 +438,7 @@ def _p1_reconstruction(grid, nodal_pressures):
     return coeffs
 
 
-#%% Compute P1 pressure reconstruction enriched with purely parabolic terms
-def _p12_reconstruction(grid, nodal_pressures, cell_center_pressures):
+def _p12_reconstruction(g, p_nv, p_cc):
     """
     Computes pressure reconstruction using P1,2 elements. P1,2 elements are
     essentially P1 elements enriched with pure parabolic terms, i.e. x_i**2.
@@ -305,11 +453,11 @@ def _p12_reconstruction(grid, nodal_pressures, cell_center_pressures):
         
     Parameters
     ----------
-    grid : PorePy object
+    g : PorePy object
         Porepy grid object
-    nodal_pressures : NumPy array
+    p_nv : NumPy array
         Values of the pressure at the grid nodes.
-    cell_center_pressures : Numpy array
+    p_cc : Numpy array
         Values of the pressure at the cell centers.
 
     Returns
@@ -318,11 +466,6 @@ def _p12_reconstruction(grid, nodal_pressures, cell_center_pressures):
         Coefficients of the reconstructed pressure for each element of the grid    
     
     """
-
-    # Renaming variables
-    g = grid
-    p_nv = nodal_pressures
-    p_cc = cell_center_pressures
 
     # TODO: Check what to do here to be consistent
     if g.dim == 0:
