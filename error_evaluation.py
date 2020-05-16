@@ -238,7 +238,7 @@ def _diffusive_flux_error_sd_p1(
         degree = method.degree
         int_point = method.points.shape[0]
     elif g.dim == 2:
-        method = qp.triangle.strang_fix_cowper_03()
+        method = qp.triangle.strang_fix_cowper_05()
         degree = method.degree
         int_point = method.points.shape[0]
     elif g.dim == 3:
