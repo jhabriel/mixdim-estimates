@@ -32,3 +32,4 @@ bin/*
 *.eps
 *.pdf
 .eggs/
+.DS_Store
