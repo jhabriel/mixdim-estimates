@@ -5,6 +5,9 @@ import pressure_reconstruction
 import flux_reconstruction
 import error_evaluation
 
+import error_estimates_utility as util
+import error_estimates_reconstruction as reconstruct
+import error_estimates_evaluation as evaluate
 
 def estimate_error(
     gb,
@@ -67,56 +70,115 @@ def _estimate_error_mixed(
     gb, kw, sd_operator_name, p_name, lam_name, nodal_method, p_order
 ):
 
-    # Compute full flux. This is needed for both, the flux and pressure reconstructions
-    flux_reconstruction.compute_full_flux(gb, kw, sd_operator_name, p_name, lam_name)
+    """
+    ----------------------- General algorithm overview -----------------------
+    
+    [1] Compute necessary quantities, and store in the data dicitionaries
+        
+        1.1 Compute full flux for each node of the grid bucket, and store in 
+            d["error_estimates"]["full_flux"]
+        1.2 Compute node pressure for each node of the grid bucket, and store 
+            in d["error_estimates"]["node_pressure"]
+        1.3 Compute node mortar flux for each edge of the grid bucket, and store
+            in d["error_estimates"]["nodal_mortar_flux"]
+            
+    [2] Perform reconstructions
+    
+        2.1 Perform reconstruction of the subdomain velocities using RT0 extension
+            of normal fluxes, and store in d["error_estimates"]["recons_vel"]
+        2.2 Perform reconstruction of the subdomain pressures using P1 or 
+            P1 + bubbles elements, and store in d["error_esimates"]["recons_p"]
+        2.3 Perform reconstruction of the interfaces mortar fluxes using P1
+            elements, and store in d["error_estimates"]["recons_lambda"]
+    
+    [3] Evaluate errors using QuadPy
+    
+        3.1 Compute diffusive flux error for the entire grid bucket (i.e, nodes
+            and edges), and and store in d["error_estimates"]["diffusive_flux_error"]
+    
+    --------------------------------------------------------------------------
+    """
+    
+    # First, we create the field ["error_estimates"] inside the data dictionary
+    # of each node and edge of the grid bucket
+    util.init_estimates_data_keyword(gb)
+        
+    # ------------------------------ BLOCK [1] -------------------------------
+    
+    # 1.1: Compute full flux
+    util.compute_full_flux(gb, kw, sd_operator_name, p_name, lam_name)
+    
+    # 1.2: Compute node pressure
+    util.compute_node_pressure(gb, kw, sd_operator_name, p_name, nodal_method)
+    
+    # TODO: 1.3: Compute node mortar fluxes 
+    #util.compute_node_mortar_flux()
 
-    # Compute the errors on the subdomains by looping through the nodes
-    for g, d in gb:
+    # ------------------------------ BLOCK [2] -------------------------------
+    
+    # 2.1: Reconstruct subdomain velocities
+    reconstruct.subdomain_velocity(gb, kw, lam_name)
 
-        if (
-            g.dim > 0
-        ):  # errors measured in the primal norm only defined for g.dim > 0 (?)
+    # 2.2: Reconstruct subdomain pressures
+    reconstruct.subdomain_pressure(gb, sd_operator_name, p_name, p_order)
 
-            # Rotate all grids to reference coordinate system
-            g_rot = _rotate_grid(g)
+    # TODO: 2.3: Reconstruct interface mortar fluxes
+    #reconstruct.interface_mortar_flux(gb, kw)    
 
-            # Get reconstructed velocity coefficients for the grid g
-            v_coeffs = flux_reconstruction.subdomain_velocity(
-                gb, g, g_rot, d, kw, lam_name
-            )
+    # ------------------------------ BLOCK [3] -------------------------------
+    
+    # 3.1: Evaluate errors
+    evaluate.evaluate_error_estimates(gb, kw)
+    
+    #flux_reconstruction.compute_full_flux(gb, kw, sd_operator_name, p_name, lam_name)
 
-            # Get reconstructed pressure coefficients for the grid g
-            p_coeffs = pressure_reconstruction.subdomain_pressure(
-                gb,
-                g_rot,
-                d,
-                kw,
-                sd_operator_name,
-                p_name,
-                lam_name,
-                nodal_method,
-                p_order,
-            )
+    # # Compute the errors on the subdomains by looping through the nodes
+    # for g, d in gb:
 
-            # Evaluate errors with quadpy and store results in d[pp.STATE]
-            error_evaluation.diffusive_flux_sd(g_rot, d, p_coeffs, v_coeffs)
+    #     if (
+    #         g.dim > 0
+    #     ):  # errors measured in the primal norm only defined for g.dim > 0 (?)
 
-    # Compute the errors on the interfaces by looping through the edges
-    for e, d in gb.edges():
+    #         # Rotate all grids to reference coordinate system
+    #         g_rot = _rotate_grid(g)
 
-        # # Retrieve neighboring grids and mortar grid
-        # g_low, g_high = self.gb.nodes_of_edge(e)
-        # mortar_grid = d["mortar_grid"]
+    #         # Get reconstructed velocity coefficients for the grid g
+    #         v_coeffs = flux_reconstruction.subdomain_velocity(
+    #             gb, g, g_rot, d, kw, lam_name
+    #         )
 
-        # # We assume that the lower dimensional grid coincides geometrically
-        # # with the mortar grid. Hence, we rotate the g_low
-        # glow_rot = self.rotate(g_low)
+    #         # Get reconstructed pressure coefficients for the grid g
+    #         p_coeffs = pressure_reconstruction.subdomain_pressure(
+    #             gb,
+    #             g_rot,
+    #             d,
+    #             kw,
+    #             sd_operator_name,
+    #             p_name,
+    #             lam_name,
+    #             nodal_method,
+    #             p_order,
+    #         )
 
-        # # Get reconstructed interface fluxes
-        # lambda_coeffs = flux_reconstruction.interface_flux(glow_rot, mortar_grid, d, self.kw)
+    #         # Evaluate errors with quadpy and store results in d[pp.STATE]
+    #         error_evaluation.diffusive_flux_sd(g_rot, d, p_coeffs, v_coeffs)
 
-        # # TODO: Calculate errors in the interfaces
-        pass
+    # # Compute the errors on the interfaces by looping through the edges
+    # for e, d in gb.edges():
+
+    #     # # Retrieve neighboring grids and mortar grid
+    #     # g_low, g_high = self.gb.nodes_of_edge(e)
+    #     # mortar_grid = d["mortar_grid"]
+
+    #     # # We assume that the lower dimensional grid coincides geometrically
+    #     # # with the mortar grid. Hence, we rotate the g_low
+    #     # glow_rot = self.rotate(g_low)
+
+    #     # # Get reconstructed interface fluxes
+    #     # lambda_coeffs = flux_reconstruction.interface_flux(glow_rot, mortar_grid, d, self.kw)
+
+    #     # # TODO: Calculate errors in the interfaces
+    #     pass
 
 
 # -------------------------------------------------------------------------- #
@@ -235,12 +297,13 @@ def compute_global_error(gb, data=None):
 
     # Obtain global error for mono-dimensional grid
     if not isinstance(gb, GridBucket) and not isinstance(gb, pp.GridBucket):
-        global_error = data[pp.STATE]["error_DF"].sum()
+        global_error = data["error_estimates"]["difussive_error"].sum()
+    
     # Obtain global error for mixed-dimensional grids
     else:
         for g, d in gb:
             if g.dim > 0:
-                global_error += d[pp.STATE]["error_DF"].sum()
+                global_error += d["error_estimates"]["diffusive_error"].sum()
 
         for e, d in gb.edges():
             # TODO: add diffusive flux error contribution for the interfaces
@@ -268,7 +331,7 @@ def compute_subdomain_error(g, d):
 
     """
 
-    subdomain_error = d[pp.STATE]["error_DF"].sum()
+    subdomain_error = d["error_estimates"]["diffusive_error"].sum()
 
     return subdomain_error
 
@@ -291,6 +354,6 @@ def compute_interface_error(g, d):
 
     """
 
-    interface_error = d[pp.STATE]["error_DF"].sum()
+    interface_error = d["error_estimates"]["diffusive_error"].sum()
 
     return interface_error
