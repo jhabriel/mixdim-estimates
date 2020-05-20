@@ -11,10 +11,17 @@ import numpy.matlib as matlib
 import scipy.sparse as sps
 import porepy as pp
 import quadpy as qp
+import line_profiler
 
 from a_posteriori_error import estimate_error, compute_global_error, compute_subdomain_error
+from a_priori_old import estimate_error as estimate_error_old
+from a_priori_old import compute_global_error as compute_global_error_old
+from a_priori_old import compute_subdomain_error as compute_subdomain_error_old
+
 from flux_reconstruction import _get_sign_normals
 from error_evaluation import _get_quadpy_elements
+
+from error_estimates_utility import _compute_node_pressure_kavg
 
 
 def fixed_dimensional_grid():
@@ -47,8 +54,8 @@ def single_fracture():
     # Plot fracture
     network_2d.plot()
     # Target lengths
-    target_h_bound = 0.02
-    target_h_fract = 0.02
+    target_h_bound = 0.5
+    target_h_fract = 0.5
     mesh_args = {"mesh_size_bound": target_h_bound, "mesh_size_frac": target_h_fract}
     # Construct grid bucket
     gb = network_2d.mesh(mesh_args)
@@ -323,27 +330,55 @@ if not unfractured_domain:
 
     # Obtaining the errors
     # The errors are stored in the dictionaries under pp.STATE
-    estimate_error(gb, lam_name=edge_variable, nodal_method="flux-inverse")
+    #estimate_error(gb, lam_name=edge_variable, nodal_method="flux-inverse", p_order="1")
+    new = True
+    if new:
+        estimate_error(gb, lam_name=edge_variable, nodal_method="flux-inverse", p_order="1")
+    else:
+        estimate_error_old(gb, lam_name=edge_variable, nodal_method="flux-inverse", p_order="1")
+
+    # for g, d in gb:
+    #     d[pp.STATE]["diffusive_error"] = d["error_estimates"]["diffusive_error"]
 else:
     g_mono = gb.grids_of_dimension(2)[0]
     d_mono = gb.node_props(g_mono)
     estimate_error(g_mono, data=d_mono)
 
 #%% Write to vtk. Create a new exporter, to avoid interferring with the above grid illustration.
-exporter = pp.Exporter(gb, "flow", folder_name="md_flow")
-exporter.write_vtk()
+#exporter = pp.Exporter(gb, "flow", folder_name="md_flow")
+#exporter.write_vtk()
 # Note that we only export the subdomain variable, not the one on the edge
-exporter.write_vtk([subdomain_variable, "error_DF"])
+#exporter.write_vtk([subdomain_variable, "diffusive_error"])
 
 
 #%% Get global error
-global_error = compute_global_error(gb)
+if new:
+    global_error = compute_global_error(gb)
+else:
+    global_error = compute_global_error_old(gb)
 g_2d = gb.grids_of_dimension(2)[0]
 g_1d = gb.grids_of_dimension(1)[0]
 d_2d = gb.node_props(g_2d)
 d_1d = gb.node_props(g_1d)
-print('The global error is: ', compute_global_error(gb))
-print('The error in the 2d grid is: ', compute_subdomain_error(g_2d, d_2d))
-print('The error in the 1d grid is: ', compute_subdomain_error(g_1d, d_1d))
+print('The global error is: ', global_error)
+#print('The error in the 2d grid is: ', compute_subdomain_error_old(g_2d, d_2d))
+#print('The error in the 1d grid is: ', compute_subdomain_error_old(g_1d, d_1d))
 
 
+#%% Nodal mortar fluxes
+for e, d_e in gb.edges():
+    
+    g_m = d_e["mortar_grid"]
+    lam = d_e[pp.STATE][edge_variable]
+    V = g_m.cell_volumes
+    
+    g_l, g_h = gb.nodes_of_edge(e)
+    _, frac_faces, _ = sps.find(g_h.tags["fracture_faces"])
+    
+    frac_faces_areas = g_h.face_areas[frac_faces]
+    lam_vel = lam / frac_faces_areas
+    
+    
+    
+    
+    
