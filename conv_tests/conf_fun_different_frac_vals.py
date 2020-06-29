@@ -1,3 +1,10 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Sun May 24 17:51:32 2020
+
+@author: jv
+"""
 import numpy as np
 import numpy.matlib as matlib
 import porepy as pp
@@ -5,22 +12,19 @@ import scipy.sparse as sps
 import sympy as sym
 import quadpy as qp
 
-from a_posteriori_error import estimate_error
+from a_posteriori_new import estimate_error
 from error_estimates_utility import (
     rotate_embedded_grid,
     compute_global_error, 
     compute_subdomain_error, 
     compute_interface_error,
     transfer_error_to_state,
+    _get_quadpy_elements,
+    _quadpyfy,
 )
         
-from error_estimates_evaluation import _get_quadpy_elements
 
-#from error_evaluation import _get_quadpy_elements
-#from pressure_reconstruction import subdomain_pressure as pressure_coefficients
-
-
-def conv_fun(target_mesh_size=0.05, method="mpfa"):
+def conv_fun_new(target_mesh_size=0.05, method="mpfa"):
     
     def make_constrained_mesh(h=0.05):
         """
@@ -167,9 +171,9 @@ def conv_fun(target_mesh_size=0.05, method="mpfa"):
     x, y = sym.symbols("x y")
 
     # Bulk pressures
-    p2d_hor_sym = sym.sqrt((x - 0.5) ** 2)  # 0.25 <= y <= 0.75
-    p2d_top_sym = sym.sqrt((x - 0.5) ** 2 + (y - 0.75) ** 2)  # y > 0.75
-    p2d_bot_sym = sym.sqrt((x - 0.5) ** 2 + (y - 0.25) ** 2)  # y < 0.25
+    p2d_hor_sym = sym.sqrt((x - 0.5) ** 2)  + 1 # 0.25 <= y <= 0.75
+    p2d_top_sym = sym.sqrt((x - 0.5) ** 2 + (y - 0.75) ** 2)  + 1 # y > 0.75
+    p2d_bot_sym = sym.sqrt((x - 0.5) ** 2 + (y - 0.25) ** 2)  + 1 # y < 0.25
 
     # Derivatives of the bulk pressure
     dp2d_hor_sym_dx = sym.diff(p2d_hor_sym, x)
@@ -192,7 +196,7 @@ def conv_fun(target_mesh_size=0.05, method="mpfa"):
     f2d_bot_sym = sym.diff(q2d_bot_sym[0], x) + sym.diff(q2d_bot_sym[1], y)
 
     # Fracture pressure
-    p1d = -1
+    p1d = 0
 
     # Mortar fluxes
     lambda_left = 1
@@ -268,7 +272,10 @@ def conv_fun(target_mesh_size=0.05, method="mpfa"):
     for g, d in gb:
 
         # Define BoundaryCondition object
-        bc_faces = g.get_boundary_faces()
+        if g.dim == 2:
+            bc_faces = g.get_boundary_faces()
+        else:
+            bc_faces = g.get_all_boundary_faces()
         bc_type = bc_faces.size * ["dir"]
         bc = pp.BoundaryCondition(g, faces=bc_faces, cond=bc_type)
         specified_parameters = {"bc": bc}
@@ -286,7 +293,7 @@ def conv_fun(target_mesh_size=0.05, method="mpfa"):
                 xf_2d[0][bot_bc_faces], xf_2d[1][bot_bc_faces]
             )
         else:
-            bc_values[bc_faces] = -1
+            bc_values[bc_faces] = 0
 
         specified_parameters["bc_values"] = bc_values
 
@@ -432,7 +439,7 @@ def conv_fun(target_mesh_size=0.05, method="mpfa"):
 
     # Obtaining the errors
     # The errors are stored in the dictionaries under pp.STATE
-    estimate_error(gb, lam_name=edge_variable, nodal_method='k-averaging')
+    estimate_error(gb, lam_name=edge_variable)
     
     # Transfer results to the d[pp.STATE]
     transfer_error_to_state(gb)
@@ -446,68 +453,68 @@ def conv_fun(target_mesh_size=0.05, method="mpfa"):
         for g, d in gb:
 
             # Rotate grid
-            g = rotate_embedded_grid(g)
+            g_rot = rotate_embedded_grid(g)
 
             # Retrieving quadpy elemnts
-            elements = _get_quadpy_elements(g)
+            elements = _get_quadpy_elements(g, g_rot)
             
             # Retrieve pressure coefficients
-            p_coeffs = d["error_estimates"]["recons_p"]
+            p_coeffs = d["error_estimates"]["postprocess_p"].copy()
             
             # Declaring integration methods
             if g.dim == 1:
-                method = qp.line_segment.chebyshev_gauss_2(3)
+                method = qp.line_segment.newton_cotes_closed(5)
                 int_point = method.points.shape[0]
             elif g.dim == 2:
                 method = qp.triangle.strang_fix_cowper_05()
                 int_point = method.points.shape[0]
 
-            # Coefficients of the gradient of reconstructed pressure for P1 elements
+            # Coefficients of the gradient of postprocessed pressure
             if g.dim == 1:
-                beta = matlib.repmat(p_coeffs[:, 1], int_point, 1).T
+                beta = _quadpyfy(p_coeffs[:, 1], int_point)
+                epsilon = _quadpyfy(p_coeffs[:, -1], int_point)
             elif g.dim == 2:
-                beta = matlib.repmat(p_coeffs[:, 1], int_point, 1).T
-                gamma = matlib.repmat(p_coeffs[:, 2], int_point, 1).T
+                beta = _quadpyfy(p_coeffs[:, 1], int_point)
+                gamma = _quadpyfy(p_coeffs[:, 2], int_point)
+                epsilon = _quadpyfy(p_coeffs[:, -1], int_point)
 
             # Define integration regions for 2D subdomain
-            def top_subregion(x):
-
-                grad_pex_x = (x[0] - 0.5) / (
-                    (x[0] - 0.5) ** 2 + (x[1] - 0.75) ** 2
-                ) ** (0.5)
-                grad_pex_y = (x[1] - 0.75) / (
-                    (x[0] - 0.5) ** 2 + (x[1] - 0.75) ** 2
-                ) ** (0.5)
-                grad_pre_x = beta
-                grad_pre_y = gamma
+            def top_subregion(X):
+                x = X[0]
+                y = X[1]
+                
+                grad_pex_x = (x - 0.5) / ((x - 0.5) ** 2 + (y - 0.75) ** 2) ** (0.5)
+                grad_pex_y = (y - 0.75) / ((x - 0.5) ** 2 + (y - 0.75) ** 2) ** (0.5)
+                grad_pre_x = beta + 2 * epsilon * x
+                grad_pre_y = gamma + 2 * epsilon * y
 
                 int_x = (grad_pex_x - grad_pre_x) ** 2
                 int_y = (grad_pex_y - grad_pre_y) ** 2
 
                 return int_x + int_y
 
-            def mid_subregion(x):
-
-                grad_pex_x = ((x[0] - 0.5) ** 2) ** (0.5) / (x[0] - 0.5)
+            def mid_subregion(X):
+                x = X[0]
+                y = X[1]
+                
+                grad_pex_x = ((x - 0.5) ** 2) ** (0.5) / (x - 0.5)
                 grad_pex_y = 0
-                grad_pre_x = beta
-                grad_pre_y = gamma
+                grad_pre_x = beta + 2 * epsilon * x
+                grad_pre_y = gamma + 2 * epsilon * y
 
                 int_x = (grad_pex_x - grad_pre_x) ** 2
                 int_y = (grad_pex_y - grad_pre_y) ** 2
 
                 return int_x + int_y
 
-            def bot_subregion(x):
-
-                grad_pex_x = (x[0] - 0.5) / (
-                    (x[0] - 0.5) ** 2 + (x[1] - 0.25) ** 2
-                ) ** (0.5)
-                grad_pex_y = (x[1] - 0.25) / (
-                    (x[0] - 0.5) ** 2 + (x[1] - 0.25) ** 2
-                ) ** (0.5)
-                grad_pre_x = beta
-                grad_pre_y = gamma
+            def bot_subregion(X):
+                x = X[0]
+                y = X[1]
+                
+                grad_pex_x = (x - 0.5) / ((x - 0.5) ** 2 + (y - 0.25) ** 2 ) ** (0.5)
+                grad_pex_y = (y - 0.25) / ((x - 0.5) ** 2 + (y - 0.25) ** 2) ** (0.5)
+                grad_pre_x = beta + 2 * epsilon * x
+                grad_pre_y = gamma + 2 * epsilon * y
 
                 int_x = (grad_pex_x - grad_pre_x) ** 2
                 int_y = (grad_pex_y - grad_pre_y) ** 2
@@ -515,9 +522,11 @@ def conv_fun(target_mesh_size=0.05, method="mpfa"):
                 return int_x + int_y
 
             # Define integration regions for the fracture
-            def fracture(x):
-
-                grad_pre_x = beta
+            def fracture(X):
+                x = X[0]
+                
+                grad_pre_x = beta + 2 * epsilon * x
+                
                 int_x = (-grad_pre_x) ** 2
 
                 return int_x
@@ -535,7 +544,7 @@ def conv_fun(target_mesh_size=0.05, method="mpfa"):
 
                 num_cells_2d = g.num_cells
                 true_error_2d = d[pp.STATE]["true_error"].sum()
-                error_estimate_2d = d[pp.STATE]["diffusive_error"].sum()
+                error_estimate_2d = compute_subdomain_error(g, d_2d)
 
             else:
 
@@ -544,7 +553,7 @@ def conv_fun(target_mesh_size=0.05, method="mpfa"):
 
                 num_cells_1d = g.num_cells
                 true_error_1d = d[pp.STATE]["true_error"].sum()
-                error_estimate_1d = d[pp.STATE]["diffusive_error"].sum()
+                error_estimate_1d = compute_subdomain_error(g, d_1d)
                 
         
         # Compute true error for the interface
@@ -581,12 +590,12 @@ def conv_fun(target_mesh_size=0.05, method="mpfa"):
             cells_h = cell_idx[face_matched_idx]
             
             # Now, retrieve the coefficients of the reconstructed pressure of those cells
-            ph_coeff = d_h["error_estimates"]["recons_p"][cells_h]
+            ph_coeff = d_h["error_estimates"]["postprocess_p"][cells_h]
             
             # Obtain the contiguous face-center pressure to the interface.
             ph_fc = ph_coeff[:, 0]
             for dim in range(g_h.dim):
-                ph_fc += ph_coeff[:, dim+1] * fc_h[:, dim]
+                ph_fc += ph_coeff[:, dim+1] * fc_h[:, dim] + ph_coeff[:, -1] * fc_h[:, dim] ** 2
             
             # Prepare to project
             ph_faces = np.zeros(g_h.num_faces)
@@ -603,7 +612,7 @@ def conv_fun(target_mesh_size=0.05, method="mpfa"):
             gl_rot = rotate_embedded_grid(g_l)
         
             # Rotate reconstructed pressure 
-            pl_coeff = d_l["error_estimates"]["recons_p"]
+            pl_coeff = d_l["error_estimates"]["postprocess_p"]
         
             # Retrieve cell-center coordinates
             cc_l = gl_rot.cell_centers
@@ -611,7 +620,7 @@ def conv_fun(target_mesh_size=0.05, method="mpfa"):
             # Obtain reconstructed cell-center pressures
             pl_cc = pl_coeff[:, 0]
             for dim in range(g_l.dim):
-                pl_cc += pl_coeff[:, dim+1] * cc_l[dim]
+                pl_cc += pl_coeff[:, dim+1] * cc_l[dim] + pl_coeff[:, -1] * cc_l[dim] ** 2
             
             # Project to the mortar grid    
             proj_cc_pl = g_m.slave_to_mortar_avg() * pl_cc     

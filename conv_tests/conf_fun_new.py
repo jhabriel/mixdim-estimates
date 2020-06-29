@@ -1,3 +1,10 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Sun May 24 17:51:32 2020
+
+@author: jv
+"""
 import numpy as np
 import numpy.matlib as matlib
 import porepy as pp
@@ -5,22 +12,32 @@ import scipy.sparse as sps
 import sympy as sym
 import quadpy as qp
 
-from a_posteriori_error import estimate_error
+from a_posteriori_new import estimate_error
 from error_estimates_utility import (
     rotate_embedded_grid,
     compute_global_error, 
     compute_subdomain_error, 
     compute_interface_error,
     transfer_error_to_state,
+    _get_quadpy_elements,
+    _quadpyfy,
+)
+
+from error_estimates_evaluation import (
+    l2_velocity,
+    l2_postp,
+    l2_recons,
+    #l2_sh,
+    l2_new_postpro,
+    l2_direct_recons,
+    l2_cc_postp_p, 
+    l2_nv_conf_p, 
+    l2_grad_sh,
+    direct_error_computation
 )
         
-from error_estimates_evaluation import _get_quadpy_elements
 
-#from error_evaluation import _get_quadpy_elements
-#from pressure_reconstruction import subdomain_pressure as pressure_coefficients
-
-
-def conv_fun(target_mesh_size=0.05, method="mpfa"):
+def conv_fun_new(target_mesh_size=0.05, method="mpfa"):
     
     def make_constrained_mesh(h=0.05):
         """
@@ -124,6 +141,9 @@ def conv_fun(target_mesh_size=0.05, method="mpfa"):
 
     xf_2d = g_2d.face_centers
     xf_1d = g_1d.face_centers
+    
+    xn_2d = g_2d.nodes
+    xn_1d = g_1d.nodes
 
     # Mappings
     cell_faces_map, _, _ = sps.find(g_2d.cell_faces)
@@ -153,6 +173,11 @@ def conv_fun(target_mesh_size=0.05, method="mpfa"):
     idx_hor_fc = (xf_2d[1] >= 0.25) & (xf_2d[1] <= 0.75)
     idx_top_fc = xf_2d[1] > 0.75
     idx_bot_fc = xf_2d[1] < 0.25
+    
+    # Boolean indices of the nodes
+    idx_hor_nv = (xn_2d[1] >= 0.25) & (xn_2d[1] <= 0.75)
+    idx_top_nv = xn_2d[1] > 0.75
+    idx_bot_nv = xn_2d[1] < 0.25 
 
     # Indices of boundary faces
     bnd_faces = g_2d.get_boundary_faces()
@@ -225,6 +250,15 @@ def conv_fun(target_mesh_size=0.05, method="mpfa"):
     )
 
     pcc_1d_exact = p1d * np.ones(g_1d.num_cells)
+    
+    # Exact nodal pressures
+    pnv_2d_exact = (
+        p2d_hor(xn_2d[0], xn_2d[1]) * idx_hor_nv
+        + p2d_top(xn_2d[0], xn_2d[1]) * idx_top_nv
+        + p2d_bot(xn_2d[0], xn_2d[1]) * idx_bot_nv
+        )
+
+    pnv_1d_exact = p1d * np.ones(g_1d.num_nodes)
 
     # Exact source terms
     f2d = (
@@ -267,8 +301,13 @@ def conv_fun(target_mesh_size=0.05, method="mpfa"):
     # Set parameters in the subdomains
     for g, d in gb:
 
-        # Define BoundaryCondition object
-        bc_faces = g.get_boundary_faces()
+        #Define BoundaryCondition object
+        if g.dim == 2:
+            bc_faces = g.get_boundary_faces()
+        else:
+            bc_faces = g.get_all_boundary_faces()
+    
+        #bc_faces = g.get_boundary_faces()
         bc_type = bc_faces.size * ["dir"]
         bc = pp.BoundaryCondition(g, faces=bc_faces, cond=bc_type)
         specified_parameters = {"bc": bc}
@@ -432,10 +471,34 @@ def conv_fun(target_mesh_size=0.05, method="mpfa"):
 
     # Obtaining the errors
     # The errors are stored in the dictionaries under pp.STATE
-    estimate_error(gb, lam_name=edge_variable, nodal_method='k-averaging')
+    estimate_error(gb, lam_name=edge_variable)
     
     # Transfer results to the d[pp.STATE]
     transfer_error_to_state(gb)
+    
+    
+    #%% Compute L2 errors
+    for g, d in gb:
+        
+        if g.dim == 2:
+            l2_2d_vel          = l2_velocity(g, d, idx_top_cc, idx_hor_cc, idx_bot_cc)
+            l2_2d_postp        = l2_postp(g, d, idx_top_cc, idx_hor_cc, idx_bot_cc)
+            l2_2d_recons       = l2_recons(g, d, idx_top_cc, idx_hor_cc, idx_bot_cc)
+            l2_2d_direct_recons = l2_direct_recons(g, d, idx_top_cc, idx_hor_cc, idx_bot_cc)
+            direct_ee_2d       = direct_error_computation(g, d, parameter_keyword)
+            l2_2d_post_pcc     = l2_cc_postp_p(g, d, parameter_keyword, pcc_2d_exact)
+            l2_2d_conf_pnv     = l2_nv_conf_p(g, d, parameter_keyword, pnv_2d_exact)
+            l2_2d_gradsh       = l2_grad_sh(g, d)
+        elif g.dim == 1:
+            l2_1d_vel          = l2_velocity(g, d, idx_top_cc, idx_hor_cc, idx_bot_cc)
+            l2_1d_postp        = l2_postp(g, d, idx_top_cc, idx_hor_cc, idx_bot_cc)
+            l2_1d_recons       = l2_recons(g, d, idx_top_cc, idx_hor_cc, idx_bot_cc)
+            l2_1d_direct_recons = l2_direct_recons(g, d, idx_top_cc, idx_hor_cc, idx_bot_cc)
+            direct_ee_1d       = direct_error_computation(g, d, parameter_keyword)
+            #l2_1d_sh           = l2_new_postpro(gb)
+            l2_1d_post_pcc     = l2_cc_postp_p(g, d, parameter_keyword, pcc_1d_exact)
+            l2_1d_conf_pnv     = l2_nv_conf_p(g, d, parameter_keyword, pnv_1d_exact)
+            l2_1d_gradsh       = l2_grad_sh(g, d)
     
     
     #%% Compute errors
@@ -446,79 +509,86 @@ def conv_fun(target_mesh_size=0.05, method="mpfa"):
         for g, d in gb:
 
             # Rotate grid
-            g = rotate_embedded_grid(g)
+            g_rot = rotate_embedded_grid(g)
 
             # Retrieving quadpy elemnts
-            elements = _get_quadpy_elements(g)
+            elements = _get_quadpy_elements(g, g_rot)
             
             # Retrieve pressure coefficients
-            p_coeffs = d["error_estimates"]["recons_p"]
+            ph = d["error_estimates"]["sh"].copy()
+            
+            # Retrieve velocity coefficients
             
             # Declaring integration methods
             if g.dim == 1:
-                method = qp.line_segment.chebyshev_gauss_2(3)
+                method = qp.line_segment.newton_cotes_closed(5)
                 int_point = method.points.shape[0]
             elif g.dim == 2:
                 method = qp.triangle.strang_fix_cowper_05()
                 int_point = method.points.shape[0]
 
-            # Coefficients of the gradient of reconstructed pressure for P1 elements
+            # Coefficients of the gradient of postprocessed pressure              
             if g.dim == 1:
-                beta = matlib.repmat(p_coeffs[:, 1], int_point, 1).T
+                c0  = _quadpyfy(ph[:, 0], int_point)
+                c1  = _quadpyfy(ph[:, 1], int_point)
             elif g.dim == 2:
-                beta = matlib.repmat(p_coeffs[:, 1], int_point, 1).T
-                gamma = matlib.repmat(p_coeffs[:, 2], int_point, 1).T
+                c0  = _quadpyfy(ph[:, 0], int_point)
+                c1  = _quadpyfy(ph[:, 1], int_point)
+                c2  = _quadpyfy(ph[:, 2], int_point)
+                c3  = _quadpyfy(ph[:, 3], int_point)
+                c4  = _quadpyfy(ph[:, 4], int_point)
 
             # Define integration regions for 2D subdomain
-            def top_subregion(x):
+            def top_subregion(X):
+                x = X[0]
+                y = X[1]
+                
+                grad_pex_x = (x - 0.5) / ((x - 0.5) ** 2 + (y - 0.75) ** 2) ** (0.5)
+                grad_pex_y = (y - 0.75) / ((x - 0.5) ** 2 + (y - 0.75) ** 2) ** (0.5)
+                
+                gradph_x = 2 * c0 * x + c1 * y + c2
+                gradph_y = c1 * x + 2 * c3 * y + c4
 
-                grad_pex_x = (x[0] - 0.5) / (
-                    (x[0] - 0.5) ** 2 + (x[1] - 0.75) ** 2
-                ) ** (0.5)
-                grad_pex_y = (x[1] - 0.75) / (
-                    (x[0] - 0.5) ** 2 + (x[1] - 0.75) ** 2
-                ) ** (0.5)
-                grad_pre_x = beta
-                grad_pre_y = gamma
-
-                int_x = (grad_pex_x - grad_pre_x) ** 2
-                int_y = (grad_pex_y - grad_pre_y) ** 2
+                int_x = (grad_pex_x - gradph_x) ** 2
+                int_y = (grad_pex_y - gradph_y) ** 2
 
                 return int_x + int_y
 
-            def mid_subregion(x):
-
-                grad_pex_x = ((x[0] - 0.5) ** 2) ** (0.5) / (x[0] - 0.5)
+            def mid_subregion(X):
+                x = X[0]
+                y = X[1]
+                
+                grad_pex_x = ((x - 0.5) ** 2) ** (0.5) / (x - 0.5)
                 grad_pex_y = 0
-                grad_pre_x = beta
-                grad_pre_y = gamma
+                gradph_x = 2 * c0 * x + c1 * y + c2
+                gradph_y = c1 * x + 2 * c3 * y + c4
 
-                int_x = (grad_pex_x - grad_pre_x) ** 2
-                int_y = (grad_pex_y - grad_pre_y) ** 2
+                int_x = (grad_pex_x - gradph_x) ** 2
+                int_y = (grad_pex_y - gradph_y) ** 2
 
                 return int_x + int_y
 
-            def bot_subregion(x):
+            def bot_subregion(X):
+                x = X[0]
+                y = X[1]
+                
+                grad_pex_x = (x - 0.5) / ((x - 0.5) ** 2 + (y - 0.25) ** 2 ) ** (0.5)
+                grad_pex_y = (y - 0.25) / ((x - 0.5) ** 2 + (y - 0.25) ** 2) ** (0.5)
+                gradph_x = 2 * c0 * x + c1 * y + c2
+                gradph_y = c1 * x + 2 * c3 * y + c4
 
-                grad_pex_x = (x[0] - 0.5) / (
-                    (x[0] - 0.5) ** 2 + (x[1] - 0.25) ** 2
-                ) ** (0.5)
-                grad_pex_y = (x[1] - 0.25) / (
-                    (x[0] - 0.5) ** 2 + (x[1] - 0.25) ** 2
-                ) ** (0.5)
-                grad_pre_x = beta
-                grad_pre_y = gamma
-
-                int_x = (grad_pex_x - grad_pre_x) ** 2
-                int_y = (grad_pex_y - grad_pre_y) ** 2
+                int_x = (grad_pex_x - gradph_x) ** 2
+                int_y = (grad_pex_y - gradph_y) ** 2
 
                 return int_x + int_y
 
             # Define integration regions for the fracture
-            def fracture(x):
-
-                grad_pre_x = beta
-                int_x = (-grad_pre_x) ** 2
+            def fracture(X):
+                x = X
+                
+                gradph_x = 2 * c0 * x + c1
+                
+                int_x = (-gradph_x) ** 2
 
                 return int_x
 
@@ -535,7 +605,7 @@ def conv_fun(target_mesh_size=0.05, method="mpfa"):
 
                 num_cells_2d = g.num_cells
                 true_error_2d = d[pp.STATE]["true_error"].sum()
-                error_estimate_2d = d[pp.STATE]["diffusive_error"].sum()
+                error_estimate_2d = compute_subdomain_error(g, d_2d)
 
             else:
 
@@ -544,88 +614,129 @@ def conv_fun(target_mesh_size=0.05, method="mpfa"):
 
                 num_cells_1d = g.num_cells
                 true_error_1d = d[pp.STATE]["true_error"].sum()
-                error_estimate_1d = d[pp.STATE]["diffusive_error"].sum()
+                error_estimate_1d = compute_subdomain_error(g, d_1d)
                 
         
         # Compute true error for the interface
         for e, d in gb.edges():
             
+            # Obtain mortar grid, mortar fluxes, adjacent grids, and data dicts
             g_m = d_e["mortar_grid"]
-            lam = d_e[pp.STATE][edge_variable]
+            V = g_m.cell_volumes
             
             g_l, g_h = gb.nodes_of_edge(e)
             d_h = gb.node_props(g_h)
             d_l = gb.node_props(g_l)
+                
+            # Declare integration method, obtain number of integration points, 
+            # normalize the integration points (quadpy uses -1 to 1), and obtain
+            # weights, which have to be divided by two for the same reason
+            method = qp.line_segment.newton_cotes_closed(5)
+            num_points = method.points.size
+            normalized_intpts = (method.points+1)/2
+            weights = method.weights/2
             
+            #------------- Treatment of the high-dimensional grid --------------------
             
-            # --- Project high-dim face-center reconst pressure to the mortar grid ---
+            # Retrieve mapped faces from master to mortar
+            face_high, _, _,  = sps.find(g_m.mortar_to_master_avg())
             
-            # First, rotate the grid (whenever coordinates are used, the rotated
-            # version of the grids must be used).
-            gh_rot = rotate_embedded_grid(g_h)
+            # Find, to which cells "face_high" belong to
+            cell_faces_map, cell_idx , _   = sps.find(g_h.cell_faces)
+            _, facehit, _ = np.intersect1d(cell_faces_map, face_high, return_indices=True)
+            cell_high = cell_idx[facehit] # these are the cells where face_high live
             
-            # Obtain indices of the fracture faces
-            _, frac_faces, _ = sps.find(g_h.tags["fracture_faces"])
-            
-            # Obtain face-center coordinates of the fracture faces.
-            # NOTE: Rows are the fracture faces, and cols are the spatial coordinates
-            fc_h = gh_rot.face_centers[:, frac_faces].T
-            
-            # Obtain global (subdomain) face-cell mapping and associated cell indices
-            face_of_cell_map, cell_idx , _   = sps.find(g_h.cell_faces)
-            
-            # We need the indices where face_of_cell_map matches frac_faces 
-            _, face_matched_idx, _ = np.intersect1d(face_of_cell_map, frac_faces, return_indices=True)
-            
-            # Retrieve the cells associated with the fracture faces
-            cells_h = cell_idx[face_matched_idx]
-            
-            # Now, retrieve the coefficients of the reconstructed pressure of those cells
-            ph_coeff = d_h["error_estimates"]["recons_p"][cells_h]
-            
-            # Obtain the contiguous face-center pressure to the interface.
-            ph_fc = ph_coeff[:, 0]
+            # Obtain the coordinates of the nodes of each relevant face
+            face_nodes_map, _, _ = sps.find(g_h.face_nodes)
+            node_faces = face_nodes_map.reshape((np.array([g_h.num_faces, g_h.dim])))
+            node_faces_high = node_faces[face_high]
+            nodescoor_faces_high = np.zeros(
+                [g_h.dim, node_faces_high.shape[0], node_faces_high.shape[1]]
+                )
             for dim in range(g_h.dim):
-                ph_fc += ph_coeff[:, dim+1] * fc_h[:, dim]
+                nodescoor_faces_high[dim] = g_h.nodes[dim][node_faces_high]
             
-            # Prepare to project
-            ph_faces = np.zeros(g_h.num_faces)
-            ph_faces[frac_faces] = ph_fc
+            # Reformat node coordinates to match size of integration point array
+            nodecoor_format_high  = np.empty([g_h.dim, face_high.size, num_points * g_h.dim])
+            for dim in range(g_h.dim):
+                nodecoor_format_high[dim] = matlib.repeat(nodescoor_faces_high[dim], num_points, axis=1)
             
-            # Project to the mortar grid
-            proj_fc_ph = g_m.master_to_mortar_avg() * ph_faces
+            # Obtain evaluation points at the higher-dimensional faces 
+            faces_high_intcoor = np.empty([g_h.dim, face_high.size, num_points])
+            for dim in range(g_h.dim):
+                faces_high_intcoor[dim] = (
+                    (nodecoor_format_high[dim][:, num_points:] - nodecoor_format_high[dim][:, :num_points])
+                    * normalized_intpts + nodecoor_format_high[dim][:, :num_points]
+                    )
             
+            # Retrieve postprocessed pressure coefficients (P1,2)
+            ph = d_h["error_estimates"]["ph"].copy()
+            ph_cell_high = ph[cell_high]
             
-            # --- Project low-dim cell-center reconst pressure to the mortar grid ---
+            # Evaluate postprocessed higher dimensional pressure at integration points
+            tracep_intpts = _quadpyfy(ph_cell_high[:, 0], num_points)
+            for dim in range(g_h.dim):
+                tracep_intpts += (
+                    _quadpyfy(ph_cell_high[:, dim+1], num_points) * faces_high_intcoor[dim]
+                    + _quadpyfy(ph_cell_high[:, -1], num_points)  * faces_high_intcoor[dim] ** 2
+                )
+                
+            #-------------- Treatment of the low-dimensional grid --------------------
         
-            # First, rotate the grid (whenever coordinates are used, the rotated
-            # version of the grids must be used).
+            # First, rotate the grid
             gl_rot = rotate_embedded_grid(g_l)
-        
-            # Rotate reconstructed pressure 
-            pl_coeff = d_l["error_estimates"]["recons_p"]
-        
-            # Retrieve cell-center coordinates
-            cc_l = gl_rot.cell_centers
             
-            # Obtain reconstructed cell-center pressures
-            pl_cc = pl_coeff[:, 0]
+            # Obtain indices of the cells, i.e., slave to mortar mapped cells
+            cell_low,  _, _,  = sps.find(g_m.mortar_to_slave_avg())
+            
+            # Obtain n coordinates of the nodes of those cells
+            cell_nodes_map, _, _ = sps.find(g_l.cell_nodes())
+            nodes_cell = cell_nodes_map.reshape(np.array([g_l.num_cells, g_l.dim + 1]))
+            nodes_cell_low = nodes_cell[cell_low]
+            nodescoor_cell_low = np.zeros(
+                [g_l.dim, nodes_cell_low.shape[0], nodes_cell_low.shape[1]]
+                )
             for dim in range(g_l.dim):
-                pl_cc += pl_coeff[:, dim+1] * cc_l[dim]
+                nodescoor_cell_low[dim] = gl_rot.nodes[dim][nodes_cell_low]
             
-            # Project to the mortar grid    
-            proj_cc_pl = g_m.slave_to_mortar_avg() * pl_cc     
+            # Reformat node coordinates to match size of integration point array
+            nodecoor_format_low  = np.empty([g_l.dim, cell_low.size, num_points * (g_l.dim+1)])
+            for dim in range(g_l.dim):
+                nodecoor_format_low[dim] = matlib.repeat(nodescoor_cell_low[dim], num_points, axis=1)
             
-            # -------------------- Estimate the diffusive error ----------------------
+            # Obtain evaluation at the lower-dimensional cells 
+            cells_low_intcoor = np.empty([g_l.dim, cell_low.size, num_points])
+            for dim in range(g_l.dim):
+                cells_low_intcoor[dim] = (
+                    (nodecoor_format_low[dim][:, num_points:] - nodecoor_format_low[dim][:, :num_points])
+                    * normalized_intpts + nodecoor_format_low[dim][:, :num_points]
+                    )
             
-            # Compute the (mortar volume) scaled pressure difference.
-            #diff = (proj_cc_pl - proj_fc_ph) * g_m.cell_volumes
-            deltap_recon = (proj_cc_pl - proj_fc_ph)
-            deltap_exact = -1 - 0
-            mismatch_squared = (deltap_exact - deltap_recon) ** 2
+            # Retrieve reconstructed pressure, i.e. P1,2
+            pl = d_l["error_estimates"]["ph"].copy()
+            pl_cell_low = pl[cell_low]
+            
+            # Evaluate postprocessed lower-dimensional pressure at integration points
+            plow_intpts = _quadpyfy(pl_cell_low[:, 0], num_points)
+            for dim in range(g_l.dim):
+                plow_intpts += (
+                    _quadpyfy(pl_cell_low[:, dim+1], num_points) * cells_low_intcoor[dim]
+                    + _quadpyfy(pl_cell_low[:, -1], num_points) * cells_low_intcoor[dim] ** 2
+                )
+            
+            # ------------------------ Computing the integral ------------------------
+                        
+            # Format  weights for integration
+            weights_format = matlib.repmat(weights, g_m.num_cells, 1)
+            
+            # Declare integrand
+            integrand = (-1 - (plow_intpts - tracep_intpts)) ** 2
+            
+            # Aaaand finally, integrate
+            true_error_mortar = np.sum(V * (integrand * weights_format).sum(axis=1))
             
             # Compute the mismatch
-            true_error_mortar = (mismatch_squared * g_m.cell_volumes).sum()
+            #true_error_mortar = (mismatch_squared * g_m.cell_volumes).sum()
             
             
             # -------------------- Projection to the side grids ----------------------
@@ -673,14 +784,18 @@ def conv_fun(target_mesh_size=0.05, method="mpfa"):
 
     # Return 
     return (
-            num_cells_2d,
-            true_error_2d,
-            error_estimate_2d,
-            num_cells_1d,
-            true_error_1d,
-            error_estimate_1d,
-            num_cells_mortar,
-            true_error_mortar, 
-            error_estimate_mortar
+            num_cells_2d,       true_error_2d,      error_estimate_2d,
+            num_cells_1d,       true_error_1d,      error_estimate_1d,
+            num_cells_mortar,   true_error_mortar,  error_estimate_mortar,
+            l2_2d_vel,          l2_1d_vel,
+            l2_2d_postp,        l2_1d_postp,
+            l2_2d_recons,       l2_1d_recons,
+            l2_2d_direct_recons, l2_1d_direct_recons,
+            direct_ee_2d,       direct_ee_1d,
+            #                    l2_1d_sh
+            #l2_2d_post_pcc,     l2_1d_post_pcc,
+            #l2_2d_conf_pnv,     l2_1d_conf_pnv,
+            #l2_2d_vel,          l2_1d_vel,
+            #l2_2d_gradsh,       l2_1d_gradsh
         )
     
