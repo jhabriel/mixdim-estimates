@@ -10,6 +10,7 @@ import numpy as np
 import numpy.matlib as matlib
 import porepy as pp
 import scipy.sparse as sps
+from typing import Union
 
 #%% Flux related functions
 def compute_full_flux(gb, kw, sd_operator_name, p_name, lam_name):
@@ -300,19 +301,6 @@ def get_sign_normals(g, g_rot):
     sign_normals = 1 - 2 * np.int8(length_sum_n < 1e-8)
 
     return sign_normals
-
-
-def get_nodes_coordinates(g, g_rot):
-
-    # Obtain node coordinates in cell-nodes format
-    cell_nodes_map, _, _ = sps.find(g.cell_nodes())
-    nodes_cell = cell_nodes_map.reshape(np.array([g.num_cells, g.dim + 1]))
-    nodes_coor_cell = np.zeros([g.dim, g.num_cells, g.dim + 1])
-    for dim in range(g.dim):
-        nodes_coor_cell[dim] = g_rot.nodes[dim][nodes_cell]
-
-    return nodes_coor_cell
-
 
 def _get_quadpy_elements(g, g_rot):
     """
