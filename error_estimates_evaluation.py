@@ -12,6 +12,10 @@ import scipy.sparse as sps
 import quadpy as qp
 import porepy as pp
 
+# TODO: Import error_estimates_utility as util
+# import error_estimates_utility as util
+
+
 from error_estimates_utility import (
     rotate_embedded_grid,
     _get_quadpy_elements,
@@ -62,8 +66,8 @@ def compute_error_estimates(gb, kw, lam_name):
         if g_m.dim > 0:  # error estimates only valid for g_m.dim > 0
 
             # Obtain the diffusive flux error
-            diffusive_error = _diffusive_flux_edge_error(gb, e, d_e, kw, lam_name)
-            d_e["error_estimates"]["diffusive_error"] = diffusive_error
+            # diffusive_error = _diffusive_flux_edge_error(gb, e, d_e, kw, lam_name)
+            d_e["error_estimates"]["diffusive_error"] = np.zeros_like(g_m.num_cells)
 
             # Obtain the non-conformity error
             d_e["error_estimates"]["nonconf_error"] = np.zeros_like(g_m.num_cells)
@@ -162,7 +166,7 @@ def _diffusive_flux_sd_error(g, g_rot, d, kw):
         c8 = _quadpyfy(ph[:, 8], int_point)
 
     # Declare integrands and prepare for integration
-    def integrad(X):
+    def integrand(X):
         if g.dim == 1:
             x = X
             vel_x = a * x + b
@@ -336,6 +340,28 @@ def _non_conformity_sd_error(g, g_rot, d, kw):
 
 #%% Interface error
 def _diffusive_flux_edge_error(gb, e, d_e, kw, lam_name):
+    """
+    Compute diffusive flux error for a given edge of grid bucket.
+
+    Parameters
+    ----------
+    gb : PorePy Object
+        Grid Bucket.
+    e : PorePy Object
+        Edge from the Grid Bucket.
+    d_e : Dictionary
+        Dictionary associated with the edge e.
+    kw : Keyword
+        Problem name, i.e., "flow".
+    lam_name : Keyword
+        Interface variable name, i.e., "mortar_solution.
+
+    Returns
+    -------
+    diffusive_error
+        DESCRIPTION.
+
+    """
 
     # Obtain mortar grid, mortar fluxes, adjacent grids, and data dicts
     g_m = d_e["mortar_grid"]
@@ -485,9 +511,9 @@ def _diffusive_flux_edge_error(gb, e, d_e, kw, lam_name):
         pass
 
     # Compute integrals and concatenate into one interface
-    mortar_error0 = method.integrate(integrand0, elements0)
-    mortar_error1 = method.integrate(integrand1, elements1)
-    mortar_error = np.concatenate((mortar_error0, mortar_error1))
+    diffusive_error0 = method.integrate(integrand0, elements0)
+    diffusive_error1 = method.integrate(integrand1, elements1)
+    mortar_error = np.concatenate((diffusive_error0, diffusive_error1))
 
     return mortar_error
 
