@@ -11,9 +11,6 @@ import numpy.matlib as matlib
 import porepy as pp
 import scipy.sparse as sps
 
-from porepy.grids.grid_bucket import GridBucket
-
-
 #%% Flux related functions
 def compute_full_flux(gb, kw, sd_operator_name, p_name, lam_name):
     """
@@ -116,253 +113,8 @@ def compute_full_flux(gb, kw, sd_operator_name, p_name, lam_name):
                 # Store in data dictionary
                 d["error_estimates"]["full_flux"] = darcy_flux + induced_flux
 
-    return
+    return None
 
-#%% Pressure related functions
-def compute_node_pressure(gb, kw, sd_operator_name, p_name, nodal_method):
-    """
-    This function simply calls either the 'flux-inverse' or the 'k-averaging'
-    nodal interpolation methods, for each node of the grid bucket.
-
-    Parameters
-    ----------
-    gb : PorePy object
-        Grid bucket, with the solution computed in d[pp.STATE][p_name]
-    kw : Keyword
-        Problem name, i.e., 'flow'.
-    sd_operator_name : Keyword
-        Subdomain operator name, i.e., 'difussion'.
-    p_name : Keyword
-        Subdomain variable name, i.e., 'pressure'.
-    nodal_method : Keyword
-        Nodal interpolation method, i.e., 'flux-inverse' or 'k-averaging'
-
-    Returns
-    -------
-    None.
-
-    """
-    
-    for g, d in gb:
-        
-        if nodal_method == 'flux-inverse':
-            _compute_node_pressure_invflux(g, d, kw, sd_operator_name, p_name)
-        elif nodal_method == "k-averaging":
-            _compute_node_pressure_kavg(g, d, kw, sd_operator_name, p_name)
-        else:
-            raise("Nodal pressure interpolation method not implemented. Use either 'flux-inverse' or 'k-averaging'.")
-
-    return
-
-
-def _compute_node_pressure_invflux(g, d, kw, sd_operator_name, p_name):
-    """
-    Computes nodal pressure values using the inverse of the flux
-
-    Parameters
-    ----------
-    g : PorePy object
-        Grid, i.e., node from the grid bucket
-    d : dictionary 
-        Data dictionary
-    kw : Keyword
-        Problem name, i.e., 'flow'.
-    p_name : Keyword
-        Subdomain variable name, i.e., 'pressure'.
-
-    Returns
-    -------
-    None.
-    
-    Note: The data dictionary will be updated with  d["error_estimates"]["node_pressure"],
-    a NumPy array of length g.num_nodes.
-
-    """
-    
-    # Retrieve subdomain discretization
-    discr = d[pp.DISCRETIZATION][p_name][sd_operator_name]
-
-    # Boolean variable for checking is the scheme is FV
-    is_fv = issubclass(type(discr), pp.FVElliptic)
-    
-    # Retrieve pressure from the dictionary
-    if is_fv:
-        p = d[pp.STATE][p_name]
-    else:
-        p = discr.extract_pressure(g, d[pp.STATE][p_name], d)
-        
-    # Handle the case of zero-dimensional grids
-    if g.dim == 0:
-        d["error_estimates"]["node_pressure"] = p
-        return
-
-    # Retrieve topological data
-    nc = g.num_cells
-    nf = g.num_faces
-    nn = g.num_nodes
-
-    # Retrieve subdomain discretization
-    discr = d[pp.DISCRETIZATION][p_name][sd_operator_name]
-
-    # Perform reconstruction [This is Eirik's original implementation]
-    cell_nodes = g.cell_nodes()
-    cell_node_volumes = cell_nodes * sps.dia_matrix((g.cell_volumes, 0), (nc, nc))
-    sum_cell_nodes = cell_node_volumes * np.ones(nc)
-    cell_nodes_scaled = (
-        sps.dia_matrix((1.0 / sum_cell_nodes, 0), (nn, nn)) * cell_node_volumes
-    )
-
-    # Retrieving numerical full fluxes
-    if "full_flux" in d["error_estimates"]:
-        flux = d["error_estimates"]["full_flux"]
-    else:
-        raise('Full flux must be computed first')
-
-    # Project fluxes
-    proj_flux = pp.RT0(kw).project_flux(g, flux, d)[: g.dim]
-
-    # Obtaining local gradients
-    loc_grad = np.zeros((g.dim, nc))
-    perm = d[pp.PARAMETERS][kw]["second_order_tensor"].values
-    for ci in range(nc):
-        loc_grad[: g.dim, ci] = -np.linalg.inv(perm[: g.dim, : g.dim, ci]).dot(
-            proj_flux[:, ci]
-        )
-        
-    # Obtaining nodal pressures
-    cell_nodes_map, _, _ = sps.find(g.cell_nodes())
-    cell_node_matrix = cell_nodes_map.reshape(np.array([g.num_cells, g.dim + 1]))
-    nodal_pressures = np.zeros(nn)
-
-    for col in range(g.dim + 1):
-        nodes = cell_node_matrix[:, col]
-        dist = g.nodes[: g.dim, nodes] - g.cell_centers[: g.dim]
-        scaling = cell_nodes_scaled[nodes, np.arange(nc)]
-        contribution = (
-            np.asarray(scaling)
-            * (p + np.sum(dist * loc_grad, axis=0))
-        ).ravel()
-        nodal_pressures += np.bincount(nodes, weights=contribution, minlength=nn)
-
-    # Treatment of boundary conditions
-    bc = d[pp.PARAMETERS][kw]["bc"]
-    bc_values = d[pp.PARAMETERS][kw]["bc_values"]
-
-    external_dirichlet_boundary = np.logical_and(
-        bc.is_dir, g.tags["domain_boundary_faces"]
-    )
-
-    face_vec = np.zeros(nf)
-    face_vec[external_dirichlet_boundary] = 1
-    num_dir_face_of_node = g.face_nodes * face_vec
-    is_dir_node = num_dir_face_of_node > 0
-    face_vec *= 0
-    face_vec[external_dirichlet_boundary] = bc_values[external_dirichlet_boundary]
-
-    node_val_dir = g.face_nodes * face_vec
-
-    node_val_dir[is_dir_node] /= num_dir_face_of_node[is_dir_node]
-    nodal_pressures[is_dir_node] = node_val_dir[is_dir_node]
-
-    # Save in the dictionary
-    d["error_estimates"]["node_pressure"] = nodal_pressures
-
-    return
-
-
-def _compute_node_pressure_kavg(g, d, kw, sd_operator_name, p_name):
-    """
-    Computes nodal pressure values using an average of the cell permeabilities
-    associated with the node patch.
-
-    Parameters
-    ----------
-    g : PorePy object
-        Grid, i.e., node from the grid bucket
-    d : dictionary 
-        Data dictionary
-    kw : Keyword
-        Problem name, i.e., 'flow'.
-    p_name : Keyword
-        Subdomain variable name, i.e., 'pressure'.
-
-    Returns
-    -------
-    None.
-    
-    Note: The data dictionary will be updated with the field d["error_estimates"]["node_pressure"]
-
-    """
-
-    # Retrieve subdomain discretization
-    discr = d[pp.DISCRETIZATION][p_name][sd_operator_name]
-
-    # Boolean variable for checking is the scheme is FV
-    is_fv = issubclass(type(discr), pp.FVElliptic)
-    
-    # Retrieve pressure from the dictionary
-    if is_fv:
-        p_cc = d[pp.STATE][p_name]
-    else:
-        p_cc = discr.extract_pressure(g, d[pp.STATE][p_name], d)
-        
-    # Handle the case of zero-dimensional grids
-    if g.dim == 0:
-        d["error_estimates"]["node_pressure"] = p_cc
-        return
-
-    # Topological data
-    nn = g.num_nodes
-    nf = g.num_faces
-    V = g.cell_volumes
-    
-    # Retrieve permeability values
-    k = d[pp.PARAMETERS][kw]["second_order_tensor"].values
-    perm = k[0][0]
-    # TODO: For the moment, we assume kxx = kyy = kzz on each cell
-    # It would be nice to add the possibility to account for anisotropy
-
-    nodes_of_cell, cell_idx, _ = sps.find(g.cell_nodes()) 
-    p_contribution = p_cc[cell_idx]
-    k_contribution = perm[cell_idx]
-    V_contribution = V[cell_idx]
-    
-    numer_contribution = p_contribution * k_contribution * V_contribution
-    denom_contribution = k_contribution * V_contribution
-    
-    numer = np.bincount(nodes_of_cell, weights=numer_contribution, minlength=nn)
-    denom = np.bincount(nodes_of_cell, weights=denom_contribution, minlength=nn)
-    
-    nodal_pressures = numer / denom
-    
-    #Deal with Dirichlet and Neumann boundary conditions
-    bc = d[pp.PARAMETERS][kw]["bc"]
-    bc_values = d[pp.PARAMETERS][kw]["bc_values"]
-    external_dirichlet_boundary = np.logical_and(
-        bc.is_dir, g.tags["domain_boundary_faces"]
-    )
-    face_vec = np.zeros(nf)
-    face_vec[external_dirichlet_boundary] = 1
-    num_dir_face_of_node = g.face_nodes * face_vec
-    is_dir_node = num_dir_face_of_node > 0
-    face_vec *= 0
-    face_vec[external_dirichlet_boundary] = bc_values[external_dirichlet_boundary]
-    node_val_dir = g.face_nodes * face_vec
-    node_val_dir[is_dir_node] /= num_dir_face_of_node[is_dir_node]
-    nodal_pressures[is_dir_node] = node_val_dir[is_dir_node]
-
-    # Save in the dictionary
-    d["error_estimates"]["node_pressure"] = nodal_pressures
-    
-    return
-
-#%% Mortar related functions
-def compute_node_mortar_flux(g_m, d_e, lam_name):
-    
-    V = g_m.cell_volumes()
-    
-    
-    pass
 
 #%% Geometry related functions
 def rotate_embedded_grid(g):
@@ -381,32 +133,63 @@ def rotate_embedded_grid(g):
 
     Returns
     -------
-    g_rot : Porepy object
-        Rotated PorePy grid.
+    g_rot : Rotated object
+        Rotated PorePy pseudo-grid.
         
     """
 
-    # Copy grid to keep original one untouched
-    g_rot = g.copy()
+    class RotatedGrid:
+        """
+        This class creates a rotated grid object. 
+        """
+
+        def __init__(
+            self,
+            cell_centers,
+            face_normals,
+            face_centers,
+            rotation_matrix,
+            dim_bool,
+            nodes,
+        ):
+
+            self.cell_centers = cell_centers
+            self.face_normals = face_normals
+            self.face_centers = face_centers
+            self.rotation_matrix = rotation_matrix
+            self.dim_bool = dim_bool
+            self.nodes = nodes
+
+        def __str__(self):
+            return "Rotated pseudo-grid object"
+
+        def __repr__(self):
+            return (
+                "Rotated pseudo-grid object with atributes:\n"
+                + "cell_centers\n"
+                + "face_normals\n"
+                + "face_centers\n"
+                + "rotation_matrix\n"
+                + "dim_bool\n"
+                + "nodes"
+            )
 
     # Rotate grid
     (
         cell_centers,
         face_normals,
         face_centers,
-        R,
-        dim,
+        rotation_matrix,
+        dim_bool,
         nodes,
-    ) = pp.map_geometry.map_grid(g_rot)
+    ) = pp.map_geometry.map_grid(g)
 
-    # Update rotated fields in the relevant dimension
-    for dim in range(g.dim):
-        g_rot.cell_centers[dim] = cell_centers[dim]
-        g_rot.face_normals[dim] = face_normals[dim]
-        g_rot.face_centers[dim] = face_centers[dim]
-        g_rot.nodes[dim] = nodes[dim]
+    # Create rotated grid object
+    rotated_grid = RotatedGrid(
+        cell_centers, face_normals, face_centers, rotation_matrix, dim_bool, nodes
+    )
 
-    return g_rot
+    return rotated_grid
 
 
 def get_opposite_side_nodes(g):
@@ -446,7 +229,7 @@ def get_opposite_side_nodes(g):
     return opposite_nodes
 
 
-def get_sign_normals(g):
+def get_sign_normals(g, g_rot):
     """
     Computes sign of the face normals for each element in the grid
 
@@ -479,12 +262,12 @@ def get_sign_normals(g):
     # Face centers coordinates for each face associated to each cell
     faceCntr_cells = np.empty([g.dim, faces_cell.shape[0], faces_cell.shape[1]])
     for dim in range(g.dim):
-        faceCntr_cells[dim] = g.face_centers[dim][faces_cell]
+        faceCntr_cells[dim] = g_rot.face_centers[dim][faces_cell]
 
     # Global normals of the faces per cell
     glb_normal_faces_cell = np.empty([g.dim, faces_cell.shape[0], faces_cell.shape[1]])
     for dim in range(g.dim):
-        glb_normal_faces_cell[dim] = g.face_normals[dim][faces_cell]
+        glb_normal_faces_cell[dim] = g_rot.face_normals[dim][faces_cell]
 
     # Computing the local outter normals of the faces per cell.
     # To do this, we first assume that n_loc = n_glb, and then we fix the sign.
@@ -496,7 +279,7 @@ def get_sign_normals(g):
     loc_normal_faces_cell = glb_normal_faces_cell.copy()
     cellCntr_broad = np.empty([g.dim, g.num_cells, g.dim + 1])
     for dim in range(g.dim):
-        cellCntr_broad[dim] = matlib.repmat(g.cell_centers[dim], g.dim + 1, 1).T
+        cellCntr_broad[dim] = matlib.repmat(g_rot.cell_centers[dim], g.dim + 1, 1).T
 
     v1 = faceCntr_cells - cellCntr_broad
     v2 = v1 + loc_normal_faces_cell * 0.001
@@ -518,6 +301,156 @@ def get_sign_normals(g):
 
     return sign_normals
 
+
+def get_nodes_coordinates(g, g_rot):
+
+    # Obtain node coordinates in cell-nodes format
+    cell_nodes_map, _, _ = sps.find(g.cell_nodes())
+    nodes_cell = cell_nodes_map.reshape(np.array([g.num_cells, g.dim + 1]))
+    nodes_coor_cell = np.zeros([g.dim, g.num_cells, g.dim + 1])
+    for dim in range(g.dim):
+        nodes_coor_cell[dim] = g_rot.nodes[dim][nodes_cell]
+
+    return nodes_coor_cell
+
+
+def _get_quadpy_elements(g, g_rot):
+    """
+    Assembles the elements of a given grid in quadpy format
+    For a 2D example see: https://pypi.org/project/quadpy/
+
+    Parameters
+    ----------
+    grid : PorePy object
+        Porepy grid object.
+        
+    Returns
+    -------
+    quadpy_elements : NumPy array
+        Elements in QuadPy format.
+
+    Example
+    -------
+    >>> # shape (3, 5, 2), i.e., (corners, num_triangles, xy_coords)
+    >>> triangles = numpy.stack([
+            [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]],
+            [[1.2, 0.6], [1.3, 0.7], [1.4, 0.8]],
+            [[26.0, 31.0], [24.0, 27.0], [33.0, 28]],
+            [[0.1, 0.3], [0.4, 0.4], [0.7, 0.1]],
+            [[8.6, 6.0], [9.4, 5.6], [7.5, 7.4]]
+            ], axis=-2)
+    
+    """
+
+    # Renaming variables
+    nc = g.num_cells
+
+    # Getting node coordinates for each cell
+    cell_nodes_map, _, _ = sps.find(g.cell_nodes())
+    nodes_cell = cell_nodes_map.reshape(np.array([nc, g.dim + 1]))
+    nodes_coor_cell = np.empty([g.dim, nodes_cell.shape[0], nodes_cell.shape[1]])
+    for dim in range(g.dim):
+        nodes_coor_cell[dim] = g_rot.nodes[dim][nodes_cell]
+
+    # Stacking node coordinates
+    cnc_stckd = np.empty([nc, (g.dim + 1) * g.dim])
+    col = 0
+    for vertex in range(g.dim + 1):
+        for dim in range(g.dim):
+            cnc_stckd[:, col] = nodes_coor_cell[dim][:, vertex]
+            col += 1
+    element_coord = np.reshape(cnc_stckd, np.array([nc, g.dim + 1, g.dim]))
+
+    # Reshaping to please quadpy format i.e, (corners, num_elements, coords)
+    elements = np.stack(element_coord, axis=-2)
+
+    # For some reason, quadpy needs a different formatting for line segments
+    if g.dim == 1:
+        elements = elements.reshape(g.dim + 1, g.num_cells)
+
+    return elements
+
+
+def _quadpyfy(array, integration_points):
+    """
+    Format array for numerical integration
+
+    Parameters
+    ----------
+    array : TYPE
+        DESCRIPTION.
+    integration_points : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    TYPE
+        DESCRIPTION.
+
+    """
+    return matlib.repmat(array, integration_points, 1).T
+
+
+def _find_edges(
+    g: pp.Grid, loc_faces: np.ndarray, central_node: int
+) -> Union[np.ndarray, np.ndarray]:
+    """
+    Find the 1d edges around a central node in a 3d grid.
+    Args:
+        g (pp.Grid): Macro grid.
+        loc_faces (np.ndarray): Index of faces that have central_node among their
+            vertexes.
+        central_node (int): Index of the central node.
+    Returns:
+        nodes_on_edges (np.ndarray): Index of nodes that form a 1d edge together with
+            the central node.
+        face_of_edges (np.ndarray): Faces corresponding to the edge.
+    Raises:
+        ValueError: If not all faces in the grid have the same number of nodes.
+    """
+
+    fn_loc = g.face_nodes[:, loc_faces]
+    node_ind = fn_loc.indices
+    fn_ptr = fn_loc.indptr
+
+    if not np.unique(np.diff(fn_ptr)).size == 1:
+        # Fixing this should not be too hard
+        raise ValueError("Have not implemented grids with varying number of face-nodes")
+
+    # Number of nodes per face
+    num_fn = np.unique(np.diff(fn_ptr))[0]
+
+    # Sort the nodes of the local faces.
+    sort_ind = np.argsort(node_ind)
+
+    # The elements in sorted_node_ind (and node_ind) will not be unique
+    sorted_node_ind = node_ind[sort_ind]
+
+    # Duplicate the face indices, and make the same sorting as for the nodes
+    face_ind = np.tile(loc_faces, (num_fn, 1)).ravel(order="f")
+    sorted_face_ind = face_ind[sort_ind]
+
+    # Exclude nodes and faces that correspond to the central node
+    not_central_node = np.where(sorted_node_ind != central_node)[0]
+    sorted_node_ind_ext = sorted_node_ind[not_central_node]
+    sorted_face_ind_ext = sorted_face_ind[not_central_node]
+
+    # Nodes that occur more than once are part of at least two faces, thus there is an
+    # edge going from the central to that other node
+    # This may not be true for sufficiently degenerated grids (not sure what that means,
+    # possibly something with hanging nodes).
+    multiple_occur = np.where(np.bincount(sorted_node_ind_ext) > 1)[0]
+    hit = np.in1d(sorted_node_ind_ext, multiple_occur)
+
+    # Edges (represented by the node that is not the central one), and the faces of the
+    # edges. Note that neither nodes_on_edges nor face_of_edges are unique, however, the
+    # combination of an edge and a face should be so.
+    nodes_on_edges = sorted_node_ind_ext[hit]
+    face_of_edges = sorted_face_ind_ext[hit]
+
+    return nodes_on_edges, face_of_edges
+
+
 #%% Miscelaneaous functions
 def init_estimates_data_keyword(gb):
     """
@@ -534,16 +467,47 @@ def init_estimates_data_keyword(gb):
     None.
 
     """
-    
+
     for g, d in gb:
-        
-        d["error_estimates"] = { }
-        
+
+        d["error_estimates"] = {}
+
     for e, d_e in gb.edges():
-        
-        d_e["error_estimates"] = { }
-        
+
+        d_e["error_estimates"] = {}
+
     return
+
+
+def transfer_error_to_state(gb):
+
+    for g, d in gb:
+
+        if g.dim == 0:
+            d[pp.STATE]["diffusive_error"] = None
+            d[pp.STATE]["nonconf_error"] = None
+        else:
+            if "diffusive_error" and "nonconf_error" in d["error_estimates"]:
+                d[pp.STATE]["diffusive_error"] = d["error_estimates"]["diffusive_error"]
+                d[pp.STATE]["nonconf_error"] = d["error_estimates"]["nonconf_error"]
+            else:
+                raise ValueError("Error estimates must be computed first.")
+
+    for _, d_e in gb.edges():
+
+        g_m = d_e["mortar_grid"]
+
+        if g_m.dim == 0:
+            d[pp.STATE]["diffusive_error"] = None
+            d[pp.STATE]["nonconf_error"] = None
+        else:
+            if "diffusive_error" and "nonconf_error" in d_e["error_estimates"]:
+                d_e[pp.STATE]["diffusive_error"] = d_e["error_estimates"][
+                    "diffusive_error"
+                ]
+                d_e[pp.STATE]["nonconf_error"] = d_e["error_estimates"]["nonconf_error"]
+            else:
+                raise ValueError("Error estimates must be computed first.")
 
 
 #%% Global errors related functions
@@ -572,20 +536,19 @@ def compute_global_error(gb, data=None):
 
     global_error = 0
 
-    # Obtain global error for mono-dimensional grid
-    if not isinstance(gb, GridBucket) and not isinstance(gb, pp.GridBucket):
-        global_error = data[pp.STATE]["error_DF"].sum()
-    
-    # Obtain global error for mixed-dimensional grids
-    else:
-        for g, d in gb:
-            if g.dim > 0:
-                global_error += d[pp.STATE]["error_DF"].sum()
+    for g, d in gb:
+        if g.dim > 0:
+            global_error += d["error_estimates"]["diffusive_error"].sum()
+            global_error += d["error_estimates"]["nonconf_error"].sum()
 
-        for e, d in gb.edges():
-            # TODO: add diffusive flux error contribution for the interfaces
-            # global_error += d[]
-            pass
+    for _, d_e in gb.edges():
+
+        g_m = d_e["mortar_grid"]
+
+        if g_m.dim > 0:
+
+            global_error += d_e["error_estimates"]["diffusive_error"].sum()
+            global_error += d_e["error_estimates"]["nonconf_error"].sum()
 
     return global_error
 
@@ -608,7 +571,12 @@ def compute_subdomain_error(g, d):
 
     """
 
-    subdomain_error = d[pp.STATE]["error_DF"].sum()
+    # Handle the case of zero-dimensional grids
+    if g.dim == 0:
+        raise ValueError("Error estimates are not defined for zero-dimensional grids")
+
+    subdomain_error = d["error_estimates"]["diffusive_error"].sum()
+    subdomain_error += d["error_estimates"]["nonconf_error"].sum()
 
     return subdomain_error
 
@@ -631,7 +599,7 @@ def compute_interface_error(g, d):
 
     """
 
-    interface_error = d[pp.STATE]["error_DF"].sum()
+    interface_error = d["error_estimates"]["diffusive_error"].sum()
+    interface_error += d["error_estimates"]["nonconf_error"].sum()
 
     return interface_error
-    
