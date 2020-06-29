@@ -95,20 +95,28 @@ def estimate_error(
     utils.compute_full_flux(gb, keyword, sd_operator_name, p_name, lam_name)
 
     # 1.2: Reconstruct flux
+    print("Reconstructing velocity field... ", end=" ")
     recons.reconstruct_velocity(gb, keyword, lam_name)
+    print("\u2713")
 
     # ------------------------------ BLOCK [2] -------------------------------
 
     # 2.1: Postprocess pressure solution
+    print("Postprocessing pressure solution... ", end=" ")
     recons.postprocess_pressure(gb, keyword, sd_operator_name, p_name)
+    print("\u2713")
 
     # 2.2: Reconstruct postprocessed pressure
+    print("Reconstructing postprocessed pressure... ", end=" ")
     recons.reconstruct_pressure(gb, keyword)
+    print("\u2713")
 
     # ------------------------------ BLOCK [3] -------------------------------
 
     # 3.1: Evaluate errors for each subdomain and each interface
+    print("Computing error estimates... ", end=" ")
     evaluate.compute_error_estimates(gb, keyword, lam_name)
+    print("\u2713")
 
     # --------------------------------- END ----------------------------------
 

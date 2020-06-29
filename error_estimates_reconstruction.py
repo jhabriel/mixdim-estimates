@@ -10,7 +10,7 @@ import numpy as np
 import numpy.matlib as matlib
 import porepy as pp
 import scipy.sparse as sps
-import quady as qp
+import quadpy as qp
 
 import error_estimates_utility as utils
 
@@ -669,14 +669,17 @@ def postprocess_pressure(gb, kw, sd_operator_name, p_name):
             g_rot = utils.rotate_embedded_grid(g)
 
             # Retrieve postprocessed coefficients
-            coeff = _get_postp_coeff(g, g_rot, d, kw, sd_operator_name, p_name, pcc)
-
+            ph = _get_postp_coeff(g, g_rot, d, kw, sd_operator_name, p_name, pcc)
+            
+            # ------------------- TEST POSTPROCESSED PRESSURE ----------------
+            _test_postprocessed_pressure(g, g_rot, kw, d, pcc, ph)
+            
             # Store in data dictionary
-            d["error_estimates"]["ph"] = coeff.copy()
+            d["error_estimates"]["ph"] = ph.copy()
 
     return None
 
-
+                      
 def _get_postp_coeff(g, g_rot, d, kw, sd_operator_name, p_name, pcc):
     """
     Obtain P2 postprocessed for a given node of the Grid bucket.
@@ -803,3 +806,171 @@ def _get_postp_coeff(g, g_rot, d, kw, sd_operator_name, p_name, pcc):
         coeff[:, 9] = pcc - integral / V  # 1
 
     return coeff
+
+
+def _test_postprocessed_pressure(g, g_rot, kw, d, pcc, ph):
+    """
+    Testing of postprocessed pressure solution. The test consists of two parts.
+    First, we check that grad p_h = - inv(k) u_{RT0} by computing the cell 
+    center magnitudes of the lhs and rhs. The second test check if 
+    (p_h, 1)_K = |K| p_cc, where p_cc is the cell center solution.
+
+    Parameters
+    ----------
+    g : PorePy object
+        Grid.
+    g_rot : Rotated object
+        Rotate pseudo-grid.
+    kw : Keyword
+        Problem name, i.e., "flow".
+    d : Dictionary
+        Data dictionary.
+    pcc : NumPy Array
+        Cell-center pressure solution.
+    ph : NumPy Array
+        P2 post-processed pressure solution coefficients.
+
+    Returns
+    -------
+    None.
+
+    NOTE: This function is meant as an "on-the-fly" testing routine.
+
+    """
+    
+    # Get quadpy elements and cell volumes
+    elements = utils._get_quadpy_elements(g, g_rot)
+    V = g.cell_volumes
+ 
+    # Declare integration methods according to grid dimensionality
+    if g.dim == 1:
+        method = qp.line_segment.newton_cotes_closed(5)
+        int_point = method.points.shape[0]
+    elif g.dim == 2:
+        method = qp.triangle.strang_fix_cowper_05()
+        int_point = method.points.shape[0]
+    else:
+        method = qp.tetrahedron.yu_2()
+        int_point = method.points.shape[0]
+    
+    # Get cell center values
+    cc = g_rot.cell_centers
+    
+    # Get reconstructed velocity field
+    if "recons_vel" in d["error_estimates"]:
+        vel_coeff = d["error_estimates"]["recons_vel"].copy()
+    else:
+        raise ValueError("Flux must be reconstructed first")
+        
+    # Retrieve permeability values
+    perm = d[pp.PARAMETERS][kw]["second_order_tensor"].values.copy()
+    k_broad = matlib.repmat(perm[0][0], g.dim + 1, 1).T
+    
+    # Scale velocitiy field by the inverse of the permeability
+    vel_coeff /= -k_broad
+
+    # ----------------------------- TEST 1 -----------------------------------
+    # Check if ||grad(p_h)|| = ||-k^{-1} u_{RT0}|| at the cell centers    
+    
+    grad_ph = np.empty([g.dim, g.num_cells])
+    vel = np.empty([g.dim, g.num_cells])
+    if g.dim == 1:
+        grad_ph[0] = 2 * ph[:, 0] * cc[0] + ph[:, 1]
+        vel[0] = vel_coeff[:, 0] * cc[0] + vel_coeff[:, 1]
+    elif g.dim == 2:
+        grad_ph[0] = 2 * ph[:, 0] * cc[0] + ph[:, 1] * cc[1] + ph[:, 2]
+        grad_ph[1] = ph[:, 1] * cc[0] + 2 * ph[:, 3] * cc[1] + ph[:, 4] 
+        vel[0] = vel_coeff[:, 0] * cc[0] + vel_coeff[:, 1]
+        vel[1] = vel_coeff[:, 0] * cc[1] + vel_coeff[:, 2]
+    else:
+        grad_ph[0] = 2 * ph[:, 0] * cc[0] + ph[:, 1] * cc[1] + ph[:, 2] * cc[2] + ph[:, 3]
+        grad_ph[1] = ph[:, 1] * cc[0] + 2 * ph[:, 4] * cc[1] + ph[:, 5] * cc[2] + ph[:, 6]
+        grad_ph[2] = ph[:, 2] * cc[0] + ph[:, 5] * cc[1] + 2 * ph[:, 7] * cc[2] + ph[:, 8]
+        vel[0] = vel_coeff[:, 0] * cc[0] + vel_coeff[:, 1]
+        vel[1] = vel_coeff[:, 0] * cc[1] + vel_coeff[:, 2]
+        vel[2] = vel_coeff[:, 0] * cc[2] + vel_coeff[:, 3]
+    
+    
+    # Compute the magnitude
+    mag_grad_ph = np.zeros(g.num_cells)
+    mag_vel = np.zeros(g.num_cells)
+    for dim in range(g.dim): 
+        mag_grad_ph += grad_ph[dim] ** 2
+        mag_vel += vel[dim] ** 2
+    mag_grad_ph **= 0.5
+    mag_vel **= 0.5
+    
+    # Check if both arrays are equal 
+    np.testing.assert_almost_equal(
+                mag_grad_ph,
+                mag_vel,
+                decimal=12,
+                err_msg="Pressure postprocessing has failed: RT0 field not recovered.",
+            )    
+            
+    # ------------------------------- TEST 2 ---------------------------------
+    #Check if (ph, 1) = |K| p_cc
+    
+    # Reformat according to number of quadrature points
+    if g.dim == 1:
+        c0 = utils._quadpyfy(ph[:, 0], int_point)
+        c1 = utils._quadpyfy(ph[:, 1], int_point)
+        c2 = utils._quadpyfy(ph[:, 2], int_point)
+    elif g.dim == 2:
+        c0 = utils._quadpyfy(ph[:, 0], int_point)
+        c1 = utils._quadpyfy(ph[:, 1], int_point)
+        c2 = utils._quadpyfy(ph[:, 2], int_point)
+        c3 = utils._quadpyfy(ph[:, 3], int_point)
+        c4 = utils._quadpyfy(ph[:, 4], int_point)
+        c5 = utils._quadpyfy(ph[:, 5], int_point)
+    else:
+        c0 = utils._quadpyfy(ph[:, 0], int_point)
+        c1 = utils._quadpyfy(ph[:, 1], int_point)
+        c2 = utils._quadpyfy(ph[:, 2], int_point)
+        c3 = utils._quadpyfy(ph[:, 3], int_point)
+        c4 = utils._quadpyfy(ph[:, 4], int_point)
+        c5 = utils._quadpyfy(ph[:, 5], int_point)
+        c6 = utils._quadpyfy(ph[:, 6], int_point)
+        c7 = utils._quadpyfy(ph[:, 7], int_point)
+        c8 = utils._quadpyfy(ph[:, 8], int_point)
+        c9 = utils._quadpyfy(ph[:, 9], int_point)
+        
+    # Declare integrand
+    def integrand(X):      
+        if g.dim == 1:
+            x = X
+            int_ = c0 * x ** 2 + c1 * x + c2
+            return int_
+        
+        elif g.dim == 2:
+            x = X[0]
+            y = X[1]
+            int_ = c0 * x ** 2 + c1 * x * y + c2 * x + c3 * y ** 2 + c4 * y + c5
+            return int_
+        else:
+            x = X[0]
+            y = X[1]
+            z = X[2]
+            int_ = (
+                c0 * x ** 2 + c1 * x * y + c2 * x * z + c3 * x + c4 * y * 2 
+                + c5 * y * z + c6 * y + c7 * z ** 2 + c8 * z + c9
+                )
+            return int_
+    
+    # Perform integration
+    mean_val = method.integrate(integrand, elements) / V
+    
+    # Check if both arrays are equal 
+    np.testing.assert_almost_equal(
+             mean_val,
+             pcc,
+             decimal=12,
+             err_msg="Pressure postprocessing has failed: Mean value not satisfied",
+         )  
+
+    return None
+
+
+
+    
+    

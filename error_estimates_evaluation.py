@@ -1058,94 +1058,94 @@ def l2_sh(g, d):
     return np.sum(integral[: int(integral.size)])
 
 
-def l2_direct_recons(g, d, idx_top, idx_middle, idx_bot):
+# def l2_direct_recons(g, d, idx_top, idx_middle, idx_bot):
 
-    from error_estimates_utility import _compute_node_pressure_kavg
-    from error_estimates_reconstruction import _P1
+#     from error_estimates_utility import _compute_node_pressure_kavg
+#     from error_estimates_reconstruction import _P1
 
-    # Rotate grid
-    g_rot = rotate_embedded_grid(g)
+#     # Rotate grid
+#     g_rot = rotate_embedded_grid(g)
 
-    # Nodal values
-    p_nv = _compute_node_pressure_kavg(g, g_rot, d, "flow", "diffusion", "pressure")
+#     # Nodal values
+#     p_nv = _compute_node_pressure_kavg(g, g_rot, d, "flow", "diffusion", "pressure")
 
-    # Conforming coefficients
-    sh_coeff = _P1(g, g_rot, p_nv)
+#     # Conforming coefficients
+#     sh_coeff = _P1(g, g_rot, p_nv)
 
-    # Retrieve elements
-    elements = _get_quadpy_elements(g, g_rot)
+#     # Retrieve elements
+#     elements = _get_quadpy_elements(g, g_rot)
 
-    # Declaring integration methods
-    if g.dim == 1:
-        method = qp.line_segment.newton_cotes_closed(5)
-        int_point = method.points.shape[0]
-    elif g.dim == 2:
-        method = qp.triangle.strang_fix_cowper_05()
-        int_point = method.points.shape[0]
+#     # Declaring integration methods
+#     if g.dim == 1:
+#         method = qp.line_segment.newton_cotes_closed(5)
+#         int_point = method.points.shape[0]
+#     elif g.dim == 2:
+#         method = qp.triangle.strang_fix_cowper_05()
+#         int_point = method.points.shape[0]
 
-    # Quadpyfying arrays
-    if g.dim == 1:
-        alpha = _quadpyfy(sh_coeff[:, 0], int_point)
-        beta = _quadpyfy(sh_coeff[:, 1], int_point)
-    elif g.dim == 2:
-        alpha = _quadpyfy(sh_coeff[:, 0], int_point)
-        beta = _quadpyfy(sh_coeff[:, 1], int_point)
-        gamma = _quadpyfy(sh_coeff[:, 2], int_point)
+#     # Quadpyfying arrays
+#     if g.dim == 1:
+#         alpha = _quadpyfy(sh_coeff[:, 0], int_point)
+#         beta = _quadpyfy(sh_coeff[:, 1], int_point)
+#     elif g.dim == 2:
+#         alpha = _quadpyfy(sh_coeff[:, 0], int_point)
+#         beta = _quadpyfy(sh_coeff[:, 1], int_point)
+#         gamma = _quadpyfy(sh_coeff[:, 2], int_point)
 
-    # Define fracture regions for the bulk
-    def top_subregion(X):
-        x = X[0]
-        y = X[1]
+#     # Define fracture regions for the bulk
+#     def top_subregion(X):
+#         x = X[0]
+#         y = X[1]
 
-        p_ex = ((x - 0.5) ** 2 + (y - 0.75) ** 2) ** 0.5
-        conf = alpha + beta * x + gamma * y
-        int_ = (p_ex - conf) ** 2
+#         p_ex = ((x - 0.5) ** 2 + (y - 0.75) ** 2) ** 0.5
+#         conf = alpha + beta * x + gamma * y
+#         int_ = (p_ex - conf) ** 2
 
-        return int_
+#         return int_
 
-    def mid_subregion(X):
-        x = X[0]
-        y = X[1]
+#     def mid_subregion(X):
+#         x = X[0]
+#         y = X[1]
 
-        p_ex = ((x - 0.5) ** 2) ** 0.5
-        conf = alpha + beta * x + gamma * y
-        int_ = (p_ex - conf) ** 2
+#         p_ex = ((x - 0.5) ** 2) ** 0.5
+#         conf = alpha + beta * x + gamma * y
+#         int_ = (p_ex - conf) ** 2
 
-        return int_
+#         return int_
 
-    def bot_subregion(X):
-        x = X[0]
-        y = X[1]
+#     def bot_subregion(X):
+#         x = X[0]
+#         y = X[1]
 
-        p_ex = ((x - 0.5) ** 2 + (y - 0.25) ** 2) ** 0.5
-        conf = alpha + beta * x + gamma * y
-        int_ = (p_ex - conf) ** 2
+#         p_ex = ((x - 0.5) ** 2 + (y - 0.25) ** 2) ** 0.5
+#         conf = alpha + beta * x + gamma * y
+#         int_ = (p_ex - conf) ** 2
 
-        return int_
+#         return int_
 
-    # Define integration regions for the fracture
-    def fracture(X):
-        x = X  # [0]
+#     # Define integration regions for the fracture
+#     def fracture(X):
+#         x = X  # [0]
 
-        p_ex = -1
-        conf = alpha + beta * x
+#         p_ex = -1
+#         conf = alpha + beta * x
 
-        int_ = (p_ex - conf) ** 2
+#         int_ = (p_ex - conf) ** 2
 
-        return int_
+#         return int_
 
-    # Compute errors
-    if g.dim == 2:
+#     # Compute errors
+#     if g.dim == 2:
 
-        int_top = method.integrate(top_subregion, elements)
-        int_mid = method.integrate(mid_subregion, elements)
-        int_bot = method.integrate(bot_subregion, elements)
-        integral = int_top * idx_top + int_mid * idx_middle + int_bot * idx_bot
-    elif g.dim == 1:
+#         int_top = method.integrate(top_subregion, elements)
+#         int_mid = method.integrate(mid_subregion, elements)
+#         int_bot = method.integrate(bot_subregion, elements)
+#         integral = int_top * idx_top + int_mid * idx_middle + int_bot * idx_bot
+#     elif g.dim == 1:
 
-        integral = method.integrate(fracture, elements)
+#         integral = method.integrate(fracture, elements)
 
-    return integral.sum()
+#     return integral.sum()
 
 
 def l2_grad_sh(g, d):
