@@ -34,11 +34,11 @@ for method in methods:
     d[method] = {'num_cells_2d':[ ], 'true_error_2d':[ ], 'error_estimate_2d':[ ], 
                  'num_cells_1d':[ ], 'true_error_1d':[ ], 'error_estimate_1d':[ ],
                  'num_cells_mortar': [ ], "true_error_mortar": [ ], "error_estimate_mortar":  [], 
-                 'l2_velocity_2d': [ ], "l2_velocity_1d": [ ],
-                 'l2_postp_2d' : [ ], 'l2_postp_1d': [ ],
-                 'l2_recons_2d': [ ], 'l2_recons_1d': [ ],
-                 'l2_direct_recons_2d': [ ], 'l2_direct_recons_1d': [ ],
-                 'direct_ee_2d': [ ],   'direct_ee_1d': [ ],
+                 #'l2_velocity_2d': [ ], "l2_velocity_1d": [ ],
+                 #'l2_postp_2d' : [ ], 'l2_postp_1d': [ ],
+                 #'l2_recons_2d': [ ], 'l2_recons_1d': [ ],
+                 #'l2_direct_recons_2d': [ ], 'l2_direct_recons_1d': [ ],
+                 #'direct_ee_2d': [ ],   'direct_ee_1d': [ ],
                  #"new_sh_1d": [ ]
                  #'l2_conf_nv_2d': [ ], "l2_conf_nv_1d": [ ], 
                  #'l2_grad_nonconf_2d': [ ], "l2_grad_nonconf_1d": [ ], 
@@ -48,11 +48,11 @@ for method in methods:
         (num_cells_2d, true_error_2d, error_estimate_2d,
          num_cells_1d, true_error_1d, error_estimate_1d,
          num_cells_mortar, true_error_mortar, error_estimates_mortar,
-         l2_velocity_2d, l2_velocity_1d,
-         l2_postp_2d,    l2_postp_1d, 
-         l2_recons_2d,   l2_recons_1d,
-         l2_direct_recons_2d, l2_direct_recons_1d,
-         direct_ee_2d, direct_ee_1d,
+         #l2_velocity_2d, l2_velocity_1d,
+         #l2_postp_2d,    l2_postp_1d, 
+         #l2_recons_2d,   l2_recons_1d,
+         #l2_direct_recons_2d, l2_direct_recons_1d,
+         #direct_ee_2d, direct_ee_1d,
          #new_sh_1d
          #l2_conf_nv_2d, l2_conf_nv_1d, 
          #l2_grad_nonconf_2d, l2_grad_nonconf_1d
@@ -70,16 +70,16 @@ for method in methods:
         d[method]['true_error_mortar'].append(true_error_mortar)
         d[method]['error_estimate_mortar'].append(error_estimates_mortar)
         
-        d[method]['l2_velocity_2d'].append(l2_velocity_2d)
-        d[method]['l2_velocity_1d'].append(l2_velocity_1d)
-        d[method]['l2_postp_2d'].append(l2_postp_2d)
-        d[method]['l2_postp_1d'].append(l2_postp_1d)
-        d[method]['l2_recons_2d'].append(l2_recons_2d)
-        d[method]['l2_recons_1d'].append(l2_recons_1d)
-        d[method]['l2_direct_recons_2d'].append(l2_direct_recons_2d)
-        d[method]['l2_direct_recons_1d'].append(l2_direct_recons_1d)
-        d[method]['direct_ee_2d'].append(direct_ee_2d)
-        d[method]['direct_ee_1d'].append(direct_ee_1d)
+        #d[method]['l2_velocity_2d'].append(l2_velocity_2d)
+        #d[method]['l2_velocity_1d'].append(l2_velocity_1d)
+        #d[method]['l2_postp_2d'].append(l2_postp_2d)
+        #d[method]['l2_postp_1d'].append(l2_postp_1d)
+        #d[method]['l2_recons_2d'].append(l2_recons_2d)
+        #d[method]['l2_recons_1d'].append(l2_recons_1d)
+        #d[method]['l2_direct_recons_2d'].append(l2_direct_recons_2d)
+        #d[method]['l2_direct_recons_1d'].append(l2_direct_recons_1d)
+        #d[method]['direct_ee_2d'].append(direct_ee_2d)
+        #d[method]['direct_ee_1d'].append(direct_ee_1d)
         #d[method]['new_sh_1d'].append(new_sh_1d)
 
         #d[method]['l2_conf_nv_2d'].append(l2_conf_nv_2d)
@@ -176,7 +176,7 @@ for counter, method in enumerate(methods):
     figure.axes[1].loglog(np.array(d[method]['num_cells_1d']), 
                 np.array(d[method]['true_error_1d']), linestyle='--', linewidth=2, color=colors[counter])
     figure.axes[1].loglog(np.array(d[method]['num_cells_1d']), 
-                np.array(d[method]['direct_ee_1d']), marker='o', color=colors[counter])
+                np.array(d[method]['error_estimate_1d']), marker='o', color=colors[counter])
     figure.axes[1].set_xlabel(r'$\# fracture \,\, cells$')
 figure.axes[1].set_ylabel(r'$\eta_{NC}^2 \;\; (\Omega_1)$')
 figure.axes[1].grid(True)
@@ -230,167 +230,167 @@ figure.suptitle("Convergence analysis for bulk and fracture")
 # plt.grid(True)
 # plt.show()
 
-#%% Reconstructed velocity
-figure, axes = create_subplot(1)
+# #%% Reconstructed velocity
+# figure, axes = create_subplot(1)
 
-x1 = np.log(1.5e2)
-y1 = np.log(0.5e-4)
-y2 = np.log(2e-2)
+# x1 = np.log(1.5e2)
+# y1 = np.log(0.5e-4)
+# y2 = np.log(2e-2)
 
-x2_linear = x1 - (y2 - y1)
-x2_quadra = x1 - 0.5*(y2-y1) 
-figure.axes[0].grid(True, which="both", ls="--", color='0.75')
+# x2_linear = x1 - (y2 - y1)
+# x2_quadra = x1 - 0.5*(y2-y1) 
+# figure.axes[0].grid(True, which="both", ls="--", color='0.75')
 
-# Plot 2d
-figure.axes[0].loglog([np.exp(x1), np.exp(x2_quadra)], [np.exp(y1), np.exp(y2)], color='m', LineWidth=3)
+# # Plot 2d
+# figure.axes[0].loglog([np.exp(x1), np.exp(x2_quadra)], [np.exp(y1), np.exp(y2)], color='m', LineWidth=3)
 
-for counter, method in enumerate(methods):
-    figure.axes[0].loglog(np.array(d[method]['num_cells_2d']) ** 0.5, 
-                np.array(d[method]['l2_velocity_2d']), marker='o', color=colors[counter])    
+# for counter, method in enumerate(methods):
+#     figure.axes[0].loglog(np.array(d[method]['num_cells_2d']) ** 0.5, 
+#                 np.array(d[method]['l2_velocity_2d']), marker='o', color=colors[counter])    
 
-figure.axes[0].set_xlabel(r'$\sqrt{\# cells}$')
-figure.axes[0].set_ylabel(r'$error \;\; (\Omega_2)$')
+# figure.axes[0].set_xlabel(r'$\sqrt{\# cells}$')
+# figure.axes[0].set_ylabel(r'$error \;\; (\Omega_2)$')
 
-# Plot 1d
+# # Plot 1d
 
-x1 = np.log(3e1)
-y1 = np.log(4e-7)
-y2 = np.log(4e-5)
+# x1 = np.log(3e1)
+# y1 = np.log(4e-7)
+# y2 = np.log(4e-5)
 
-x2_linear = x1 - (y2 - y1)
-x2_quadra = x1 - 0.5*(y2-y1) 
-figure.axes[1].grid(True, which="both", ls="--", color='0.75')
+# x2_linear = x1 - (y2 - y1)
+# x2_quadra = x1 - 0.5*(y2-y1) 
+# figure.axes[1].grid(True, which="both", ls="--", color='0.75')
 
-figure.axes[1].loglog([np.exp(x1), np.exp(x2_quadra)], [np.exp(y1), np.exp(y2)], color='m', LineWidth=3)
+# figure.axes[1].loglog([np.exp(x1), np.exp(x2_quadra)], [np.exp(y1), np.exp(y2)], color='m', LineWidth=3)
 
-for counter, method in enumerate(methods):
-    figure.axes[1].loglog(np.array(d[method]['num_cells_1d']), 
-                np.array(d[method]['l2_velocity_1d']), marker='o', color=colors[counter])    
+# for counter, method in enumerate(methods):
+#     figure.axes[1].loglog(np.array(d[method]['num_cells_1d']), 
+#                 np.array(d[method]['l2_velocity_1d']), marker='o', color=colors[counter])    
     
-figure.axes[1].set_xlabel(r'$\# fracture \,\, cells$')
-figure.axes[1].set_ylabel(r'$error \;\; (\Omega_1)$')
+# figure.axes[1].set_xlabel(r'$\# fracture \,\, cells$')
+# figure.axes[1].set_ylabel(r'$error \;\; (\Omega_1)$')
 
-# Plot legend
-figure.axes[2].loglog([],[], color='m', LineWidth=3)
-for counter, method in enumerate(methods):
-    figure.axes[2].loglog([],[], marker='o', color=colors[counter])      
-leg_str = ['Quadratic']
-for method in methods: leg_str.append(method) 
-figure.axes[2].legend(leg_str, loc="center left", frameon=False)
-figure.axes[2].axis("off")
+# # Plot legend
+# figure.axes[2].loglog([],[], color='m', LineWidth=3)
+# for counter, method in enumerate(methods):
+#     figure.axes[2].loglog([],[], marker='o', color=colors[counter])      
+# leg_str = ['Quadratic']
+# for method in methods: leg_str.append(method) 
+# figure.axes[2].legend(leg_str, loc="center left", frameon=False)
+# figure.axes[2].axis("off")
 
-figure.suptitle(r"$||u - \tilde{u}_h|| $")
+# figure.suptitle(r"$||u - \tilde{u}_h|| $")
 
 
-#%% Postprocessed pressure
+# #%% Postprocessed pressure
 
-figure, axes = create_subplot(2)
+# figure, axes = create_subplot(2)
 
-x1 = np.log(1.5e2)
-y1 = np.log(3e-7)
-y2 = np.log(1e-4)
+# x1 = np.log(1.5e2)
+# y1 = np.log(3e-7)
+# y2 = np.log(1e-4)
 
-x2_linear = x1 - (y2 - y1)
-x2_quadra = x1 - 0.5*(y2-y1) 
-figure.axes[0].grid(True, which="both", ls="--", color='0.75')
+# x2_linear = x1 - (y2 - y1)
+# x2_quadra = x1 - 0.5*(y2-y1) 
+# figure.axes[0].grid(True, which="both", ls="--", color='0.75')
 
-# Plot 2d
-figure.axes[0].loglog([np.exp(x1), np.exp(x2_quadra)], [np.exp(y1), np.exp(y2)], color='m', LineWidth=3)
+# # Plot 2d
+# figure.axes[0].loglog([np.exp(x1), np.exp(x2_quadra)], [np.exp(y1), np.exp(y2)], color='m', LineWidth=3)
 
-for counter, method in enumerate(methods):
-    figure.axes[0].loglog(np.array(d[method]['num_cells_2d']) ** 0.5, 
-                np.array(d[method]['l2_postp_2d']), marker='o', color=colors[counter])    
+# for counter, method in enumerate(methods):
+#     figure.axes[0].loglog(np.array(d[method]['num_cells_2d']) ** 0.5, 
+#                 np.array(d[method]['l2_postp_2d']), marker='o', color=colors[counter])    
 
-figure.axes[0].set_xlabel(r'$\sqrt{\# cells}$')
-figure.axes[0].set_ylabel(r'$error \;\; (\Omega_2)$')
+# figure.axes[0].set_xlabel(r'$\sqrt{\# cells}$')
+# figure.axes[0].set_ylabel(r'$error \;\; (\Omega_2)$')
 
-# Plot 1d
+# # Plot 1d
 
-x1 = np.log(4e1)
-y1 = np.log(7e-10)
-y2 = np.log(3e-7)
+# x1 = np.log(4e1)
+# y1 = np.log(7e-10)
+# y2 = np.log(3e-7)
 
-x2_linear = x1 - (y2 - y1)
-x2_quadra = x1 - 0.5*(y2-y1) 
-figure.axes[1].grid(True, which="both", ls="--", color='0.75')
+# x2_linear = x1 - (y2 - y1)
+# x2_quadra = x1 - 0.5*(y2-y1) 
+# figure.axes[1].grid(True, which="both", ls="--", color='0.75')
 
-figure.axes[1].loglog([np.exp(x1), np.exp(x2_quadra)], [np.exp(y1), np.exp(y2)], color='m', LineWidth=3)
+# figure.axes[1].loglog([np.exp(x1), np.exp(x2_quadra)], [np.exp(y1), np.exp(y2)], color='m', LineWidth=3)
 
-for counter, method in enumerate(methods):
-    figure.axes[1].loglog(np.array(d[method]['num_cells_1d']), 
-                np.array(d[method]['l2_postp_1d']), marker='o', color=colors[counter])    
+# for counter, method in enumerate(methods):
+#     figure.axes[1].loglog(np.array(d[method]['num_cells_1d']), 
+#                 np.array(d[method]['l2_postp_1d']), marker='o', color=colors[counter])    
     
-figure.axes[1].set_xlabel(r'$\# fracture \,\, cells$')
-figure.axes[1].set_ylabel(r'$error \;\; (\Omega_1)$')
+# figure.axes[1].set_xlabel(r'$\# fracture \,\, cells$')
+# figure.axes[1].set_ylabel(r'$error \;\; (\Omega_1)$')
 
-# Plot legend
-figure.axes[2].loglog([],[], color='m', LineWidth=3)
-for counter, method in enumerate(methods):
-    figure.axes[2].loglog([],[], marker='o', color=colors[counter])      
-leg_str = ['Quadratic']
-for method in methods: leg_str.append(method) 
-figure.axes[2].legend(leg_str, loc="center left", frameon=False)
-figure.axes[2].axis("off")
+# # Plot legend
+# figure.axes[2].loglog([],[], color='m', LineWidth=3)
+# for counter, method in enumerate(methods):
+#     figure.axes[2].loglog([],[], marker='o', color=colors[counter])      
+# leg_str = ['Quadratic']
+# for method in methods: leg_str.append(method) 
+# figure.axes[2].legend(leg_str, loc="center left", frameon=False)
+# figure.axes[2].axis("off")
 
-figure.suptitle(r"$||p - \tilde{p}_h|| $")
+# figure.suptitle(r"$||p - \tilde{p}_h|| $")
 
 
-#%% Reconstructed (conforming) pressure
+# #%% Reconstructed (conforming) pressure
 
-figure, axes = create_subplot(3)
+# figure, axes = create_subplot(3)
 
-x1 = np.log(1.5e2)
-y1 = np.log(3e-7)
-y2 = np.log(1e-4)
+# x1 = np.log(1.5e2)
+# y1 = np.log(3e-7)
+# y2 = np.log(1e-4)
 
-x2_linear = x1 - (y2 - y1)
-x2_quadra = x1 - 0.5*(y2-y1) 
-figure.axes[0].grid(True, which="both", ls="--", color='0.75')
+# x2_linear = x1 - (y2 - y1)
+# x2_quadra = x1 - 0.5*(y2-y1) 
+# figure.axes[0].grid(True, which="both", ls="--", color='0.75')
 
-# Plot 2d
-figure.axes[0].loglog([np.exp(x1), np.exp(x2_quadra)], [np.exp(y1), np.exp(y2)], color='m', LineWidth=3)
+# # Plot 2d
+# figure.axes[0].loglog([np.exp(x1), np.exp(x2_quadra)], [np.exp(y1), np.exp(y2)], color='m', LineWidth=3)
 
-for counter, method in enumerate(methods):
-    figure.axes[0].loglog(np.array(d[method]['num_cells_2d']) ** 0.5, 
-                np.array(d[method]['l2_recons_2d']), marker='o', color=colors[counter])
-    figure.axes[0].loglog(np.array(d[method]['num_cells_2d']) ** 0.5, 
-                np.array(d[method]['l2_direct_recons_2d']), marker='s', color='blue')
+# for counter, method in enumerate(methods):
+#     figure.axes[0].loglog(np.array(d[method]['num_cells_2d']) ** 0.5, 
+#                 np.array(d[method]['l2_recons_2d']), marker='o', color=colors[counter])
+#     figure.axes[0].loglog(np.array(d[method]['num_cells_2d']) ** 0.5, 
+#                 np.array(d[method]['l2_direct_recons_2d']), marker='s', color='blue')
 
-figure.axes[0].set_xlabel(r'$\sqrt{\# cells}$')
-figure.axes[0].set_ylabel(r'$error \;\; (\Omega_2)$')
+# figure.axes[0].set_xlabel(r'$\sqrt{\# cells}$')
+# figure.axes[0].set_ylabel(r'$error \;\; (\Omega_2)$')
 
-# Plot 1d
+# # Plot 1d
 
-x1 = np.log(4e1)
-y1 = np.log(7e-10)
-y2 = np.log(3e-7)
+# x1 = np.log(4e1)
+# y1 = np.log(7e-10)
+# y2 = np.log(3e-7)
 
-x2_linear = x1 - (y2 - y1)
-x2_quadra = x1 - 0.5*(y2-y1) 
-figure.axes[1].grid(True, which="both", ls="--", color='0.75')
+# x2_linear = x1 - (y2 - y1)
+# x2_quadra = x1 - 0.5*(y2-y1) 
+# figure.axes[1].grid(True, which="both", ls="--", color='0.75')
 
-figure.axes[1].loglog([np.exp(x1), np.exp(x2_quadra)], [np.exp(y1), np.exp(y2)], color='m', LineWidth=3)
+# figure.axes[1].loglog([np.exp(x1), np.exp(x2_quadra)], [np.exp(y1), np.exp(y2)], color='m', LineWidth=3)
 
-for counter, method in enumerate(methods):
-    figure.axes[1].loglog(np.array(d[method]['num_cells_1d']), 
-                np.array(d[method]['new_sh_1d']), marker='o', color=colors[counter])    
-    figure.axes[1].loglog(np.array(d[method]['num_cells_2d']) ** 0.5, 
-                np.array(d[method]['l2_direct_recons_1d']), marker='s', color='blue')
+# for counter, method in enumerate(methods):
+#     figure.axes[1].loglog(np.array(d[method]['num_cells_1d']), 
+#                 np.array(d[method]['new_sh_1d']), marker='o', color=colors[counter])    
+#     figure.axes[1].loglog(np.array(d[method]['num_cells_2d']) ** 0.5, 
+#                 np.array(d[method]['l2_direct_recons_1d']), marker='s', color='blue')
     
-figure.axes[1].set_xlabel(r'$\# fracture \,\, cells$')
-figure.axes[1].set_ylabel(r'$error \;\; (\Omega_1)$')
+# figure.axes[1].set_xlabel(r'$\# fracture \,\, cells$')
+# figure.axes[1].set_ylabel(r'$error \;\; (\Omega_1)$')
 
-# Plot legend
-figure.axes[2].loglog([],[], color='m', LineWidth=3)
-for counter, method in enumerate(methods):
-    figure.axes[2].loglog([],[], marker='o', color=colors[counter])    
-    figure.axes[2].loglog([],[], marker='o', color='blue')   
-leg_str = ['Quadratic', 'Vohralik', 'Direct reconst.']
-#for method in methods: leg_str.append(method) 
-figure.axes[2].legend(leg_str, loc="center left", frameon=False)
-figure.axes[2].axis("off")
+# # Plot legend
+# figure.axes[2].loglog([],[], color='m', LineWidth=3)
+# for counter, method in enumerate(methods):
+#     figure.axes[2].loglog([],[], marker='o', color=colors[counter])    
+#     figure.axes[2].loglog([],[], marker='o', color='blue')   
+# leg_str = ['Quadratic', 'Vohralik', 'Direct reconst.']
+# #for method in methods: leg_str.append(method) 
+# figure.axes[2].legend(leg_str, loc="center left", frameon=False)
+# figure.axes[2].axis("off")
 
-figure.suptitle(r"$\eta = \sum_{K \in T_h} ||p - s_h||_K^2$")
+# figure.suptitle(r"$\eta = \sum_{K \in T_h} ||p - s_h||_K^2$")
 
 
 #%%

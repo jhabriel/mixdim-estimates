@@ -16,10 +16,6 @@ from error_estimates_utility import (
         
 from error_estimates_evaluation import _get_quadpy_elements
 
-#from error_evaluation import _get_quadpy_elements
-#from pressure_reconstruction import subdomain_pressure as pressure_coefficients
-
-
 def conv_fun(target_mesh_size=0.05, method="mpfa"):
     
     def make_constrained_mesh(h=0.05):

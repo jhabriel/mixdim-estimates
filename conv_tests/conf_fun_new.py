@@ -12,7 +12,7 @@ import scipy.sparse as sps
 import sympy as sym
 import quadpy as qp
 
-from a_posteriori_new import estimate_error
+from a_posteriori_error import estimate_error
 from error_estimates_utility import (
     rotate_embedded_grid,
     compute_global_error, 
@@ -23,18 +23,18 @@ from error_estimates_utility import (
     _quadpyfy,
 )
 
-from error_estimates_evaluation import (
-    l2_velocity,
-    l2_postp,
-    l2_recons,
-    #l2_sh,
-    l2_new_postpro,
-    l2_direct_recons,
-    l2_cc_postp_p, 
-    l2_nv_conf_p, 
-    l2_grad_sh,
-    direct_error_computation
-)
+# from error_estimates_evaluation import (
+#     #l2_velocity,
+#     #l2_postp,
+#     #l2_recons,
+#     #l2_sh,
+#     #l2_new_postpro,
+#     #l2_direct_recons,
+#     #l2_cc_postp_p, 
+#     #l2_nv_conf_p, 
+#     #l2_grad_sh,
+#     #direct_error_computation
+# )
         
 
 def conv_fun_new(target_mesh_size=0.05, method="mpfa"):
@@ -477,28 +477,28 @@ def conv_fun_new(target_mesh_size=0.05, method="mpfa"):
     transfer_error_to_state(gb)
     
     
-    #%% Compute L2 errors
-    for g, d in gb:
+    # #%% Compute L2 errors
+    # for g, d in gb:
         
-        if g.dim == 2:
-            l2_2d_vel          = l2_velocity(g, d, idx_top_cc, idx_hor_cc, idx_bot_cc)
-            l2_2d_postp        = l2_postp(g, d, idx_top_cc, idx_hor_cc, idx_bot_cc)
-            l2_2d_recons       = l2_recons(g, d, idx_top_cc, idx_hor_cc, idx_bot_cc)
-            l2_2d_direct_recons = l2_direct_recons(g, d, idx_top_cc, idx_hor_cc, idx_bot_cc)
-            direct_ee_2d       = direct_error_computation(g, d, parameter_keyword)
-            l2_2d_post_pcc     = l2_cc_postp_p(g, d, parameter_keyword, pcc_2d_exact)
-            l2_2d_conf_pnv     = l2_nv_conf_p(g, d, parameter_keyword, pnv_2d_exact)
-            l2_2d_gradsh       = l2_grad_sh(g, d)
-        elif g.dim == 1:
-            l2_1d_vel          = l2_velocity(g, d, idx_top_cc, idx_hor_cc, idx_bot_cc)
-            l2_1d_postp        = l2_postp(g, d, idx_top_cc, idx_hor_cc, idx_bot_cc)
-            l2_1d_recons       = l2_recons(g, d, idx_top_cc, idx_hor_cc, idx_bot_cc)
-            l2_1d_direct_recons = l2_direct_recons(g, d, idx_top_cc, idx_hor_cc, idx_bot_cc)
-            direct_ee_1d       = direct_error_computation(g, d, parameter_keyword)
-            #l2_1d_sh           = l2_new_postpro(gb)
-            l2_1d_post_pcc     = l2_cc_postp_p(g, d, parameter_keyword, pcc_1d_exact)
-            l2_1d_conf_pnv     = l2_nv_conf_p(g, d, parameter_keyword, pnv_1d_exact)
-            l2_1d_gradsh       = l2_grad_sh(g, d)
+    #     if g.dim == 2:
+    #         #l2_2d_vel          = l2_velocity(g, d, idx_top_cc, idx_hor_cc, idx_bot_cc)
+    #         #l2_2d_postp        = l2_postp(g, d, idx_top_cc, idx_hor_cc, idx_bot_cc)
+    #         #l2_2d_recons       = l2_recons(g, d, idx_top_cc, idx_hor_cc, idx_bot_cc)
+    #         #l2_2d_direct_recons = l2_direct_recons(g, d, idx_top_cc, idx_hor_cc, idx_bot_cc)
+    #         #direct_ee_2d       = direct_error_computation(g, d, parameter_keyword)
+    #         #l2_2d_post_pcc     = l2_cc_postp_p(g, d, parameter_keyword, pcc_2d_exact)
+    #         #l2_2d_conf_pnv     = l2_nv_conf_p(g, d, parameter_keyword, pnv_2d_exact)
+    #         #l2_2d_gradsh       = l2_grad_sh(g, d)
+    #     elif g.dim == 1:
+    #         #l2_1d_vel          = l2_velocity(g, d, idx_top_cc, idx_hor_cc, idx_bot_cc)
+    #         #l2_1d_postp        = l2_postp(g, d, idx_top_cc, idx_hor_cc, idx_bot_cc)
+    #         #l2_1d_recons       = l2_recons(g, d, idx_top_cc, idx_hor_cc, idx_bot_cc)
+    #         #l2_1d_direct_recons = l2_direct_recons(g, d, idx_top_cc, idx_hor_cc, idx_bot_cc)
+    #         #direct_ee_1d       = direct_error_computation(g, d, parameter_keyword)
+    #         #l2_1d_sh           = l2_new_postpro(gb)
+    #         #l2_1d_post_pcc     = l2_cc_postp_p(g, d, parameter_keyword, pcc_1d_exact)
+    #         #l2_1d_conf_pnv     = l2_nv_conf_p(g, d, parameter_keyword, pnv_1d_exact)
+    #         #l2_1d_gradsh       = l2_grad_sh(g, d)
     
     
     #%% Compute errors
@@ -787,11 +787,11 @@ def conv_fun_new(target_mesh_size=0.05, method="mpfa"):
             num_cells_2d,       true_error_2d,      error_estimate_2d,
             num_cells_1d,       true_error_1d,      error_estimate_1d,
             num_cells_mortar,   true_error_mortar,  error_estimate_mortar,
-            l2_2d_vel,          l2_1d_vel,
-            l2_2d_postp,        l2_1d_postp,
-            l2_2d_recons,       l2_1d_recons,
-            l2_2d_direct_recons, l2_1d_direct_recons,
-            direct_ee_2d,       direct_ee_1d,
+            #l2_2d_vel,          l2_1d_vel,
+            #l2_2d_postp,        l2_1d_postp,
+            #l2_2d_recons,       l2_1d_recons,
+            #l2_2d_direct_recons, l2_1d_direct_recons,
+            #direct_ee_2d,       direct_ee_1d,
             #                    l2_1d_sh
             #l2_2d_post_pcc,     l2_1d_post_pcc,
             #l2_2d_conf_pnv,     l2_1d_conf_pnv,
