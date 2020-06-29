@@ -12,8 +12,8 @@ import scipy.sparse as sps
 import quadpy as qp
 import porepy as pp
 
-# TODO: Import error_estimates_utility as util
-# import error_estimates_utility as util
+# TODO: Import error_estimates_utility as utils
+# import error_estimates_utility as utils
 
 
 from error_estimates_utility import (
