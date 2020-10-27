@@ -33,3 +33,4 @@ bin/*
 *.pdf
 .eggs/
 *.DS_Store
+*.egg-info
