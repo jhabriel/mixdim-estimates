@@ -9,7 +9,7 @@ Add arXiv
 
 **mdestimates** is developed under Python >= 3.6. Get the latest version using git, i.e.:
 
-    git clone https://www.github.com/jhabriel/mixdim-estimates.git
+    git clone https://github.com/jhabriel/mixdim-estimates.git
     cd mixdim-estimates
   
  Install the dependencies:
