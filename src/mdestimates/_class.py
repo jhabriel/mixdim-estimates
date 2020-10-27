@@ -16,8 +16,8 @@ import porepy as pp
 
 class ErrorEstimate():
     """
-    This is the parent class for the computation of error estimates for
-    incompressible flow in mixed-dimensional settings.
+    Parent class for computation of a posteriori error estimates for solutions
+    of the incompressible flow in mixed-dimensional geometries.
     """
     
     def __init__(
@@ -114,18 +114,18 @@ class ErrorEstimate():
         """
         
         # Velocity reconstruction methods
-        from porepy.estimates._velocity_reconstruction import (
+        from mdestimates._velocity_reconstruction import (
             compute_full_flux,
             reconstruct_velocity,
             )
         
         # Pressure reconstruction methods
-        from porepy.estimates._pressure_reconstruction import(
+        from mdestimates._pressure_reconstruction import(
             reconstruct_pressure,
             )
         
         # Error evaluation methods
-        from porepy.estimates._error_evaluation import compute_error_estimates
+        from mdestimates._error_evaluation import compute_error_estimates
         
                 
         # Populating data dicitionaries with self.estimates_kw
