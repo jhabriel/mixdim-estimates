@@ -1,13 +1,13 @@
 # mdestimates: A posteriori error estimates for md-elliptic equations
 
-mdestimates computes a posteriori error estimates for the incompressible flow in fractured porous media. This python package relies heavily on PorePy and QuadPy.
+**mdestimates** computes a posteriori error estimates for the incompressible flow in fractured porous media. This python package relies heavily on [PorePy](www.github.com/pmgbergen/porepy) and [quadpy](www.github.com/nschloe/quadpy).
 
 ## Citing
 Add arXiv
 
 ## Installation from source
 
-mdestimates is developed under Python >= 3.6. Get the latest version using git, i.e.:
+**mdestimates** is developed under Python >= 3.6. Get the latest version using git, i.e.:
 
     git clone https://www.github.com/jhabriel/mixdim-estimates.git
     cd mixdim-estimates
@@ -31,7 +31,7 @@ Or, for user-editable installations,
 A simple usage of mdestimates can be found in tutorials/example.py.
 
 ## Problems?
-Create an [issue](https://github.com/pmgbergen/porepy/issues)
+Create an [issue](https://github.com/jhabriel/mixdim-estimates)
 
 ## License
 See [license md](./LICENSE.md).
