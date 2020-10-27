@@ -1,6 +1,6 @@
 # mdestimates: A posteriori error estimates for md-elliptic equations
 
-**mdestimates** computes a posteriori error estimates for the incompressible flow in fractured porous media. This python package relies heavily on [PorePy](www.github.com/pmgbergen/porepy) and [quadpy](www.github.com/nschloe/quadpy).
+**mdestimates** computes a posteriori error estimates for the incompressible flow in fractured porous media. This python package relies heavily on [PorePy](https://github.com/pmgbergen/porepy) and [quadpy](https://github.com/nschloe/quadpy).
 
 ## Citing
 Add arXiv
