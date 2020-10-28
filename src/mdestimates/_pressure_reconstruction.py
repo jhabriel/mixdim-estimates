@@ -4,7 +4,7 @@ import numpy.matlib as matlib
 import scipy.sparse as sps
 import quadpy as qp
 
-import porepy.estimates.estimates_utils as utils
+import mdestimates.estimates_utils as utils
 
 #%% Pressure reconstruction
 def reconstruct_pressure(self):
