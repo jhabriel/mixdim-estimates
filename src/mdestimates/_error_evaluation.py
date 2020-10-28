@@ -4,7 +4,7 @@ import scipy.sparse as sps
 import quadpy as qp
 import porepy as pp
 
-from porepy.estimates import estimates_utils as utils
+import mdestimates.estimates_utils as utils
 
 #%% Error computation
 def compute_error_estimates(self):
