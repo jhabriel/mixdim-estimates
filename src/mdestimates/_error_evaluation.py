@@ -195,8 +195,8 @@ def interface_diffusive_error(self, e, d_e):
         raise ValueError('Inconsistent mortar grid dimension. Expected 0, 1, or 2.')
     
     # Retrieve connectivity maps for checking if we have non-matching grid
-    master2mortar_hits = mg.master_to_mortar_avg().nonzero()[0].size
-    slave2mortar_hits = mg.slave_to_mortar_avg().nonzero()[0].size
+    primary2mortar_hits = mg.primary_to_mortar_avg().nonzero()[0].size
+    secondary2mortar_hits = mg.secondary_to_mortar_avg().nonzero()[0].size
     nc = mg.num_cells
     
     
@@ -204,12 +204,12 @@ def interface_diffusive_error(self, e, d_e):
     if mg.dim == 0:
         diffusive_error = _interface_diffusive_error_0d(self, e, d_e)
     elif mg.dim == 1:
-        if (master2mortar_hits == nc) and (slave2mortar_hits == nc):    
+        if (primary2mortar_hits == nc) and (secondary2mortar_hits == nc):    
             diffusive_error = _interface_diffusive_error_1d(self, e, d_e)
         else:
             diffusive_error = _interface_diffusive_error_nonmatching_1d(self, e, d_e)
     else:
-        if (master2mortar_hits == nc) and (slave2mortar_hits == nc):    
+        if (primary2mortar_hits == nc) and (secondary2mortar_hits == nc):    
             diffusive_error = _interface_diffusive_error_2d(self, e, d_e)
         else:
             raise ValueError('Non-matching grids in 3D are not implemented')
@@ -553,8 +553,8 @@ def _interface_diffusive_error_1d(self, e, d_e):
         k = normal_diff.reshape(mg.num_cells, 1)
 
     # Face-cell map between higher- and lower-dimensional subdomains
-    frac_faces = sps.find(mg.master_to_mortar_avg().T)[0]
-    frac_cells = sps.find(mg.slave_to_mortar_avg().T)[0]
+    frac_faces = sps.find(mg.primary_to_mortar_avg().T)[0]
+    frac_cells = sps.find(mg.secondary_to_mortar_avg().T)[0]
      
     # Obtain the trace of the higher-dimensional pressure
     tracep_high = _get_high_pressure_trace(self, g_l, g_h, d_h, frac_faces)
@@ -672,8 +672,8 @@ def  _interface_diffusive_error_2d(self, e, d_e):
         k = normal_diff.reshape(mg.num_cells, 1)
 
     # Face-cell map between higher- and lower-dimensional subdomains
-    frac_faces = sps.find(mg.master_to_mortar_avg().T)[0]
-    frac_cells = sps.find(mg.slave_to_mortar_avg().T)[0]
+    frac_faces = sps.find(mg.primary_to_mortar_avg().T)[0]
+    frac_cells = sps.find(mg.secondary_to_mortar_avg().T)[0]
      
     # Obtain the trace of the higher-dimensional pressure
     tracep_high = _get_high_pressure_trace(self, g_l, g_h, d_h, frac_faces)
@@ -723,7 +723,7 @@ def _mortar_highdim_faces_mapping(mg, side):
     """
     
     # General mapping
-    mortar_highfaces = mg.master_to_mortar_avg().nonzero()
+    mortar_highfaces = mg.primary_to_mortar_avg().nonzero()
     # Signs of the mortar cells
     mortar_signs = sps.find(mg.sign_of_mortar_sides())[2]
     # Construct the output array for the given side    
@@ -754,7 +754,7 @@ def _mortar_lowdim_cells_mapping(mg, side):
     """
     
     # General mapping
-    mortar_lowcells = mg.slave_to_mortar_avg().nonzero()
+    mortar_lowcells = mg.secondary_to_mortar_avg().nonzero()
     # Signs of the mortar cells
     mortar_signs = sps.find(mg.sign_of_mortar_sides())[2]
     # Construct the output array for the given side    

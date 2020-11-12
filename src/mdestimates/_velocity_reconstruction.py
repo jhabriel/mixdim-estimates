@@ -172,7 +172,7 @@ def compute_full_flux(self):
                     # project the mortar variable back to the high-dim subdomain
                     induced_flux += (
                         matrix_dictionary["bound_flux"]
-                        * g_m.mortar_to_master_int()
+                        * g_m.mortar_to_primary_int()
                         * d_e[pp.STATE][self.lam_name].copy()
                     )
 
@@ -201,7 +201,7 @@ def compute_full_flux(self):
                     # project the mortar variable back to the high-dim subdomain
                     induced_flux += (
                         sign
-                        * g_m.master_to_mortar_avg().T
+                        * g_m.primary_to_mortar_avg().T
                         * d_e[pp.STATE][self.lam_name].copy()
                     )
 
@@ -303,6 +303,6 @@ def _internal_source_term_contribution(self, g):
         mortar_flux = d_edge[pp.STATE][self.lam_name]
 
         # Obtain source term contribution associated to the neighboring interface
-        internal_source += g_mortar.mortar_to_slave_int() * mortar_flux
+        internal_source += g_mortar.mortar_to_secondary_int() * mortar_flux
 
     return internal_source
