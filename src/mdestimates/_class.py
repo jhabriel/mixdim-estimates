@@ -27,8 +27,8 @@ class ErrorEstimate():
         sd_operator_name="diffusion",
         p_name="pressure",
         flux_name="flux",
-        lam_name="mortar_solution",
-        p_rec="direct",
+        lam_name="mortar_flux",
+        p_rec="inv_gradp",
         estimates_kw="estimates"
         ):
     
