@@ -10,7 +10,6 @@
 *.vtu
 *.pvd
 *.vrml
-*.txt
 *.csv
 *~
 *.swo
