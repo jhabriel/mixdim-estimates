@@ -14,7 +14,7 @@ Add arXiv
   
  Install the dependencies:
  
-     pip install -r requirements.txt
+     pip install
      
  Note that we assume that PorePy >= 1.2.6 is installed. If you do not have PorePy installed, an error message will be printed out.
  
