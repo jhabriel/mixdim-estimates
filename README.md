@@ -10,7 +10,7 @@ If you use **mdestimates** in your research, we ask you to cite the following re
 
 ## Installation from source
 
-**mdestimates** is developed under Python >= 3.6. Get the latest version using by cloning this git repo, i.e.:
+**mdestimates** is developed under Python >= 3.6. Get the latest version by cloning this repository, i.e.:
 
     git clone https://github.com/jhabriel/mixdim-estimates.git
     cd mixdim-estimates
