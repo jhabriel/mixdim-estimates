@@ -1,8 +1,8 @@
 import porepy as pp
-import scipy.sparse as sps
 import numpy as np
-
+import scipy.sparse as sps
 import mdestimates.estimates_utils as utils
+
 
 def reconstruct_velocity(self):    
     """
