@@ -37,7 +37,7 @@ A simple usage of **mdestimates** can be found in tutorials/basic_tutorial.ipynb
 All the numerical examples included in REF can be found under the paper_examples folder. These includes two validation cases and two benchmark problems.
 
 ## Problems, suggestions, enhancements...
-Create an [issue](https://github.com/jhabriel/mixdim-estimates)
+Create an [issue](https://github.com/jhabriel/mixdim-estimates).
 
 ## License
 See [license md](./LICENSE.md).
