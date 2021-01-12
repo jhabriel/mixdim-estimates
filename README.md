@@ -5,6 +5,7 @@
 ## Citing
 
 If you use **mdestimates** in your research, we ask you to cite the following reference:
+
 *Add arXiv*
 
 ## Installation from source
@@ -20,7 +21,7 @@ Now, install the dependencies:
      
 Note that we assume that PorePy >= 1.2.6 is installed. If you do not have PorePy installed, please do so before installing the dependencies.
  
-To install the **mdestimates**:
+To install **mdestimates**:
 
     pip install .
 
@@ -34,7 +35,7 @@ A simple usage of **mdestimates** can be found in tutorials/basic_tutorial.ipynb
 
 ## Examples
 
-All the numerical examples included in REF can be found under the paper_examples folder. These includes two validation cases and two benchmark problems.
+All the numerical examples included in *REF* can be found under the **paper_examples** folder. These include two validation cases and two benchmark problems.
 
 ## Problems, suggestions, enhancements...
 Create an [issue](https://github.com/jhabriel/mixdim-estimates).
