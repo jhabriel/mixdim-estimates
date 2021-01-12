@@ -12,6 +12,7 @@ from typing import (
     Generic,
 )
 
+import numpy as np
 import porepy as pp
 
 class ErrorEstimate():
@@ -28,7 +29,6 @@ class ErrorEstimate():
         p_name="pressure",
         flux_name="flux",
         lam_name="mortar_flux",
-        p_rec="inv_gradp",
         estimates_kw="estimates"
         ):
     
@@ -38,7 +38,6 @@ class ErrorEstimate():
         self.p_name = p_name
         self.flux_name = flux_name
         self.lam_name = lam_name
-        self.p_rec = p_rec
         self.estimates_kw = estimates_kw
                   
     def __str__(self):
@@ -52,7 +51,6 @@ class ErrorEstimate():
             + " Subdomain variable: " + self.p_name + "\n"
             + " Flux variable: " + self.flux_name + "\n"
             + " Interface variable: " + self.lam_name + "\n"
-            + " Pressure reconstruction method: " + self.p_rec + "\n"
             ) 
     
     def _init_estimates_data_keyword(self):
@@ -96,9 +94,9 @@ class ErrorEstimate():
         [2] Pressure-related calculations 
         
             # 2.1 Reconstruct the pressure. Perform a P1 reconstruction of the
-                subdomain pressures using either a direct reconstruction or 
-                inverse of the local pressure gradient. The reconstructed 
-                pressure is stored in d['estimates']["rec_p"]. 
+                subdomain pressures using the inverse of the local pressure 
+                gradient. The reconstructed pressure is stored 
+                in d['estimates']["rec_p"]. 
         
         [3] Computation of the upper bounds and norms
         
@@ -169,7 +167,7 @@ class ErrorEstimate():
     
         """
         
-        errors = ["diffusive_error"] # add residual error later
+        errors = ["diffusive_error", "residual_error"]
         
         def transfer(d, error_type):
             if error_type in d[self.estimates_kw]:
@@ -187,56 +185,82 @@ class ErrorEstimate():
         # Transfer error from interfaces     
         for _, d_e in self.gb.edges():
             for error in errors:
-                transfer(d_e, error)
-                    
-                
+                if error == "diffusive_error":
+                    transfer(d_e, error)
+
         return None
     
     
-    def compute_global_error(self):
+    def get_majorant(self):
         """
-        Computes the sum of the local squared errors by looping through 
-        all the subdomains and interfaces of the grid bucket.
-           
-        Raises
-        ------
-        ValueError
-            If the estimates have not been computed
-    
+            Computes the majorant for the whole fracture network.
+
         Returns
         -------
-        global_error : Scalar
-            Global error, i.e., sum of squared errors.
-    
+        majorant : Scalar
+            Global error estimate.
+
         """
-        global_error = 0
-        errors = ["diffusive_error"] # add residual error later
-    
-        def add_contribution(data, error_type, global_error):
-            if error_type in data[self.estimates_kw]:
-                global_error += data[self.estimates_kw][error_type].sum()
-            else:
-                raise ValueError('Error estimates must be computed first.')
-            return global_error
         
-        # Add contribution from subdomains
+        omega_DF = 0
+        gamma_DF = 0
+        omega_R = 0
+        
+        # Errors associated to subdomains
         for g, d in self.gb:
+            
             if g.dim == 0:
                 continue
-            for error in errors:
-                global_error = add_contribution(d, error, global_error)
             
-        # Add contribution from interfaces
-        for _, d_e in self.gb.edges():
-            for error in errors:
-                global_error = add_contribution(d_e, error, global_error)
+            omega_DF += d[self.estimates_kw]["diffusive_error"].sum()
+            omega_R += d[self.estimates_kw]["residual_error"].sum()
             
-        return global_error
+        # Errors associated to interfaces
+        for _, d in self.gb.edges():
+            
+            gamma_DF += d[self.estimates_kw]["diffusive_error"].sum()
+            
+        # Computing the majorant
+        majorant = (omega_DF + gamma_DF) ** 0.5 + omega_R ** 0.5
+        
+        return majorant
     
     
-    def compute_local_error(self, g, d, error_type="all"):
+    def get_scaled_majorant(self):
         """
-        Computes the sum of the local squared error of a subdomain or interface
+        Get the permeability-scaled majorant for the whole fracture network.
+
+        Returns
+        -------
+        scaled_majorant : Scalar
+            Scaled value of the majorant.
+
+        """
+        
+        # Obtain original majorant
+        majorant = self.get_majorant()
+        
+        # Determine the highest permeability in the fracture network
+        scaling_factors = [ ]
+        for g, d in self.gb:
+            if g.dim != 0:
+                perm = d[pp.PARAMETERS]["flow"]["second_order_tensor"].values
+                perm = perm[0][0]
+                scaling_factors.append(np.max(perm))
+        for e, d in self.gb.edges():
+            k_norm = d[pp.PARAMETERS]["flow"]['normal_diffusivity']
+            scaling_factors.append(np.max(k_norm))
+        scale_factor = np.max(scaling_factors)    
+        
+        # Perform scaling
+        scaled_majorant = majorant / np.sqrt(scale_factor)
+        
+        return scaled_majorant
+        
+    
+    def get_local_errors(self, g, d, error_type="all"):
+        """
+        Computes the sum of the scaled local errors of a subdomain or interface
     
         Parameters
         ----------
@@ -246,7 +270,9 @@ class ErrorEstimate():
             Data dictionary containing the estimates
         error_type: Keyword, optional
             The sum of all errors are computed by default. Other options are
-            "diffusive_error", and "residual_error".
+            "diffusive_error", and "residual_error". Note that only
+            "diffusive_error" can be passed to mortar grids, since residual
+            errors are not defined.
     
         Raises
         ------
@@ -261,29 +287,44 @@ class ErrorEstimate():
             Local error, i.e, sum of individual (element) squared errors.
     
         """
-        errors = ["diffusive_error"] # add residual error later
         
-        # Check if errors have been computed
-        def check_error(d, error_type, estimates_kw):
-            if error_type not in d[estimates_kw]:
+        # Types of permisible errors
+        errors_subdomains = ["all", "diffusive_error", "residual_error"]
+        errors_interfaces = ["all", "diffusive_error"]
+        
+        # Boolean variable to check if it is a Mortar grid or not
+        is_mortar = issubclass(type(g), pp.MortarGrid)
+
+        # Check if requested error is valid
+        if is_mortar:
+            if error_type not in errors_interfaces:
+                raise ValueError("Inconsistent type of error estimates")
+        else:
+            if error_type not in errors_subdomains:
+                raise ValueError("Inconsistent type of error estimates")
+
+        # Check if the errors are stored in the data dictionary
+        if is_mortar:
+            if "diffusive_error" not in d[self.estimates_kw]:
                 raise ValueError("Errors must be computed first")
-        for error in errors:
-            check_error(d, error, self.estimates_kw)
+        else:
+            if "diffusive_error" and "residual_error" not in d[self.estimates_kw]:
+                raise ValueError("Errors must be computed first")
     
-        # Check if error type is implemented
-        if error_type not in ["all", "diffusive_error"]: # add residual error later
-            raise ValueError("Error type not implemented")
-    
-        # Raise an error if the subdomain is zero-dimensional
-        if isinstance(type(g), pp.MortarGrid) and g.dim not in [0, 1, 2]:
+        # Check dimensions of subdomain and mortar grids
+        if is_mortar and g.dim not in [0, 1, 2]:
             raise ValueError("Invalid dimension, expected 0D, 1D, or 2D.")
-        elif g.dim not in [1, 2, 3]:
+        elif not is_mortar and g.dim not in [1, 2, 3]:
             raise ValueError("Invalid dimension, expected 1D, 2D, or 3D")
             
         # Summing the errors
-        diffusive_error = d[self.estimates_kw]["diffusive_error"].sum()
-        #nonconf_error = d[self.estimates_kw]["nonconf_error"].sum()
-        all_errors = diffusive_error #+ nonconf_error
+        if is_mortar: # only diffusive error for mortars
+            diffusive_error = d[self.estimates_kw]["diffusive_error"].sum()
+            all_errors = diffusive_error
+        else:
+            diffusive_error = d[self.estimates_kw]["diffusive_error"].sum()
+            residual_error = d[self.estimates_kw]["residual_error"].sum()
+            all_errors = diffusive_error + residual_error
         
         # Return the errors
         if error_type == "all":
@@ -291,7 +332,216 @@ class ErrorEstimate():
         elif error_type == "diffusive_error":
             local_error = diffusive_error
         else:
-            #local_error = nonconf_error
-            pass
+            local_error = residual_error
         
-        return local_error
+        return local_error ** 0.5
+        
+    
+    def get_scaled_local_errors(self, g, d, error_type="all"):
+        """
+        Computes the sum of the scaled local errors of a subdomain or interface
+    
+        Parameters
+        ----------
+        g : PorePy object
+            Grid (for subdomains) or mortar grid (for interfaces)
+        d : dictionary
+            Data dictionary containing the estimates
+        error_type: Keyword, optional
+            The sum of all errors are computed by default. Other options are
+            "diffusive_error", and "residual_error". Note that only
+            "diffusive_error" can be passed to mortar grids, since residual
+            errors are not defined.
+    
+        Raises
+        ------
+        ValueError
+            If the errors have not been computed.
+            If the error_type is not "all", "diffusive_error", or "residual error".
+            If there are any inconsistency in the grids dimensions
+    
+        Returns
+        -------
+        local_error : Scalar
+            Local error, i.e, sum of individual (element) squared errors.
+    
+        """
+        
+        # Types of permisible errors
+        errors_subdomains = ["all", "diffusive_error", "residual_error"]
+        errors_interfaces = ["all", "diffusive_error"]
+        
+        # Boolean variable to check if it is a Mortar grid or not
+        is_mortar = issubclass(type(g), pp.MortarGrid)
+
+        # Check if requested error is valid
+        if is_mortar:
+            if error_type not in errors_interfaces:
+                raise ValueError("Inconsistent type of error estimates")
+        else:
+            if error_type not in errors_subdomains:
+                raise ValueError("Inconsistent type of error estimates")
+
+        # Check if the errors are stored in the data dictionary
+        if is_mortar:
+            if "diffusive_error" not in d[self.estimates_kw]:
+                raise ValueError("Errors must be computed first")
+        else:
+            if "diffusive_error" and "residual_error" not in d[self.estimates_kw]:
+                raise ValueError("Errors must be computed first")
+    
+        # Check dimensions of subdomain and mortar grids
+        if is_mortar and g.dim not in [0, 1, 2]:
+            raise ValueError("Invalid dimension, expected 0D, 1D, or 2D.")
+        elif not is_mortar and g.dim not in [1, 2, 3]:
+            raise ValueError("Invalid dimension, expected 1D, 2D, or 3D")
+            
+        # Summing the errors
+        if is_mortar: # only diffusive error for mortars
+            k_perp = d[pp.PARAMETERS][self.kw]['normal_diffusivity']
+            diffusive_error = np.sum(
+                (1/k_perp) * d[self.estimates_kw]["diffusive_error"]
+                )
+            all_errors = diffusive_error
+        else:
+            perm = d[pp.PARAMETERS]["flow"]["second_order_tensor"].values
+            perm = perm[0][0]
+            diffusive_error = np.sum(
+                (1/perm) * d[self.estimates_kw]["diffusive_error"]
+                )
+            residual_error = d[self.estimates_kw]["residual_error"].sum()
+            all_errors = diffusive_error + residual_error
+         
+        # Return the errors
+        if error_type == "all":
+            local_error = all_errors
+        elif error_type == "diffusive_error":
+            local_error = diffusive_error
+        else:
+            local_error = residual_error
+        
+        return local_error ** 0.5
+    
+    
+    def print_summary(self, scaled=True):
+        """
+        Wrapper for printing a summary of the global and local errors for the
+        whole fracture network classified by topological dimension. By default,
+        the scaled version of the errors are printed.
+        
+        Parameters
+        ----------
+        scaled: Bool
+            Wheter the scaled version of the errors will be printed or not. The
+            default is True.
+        
+        Returns
+        -------
+        None.
+
+        """
+        
+        if scaled:
+            self._print_summary_scaled()
+        else:
+            self._print_summary_original()
+            
+        return None
+    
+            
+    def _print_summary_original(self):
+        """
+        Prints summary of the global and local errors
+
+        Returns
+        -------
+        None.
+
+        """
+        
+        # Get hold of max and min dims
+        dim_max = self.gb.dim_max()
+        dim_min = self.gb.dim_min()
+        
+        # Obtain dimensions of subdomains and interfaces
+        dims = np.arange(start=dim_min, stop=dim_max+1)
+        
+        subdomain_dims = dims[::-1]
+        if dim_min == 0:
+            subdomain_dims = subdomain_dims[:subdomain_dims.size - 1]
+        
+        interface_dims = dims[::-1] # sort
+        interface_dims = interface_dims[1::] # ignore first element
+        
+        # Get scaled majorant and print it
+        majorant = self.get_majorant()
+        print("Majorant:", majorant)
+        
+        # Print summary of subdomain errors
+        for dim in subdomain_dims:
+            g_list = self.gb.grids_of_dimension(dim)
+            error = 0
+            for g in g_list:
+                d = self.gb.node_props(g)
+                error += self.get_local_errors(g, d)
+            print(f'{dim}D Subdomain error: {error}')
+            
+        # Print summary of interface errors
+        for dim in interface_dims:
+            error = 0
+            for _, d in self.gb.edges():
+                mg = d['mortar_grid']
+                if mg.dim == dim:
+                    error += self.get_local_errors(mg, d)
+            print(f'{dim}D Interface error: {error}')
+        
+        return None
+    
+    
+    def _print_summary_scaled(self):
+        """
+        Prints summary of scaled global and local errors
+
+        Returns
+        -------
+        None.
+
+        """
+        
+        # Get hold of max and min dims
+        dim_max = self.gb.dim_max()
+        dim_min = self.gb.dim_min()
+        
+        # Obtain dimensions of subdomains and interfaces
+        dims = np.arange(start=dim_min, stop=dim_max+1)
+        
+        subdomain_dims = dims[::-1]
+        if dim_min == 0:
+            subdomain_dims = subdomain_dims[:subdomain_dims.size - 1]
+        
+        interface_dims = dims[::-1] # sort
+        interface_dims = interface_dims[1::] # ignore first element
+        
+        # Get scaled majorant and print it
+        scaled_majorant = self.get_scaled_majorant()
+        print("Scaled majorant:", scaled_majorant)
+        
+        # Print summary of subdomain errors
+        for dim in subdomain_dims:
+            g_list = self.gb.grids_of_dimension(dim)
+            error = 0
+            for g in g_list:
+                d = self.gb.node_props(g)
+                error += self.get_scaled_local_errors(g, d)
+            print(f'{dim}D Subdomain scaled error: {error}')
+            
+        # Print summary of interface errors
+        for dim in interface_dims:
+            error = 0
+            for _, d in self.gb.edges():
+                mg = d['mortar_grid']
+                if mg.dim == dim:
+                    error += self.get_scaled_local_errors(mg, d)
+            print(f'{dim}D Interface scaled error: {error}')
+        
+        return None
