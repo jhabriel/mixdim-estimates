@@ -1,12 +1,12 @@
-import numpy as np
-import numpy.matlib as matlib
-import scipy.sparse as sps
-import quadpy as qp
 import porepy as pp
-
+import numpy as np
+import scipy.sparse as sps
 import mdestimates.estimates_utils as utils
+import quadpy as qp
 
-#%% Error computation
+from mdestimates._velocity_reconstruction import _internal_source_term_contribution as mortar_jump
+
+#%% Compute errors
 def compute_error_estimates(self):
     """
     Computes error estimates for all nodes and edges of the Grid Bucket.
@@ -23,26 +23,31 @@ def compute_error_estimates(self):
         # Handle the case of zero-dimensional subdomains
         if g.dim == 0:
             d[self.estimates_kw]["diffusive_error"] = None
+            d[self.estimates_kw]["residual_error"] = None
             continue
 
-        # Rotate grid. If g == gb.dim_max(), this has no effect whatsoever
+        # Rotate grid. If g == gb.dim_max() this has no effect.
         g_rot = utils.rotate_embedded_grid(g)
 
-        # Obtain the diffusive flux error
+        # Obtain the subdomain diffusive flux error
         diffusive_error = subdomain_diffusive_error(self, g, g_rot, d)
         d[self.estimates_kw]["diffusive_error"] = diffusive_error
+        
+        # Obtain the subdomain residual error
+        residual_error = subdomain_residual_error(self, g, g_rot, d)
+        d[self.estimates_kw]["residual_error"] = residual_error
 
     # Loop through all the edges of the grid bucket
     for e, d_e in self.gb.edges():
 
-        # Obtain the diffusive flux error
+        # Obtain the interface diffusive flux error
         diffusive_error = interface_diffusive_error(self, e, d_e)
         d_e[self.estimates_kw]["diffusive_error"] = diffusive_error
 
     return None
 
 
-#%% Subdomain error
+#%% Subdomain errors
 def subdomain_diffusive_error(self, g, g_rot, d):
     """
     Computes the (square) of the subdomain diffusive errors, given (locally) for
@@ -84,7 +89,7 @@ def subdomain_diffusive_error(self, g, g_rot, d):
     if "recon_u" not in d[self.estimates_kw]:
         raise ValueError("Velocity must be reconstructed first")
 
-    # Retrieve postprocessed pressure
+    # Retrieve reconstructed pressure
     recon_p = d[self.estimates_kw]["recon_p"].copy()
     
     # Retrieve reconstructed velocity
@@ -154,6 +159,94 @@ def subdomain_diffusive_error(self, g, g_rot, d):
     diffusive_error = method.integrate(integrand, elements)
 
     return diffusive_error
+
+
+def subdomain_residual_error(self, g, g_rot, d):
+    """
+    Computes the (square) of the residual errors, given (locally) for
+    an element E by:
+        
+               K_E h_E^2 / pi^2 ||f_i - \nabla \cdot u^RT0 ||_E^2,
+        
+    where K_E is the tangential permeability, h_E is the diameter of E,
+    f_i is the external source term, and u^RT0 is the extended RT0 velocity field.
+
+    Parameters
+    ----------
+    g : PorePy Object
+        PorePy grid object
+    g_rot : Rotated Object
+        Rotated pseudo-grid
+    d : Dictionary
+        Data dictionary.
+
+    Raises
+    ------
+    ValueError
+        If the pressure has not been reconstructed
+        If the velocity has not been reconstructed
+        If the grid dimension is not 1D, 2D, or 3D
+
+    Returns
+    -------
+    residual_error : NumPy nd-array of size (g.num_cells)
+        Residual error estimates (squared) for the given grid
+    
+    """
+        
+    # Run sanity checks
+    if g.dim not in [1, 2, 3]:
+        raise ValueError("Error not defined for the given grid dimension")
+    if "recon_u" not in d[self.estimates_kw]:
+        raise ValueError("Velocity must be reconstructed first")
+
+    # Retrieve reconstructed velocity
+    recon_u = d[self.estimates_kw]["recon_u"].copy()
+    
+    # Retrieve permeability
+    perm = d[pp.PARAMETERS][self.kw]["second_order_tensor"].values
+    k = perm[0][0].reshape(g.num_cells, 1)
+    
+    # Retrieve source terms
+    f = (d[pp.PARAMETERS][self.kw]["source"] / g.cell_volumes).reshape(g.num_cells, 1)
+    
+    # Obtain constant multiplying the norm
+    C = k * g.cell_diameters().reshape(g.num_cells, 1) ** 2 / np.pi ** 2
+    
+    # Get quadpy elements and declare integration method
+    elements = utils.get_quadpy_elements(g, g_rot)
+    if g.dim == 1:
+        method = qp.c1.newton_cotes_closed(3)
+    elif g.dim == 2:
+        method = qp.t2.get_good_scheme(3)
+    else:
+        method = qp.t3.get_good_scheme(3)
+        
+    # Obtain coefficients of the full flux
+    u = utils.poly2col(recon_u)
+        
+    # Obtain contribution from mortar jump to local mass conservation
+    lmbda = (mortar_jump(self, g) / g.cell_volumes).reshape(g.num_cells, 1)
+    
+    # Declare integrands and prepare for integration
+    def integrand(x):
+        
+        if g.dim == 1:
+            ones = np.ones_like(x)
+            return (f * ones - u[0] + lmbda) ** 2
+        
+        elif g.dim == 2:
+            ones = np.ones_like(x[0])
+            return (f * ones - 2 * u[0] + lmbda) ** 2
+        
+        else:
+            ones = np.ones_like(x[0])
+            return (f * ones - 3 * u[0] + lmbda) ** 2
+    
+    # Compute the integral
+    residual_error = C.flatten()  * method.integrate(integrand, elements)
+
+    return residual_error
 
 
 #%% Interface error
@@ -384,8 +477,8 @@ def _get_normal_velocity(self, d_e):
     
     return normal_velocity
 
-#%% Interface error [matching]
 
+#%% Interface error [matching grids]
 def _interface_diffusive_error_0d(self, e, d_e):
     """
     Computes interface diffusive flux error for 0D mortar grids
@@ -703,7 +796,7 @@ def  _interface_diffusive_error_2d(self, e, d_e):
         
     return diffusive_error
 
-#%% Interface error [non-matching]
+#%% Interface error [non-matching grids]
 def _mortar_highdim_faces_mapping(mg, side):
     """
     Get mortar cells - high-dim fracture faces mapping for a given interface side
@@ -1239,987 +1332,3 @@ def _interface_diffusive_error_nonmatching_1d(self, e, d_e):
         diffusive_error[mortar_cells] = diffusive_error_side
         
     return diffusive_error
-
-    
-#%% L2- error estimates (for testing purposes)
-
-def l2_velocity(g, d, idx_top, idx_middle, idx_bot):
-
-    # Rotate grid
-    g_rot = utils.rotate_embedded_grid(g)
-
-    # Retrieve elements
-    elements = utils.get_quadpy_elements(g, g_rot)
-
-    # Declaring integration methods
-    if g.dim == 1:
-        method = qp.c1.newton_cotes_closed(4)
-    elif g.dim == 2:
-        method = qp.t2.strang_fix_cowper_05()
-
-    # Retrieve velocity coefficients
-    uh = d["estimates"]["recon_u"].copy()
-
-    # Quadpyfying arrays
-    if g.dim == 1:
-        a = uh[:, 0].reshape(uh.shape[0], 1)
-        b = uh[:, 1].reshape(uh.shape[0], 1)
-    elif g.dim == 2:
-        a = uh[:, 0].reshape(uh.shape[0], 1)
-        b = uh[:, 1].reshape(uh.shape[0], 1)
-        c = uh[:, 2].reshape(uh.shape[0], 1)
-
-    # Define integration regions for 2D subdomain
-    def top_subregion(X):
-        x = X[0]
-        y = X[1]
-
-        uexa_x = -(x - 0.5) / ((x - 0.5) ** 2 + (y - 0.75) ** 2) ** (0.5)
-        uexa_y = -(y - 0.75) / ((x - 0.5) ** 2 + (y - 0.75) ** 2) ** (0.5)
-        urec_x = a * x + b
-        urec_y = a * y + c
-
-        int_x = (uexa_x - urec_x) ** 2
-        int_y = (uexa_y - urec_y) ** 2
-
-        return int_x + int_y
-
-    def mid_subregion(X):
-        x = X[0]
-        y = X[1]
-
-        uexa_x = -(((x - 0.5) ** 2) ** (0.5)) / (x - 0.5)
-        uexa_y = 0
-        urec_x = a * x + b
-        urec_y = a * y + c
-
-        int_x = (uexa_x - urec_x) ** 2
-        int_y = (uexa_y - urec_y) ** 2
-
-        return int_x + int_y
-
-    def bot_subregion(X):
-        x = X[0]
-        y = X[1]
-
-        uexa_x = -(x - 0.5) / ((x - 0.5) ** 2 + (y - 0.25) ** 2) ** (0.5)
-        uexa_y = -(y - 0.25) / ((x - 0.5) ** 2 + (y - 0.25) ** 2) ** (0.5)
-        urec_x = a * x + b
-        urec_y = a * y + c
-
-        int_x = (uexa_x - urec_x) ** 2
-        int_y = (uexa_y - urec_y) ** 2
-
-        return int_x + int_y
-
-    # Define integration regions for the fracture
-    def fracture(X):
-        x = X  # [0]
-
-        uexa_x = 0
-        urec_x = a * x + b
-
-        int_x = (uexa_x - urec_x) ** 2
-
-        return int_x
-
-    # Compute errors
-    if g.dim == 2:
-        int_top = method.integrate(top_subregion, elements)
-        int_mid = method.integrate(mid_subregion, elements)
-        int_bot = method.integrate(bot_subregion, elements)
-        integral = int_top * idx_top + int_mid * idx_middle + int_bot * idx_bot
-    elif g.dim == 1:
-        integral = method.integrate(fracture, elements)
-
-    return np.sqrt(integral.sum())
-
-
-def l2_reconp(g, d, idx_top, idx_middle, idx_bot):
-
-    # Rotate grid
-    g_rot = utils.rotate_embedded_grid(g)
-
-    # Retrieve elements
-    elements = utils.get_quadpy_elements(g, g_rot)
-
-    # Declaring integration methods
-    if g.dim == 1:
-        method = qp.c1.newton_cotes_closed(4)
-    elif g.dim == 2:
-        method = qp.t2.strang_fix_cowper_05()
-
-    # Retrieve postprocess pressure
-    ph = d["estimates"]["recon_p"].copy()
-    c = utils.poly2col(ph)
-
-    # Define fracture regions for the bulk
-    def top_subregion(X):
-        x = X[0]
-        y = X[1]
-
-        p_ex = ((x - 0.5) ** 2 + (y - 0.75) ** 2) ** 0.5
-        p_rec = c[0] * x + c[1] * y + c[2]
-        int_ = (p_ex - p_rec) ** 2
-
-        return int_
-
-    def mid_subregion(X):
-        x = X[0]
-        y = X[1]
-
-        p_ex = ((x - 0.5) ** 2) ** 0.5
-        p_rec = c[0] * x + c[1] * y + c[2]
-        int_ = (p_ex - p_rec) ** 2
-
-        return int_
-
-    def bot_subregion(X):
-        x = X[0]
-        y = X[1]
-
-        p_ex = ((x - 0.5) ** 2 + (y - 0.25) ** 2) ** 0.5
-        p_rec = c[0] * x + c[1] * y + c[2]
-        int_ = (p_ex - p_rec) ** 2
-
-        return int_
-
-    # Define integration regions for the fracture
-    def fracture(X):
-        x = X  # [0]
-
-        p_ex = -1
-        p_rec = c[0] * x + c[1]
-
-        int_ = (p_ex - p_rec) ** 2
-
-        return int_
-
-    # Compute errors
-    if g.dim == 2:
-        int_top = method.integrate(top_subregion, elements)
-        int_mid = method.integrate(mid_subregion, elements)
-        int_bot = method.integrate(bot_subregion, elements)
-        integral = int_top * idx_top + int_mid * idx_middle + int_bot * idx_bot
-    elif g.dim == 1:
-        integral = method.integrate(fracture, elements)
-
-    return np.sqrt(integral.sum())
-
-
-def l2_gradreconp(g, d, idx_top, idx_middle, idx_bot):
-    
-    # Rotate grid
-    g_rot = utils.rotate_embedded_grid(g)
-
-    # Retrieve elements
-    elements = utils.get_quadpy_elements(g, g_rot)
-
-    # Declaring integration methods
-    if g.dim == 1:
-        method = qp.c1.newton_cotes_closed(4)
-    elif g.dim == 2:
-        method = qp.t2.strang_fix_cowper_05()
-
-    # Retrieve postprocess pressure
-    ph = d["estimates"]["recon_p"].copy()
-    c = utils.poly2col(ph)
-    
-    # Define fracture regions for the bulk
-    def top_subregion(x):
-        grad_pex_x = (x[0] - 0.5) / ((x[0] - 0.5) ** 2 + (x[1] - 0.75) ** 2) ** (0.5)
-        grad_pex_y = (x[1] - 0.75) / ((x[0] - 0.5) ** 2 + (x[1]- 0.75) ** 2) ** (0.5)              
-               
-        grad_prec_x = c[0] * np.ones_like(x[0])
-        grad_prec_y = c[1] * np.ones_like(x[1])
-        
-        int_x = (grad_pex_x - grad_prec_x) ** 2
-        int_y = (grad_pex_y - grad_prec_y) ** 2
-
-        return int_x + int_y
-
-    def mid_subregion(x):
-        grad_pex_x = ((x[0] - 0.5) ** 2) ** (0.5) / (x[0] - 0.5)
-        grad_pex_y = 0    
-
-        grad_prec_x = c[0] * np.ones_like(x[0])
-        grad_prec_y = c[1] * np.ones_like(x[1])
-        
-        int_x = (grad_pex_x - grad_prec_x) ** 2
-        int_y = (grad_pex_y - grad_prec_y) ** 2
-
-        return int_x + int_y
-
-    def bot_subregion(x):
-        grad_pex_x = (x[0] - 0.5) / ((x[0] - 0.5) ** 2 + (x[1] - 0.25) ** 2 ) ** (0.5)
-        grad_pex_y = (x[1] - 0.25) / ((x[0] - 0.5) ** 2 + (x[1]- 0.25) ** 2) ** (0.5)                
-
-
-        grad_prec_x = c[0] * np.ones_like(x[0])
-        grad_prec_y = c[1] * np.ones_like(x[1])
-        
-        int_x = (grad_pex_x - grad_prec_x) ** 2
-        int_y = (grad_pex_y - grad_prec_y) ** 2
-        
-        return int_x + int_y
-
-
-    # Define integration regions for the fracture
-    def fracture(x):
-
-        grad_pex_x = 0
-        
-        grad_prec_x = c[0] * np.ones_like(x[0])
-
-        int_x = (grad_pex_x - grad_prec_x) ** 2
-
-        return int_x
-
-    # Compute errors
-    if g.dim == 2:
-        int_top = method.integrate(top_subregion, elements)
-        int_mid = method.integrate(mid_subregion, elements)
-        int_bot = method.integrate(bot_subregion, elements)
-        integral = int_top * idx_top + int_mid * idx_middle + int_bot * idx_bot
-    elif g.dim == 1:
-        integral = method.integrate(fracture, elements)
-
-    return np.sqrt(integral.sum())
-
-
-def l2_tracep(gb, e, d_e):
-    
-    
-    def _get_tracep_high_1d(g_l, g_h, d_h, frac_faces):
-        """
-        Obtains the coefficients of the (projected) trace of the pressure
-        
-        Parameters
-        ----------
-        g_l : PorePy object
-            Lower-dimensional grid.
-        g_h : PorePy object
-            Higher-dimensional grid.
-        d_h : Dictionary
-            Higher-dimensional data dictionary.
-        frac_faces : NumPy nd-array
-            Higher-dimensional fracture faces
-        which_p : string
-            Either "recon_p" or "postp_p"
-    
-        Returns
-        -------
-        trace_pressure : NumPy nd-array
-            Coefficients of the trace of the pressure
-    
-        """
-        def get_edge_lag_coo(grid):
-            nodes_of_frac_faces = np.reshape(
-                sps.find(g_h.face_nodes.T[frac_faces].T)[0], 
-                [frac_faces.size, g_h.dim]
-                )
-            nodes_coo_of_frac_faces = grid.nodes[:, nodes_of_frac_faces]
-            lagrangian_coo = nodes_coo_of_frac_faces
-            return lagrangian_coo
-       
-        # Rotate both grids, and obtain rotation matrix and effective dimension
-        gh_rot = utils.rotate_embedded_grid(g_h)
-        gl_rot = utils.rotate_embedded_grid(g_l)
-        R = gl_rot.rotation_matrix
-        dim_bool = gl_rot.dim_bool
-        
-        # Obtain the cells coorresponding to the frac_faces
-        cells_of_frac_faces, _, _ = sps.find(g_h.cell_faces[frac_faces].T)      
-        
-        # Retrieve the coefficients of the polynomials corresponding to those cells
-        p_high = d_h["estimates"]["recon_p"].copy()
-        p_high = p_high[cells_of_frac_faces]
-        
-        # USE THE ROTATED COORDINATES TO PERFORM THE EVALUATION OF THE PRESSURE, 
-        # BUT USE THE ORIGINAL COORDINATES TO ROTATE THE EDGE USING THE ROTATION
-        # MATRIX OF THE LOWER-DIMENSIONAL GRID AS REFERENCE !!!!
-            
-        # Evaluate the polynomials at the relevant Lagrangian nodes
-        point_coo_rot = get_edge_lag_coo(gh_rot)
-        point_val = utils.eval_P1(p_high, point_coo_rot)
-            
-        # Rotate the coordinates of the Lagrangian nodes wrt the lower-dim grid
-        point_coo = get_edge_lag_coo(g_h)
-        point_edge_coo_rot = np.empty_like(point_coo)
-        for element in range(frac_faces.size):
-            point_edge_coo_rot[:, element] = np.dot(R, point_coo[:, element])
-        point_edge_coo_rot = point_edge_coo_rot[dim_bool]
-        
-        # Construct a polynomial (of reduced dimensionality) using the rotated coo
-        trace_pressure = utils.interpolate_P1(point_val, point_edge_coo_rot)
-        
-        # Test if the values of the original polynomial match the new one
-        point_val_rot = utils.eval_P1(trace_pressure, point_edge_coo_rot)
-        np.testing.assert_almost_equal(point_val, point_val_rot, decimal=12)
-        
-        return trace_pressure
-    
-    
-    def compute_sidegrid_trace_error(side_tuple):
-        """
-        This functions projects a mortar quantity to the side grids, and then
-        performs the integration
-
-        Parameters
-        ----------
-        side_tuple : TYPE
-            DESCRIPTION.
-
-        Returns
-        -------
-        TYPE
-            DESCRIPTION.
-
-        """
-        # Get projector and sidegrid object
-        projector = side_tuple[0]
-        sidegrid = side_tuple[1]
-        # Rotate side-grid
-        sidegrid_rot = utils.rotate_embedded_grid(sidegrid)
-        # Obtain QuadPy elements
-        elements = utils.get_quadpy_elements(sidegrid, sidegrid_rot)
-        # Project normal velocities, pressure jump, and normal diffusivities
-        tracep_side = projector * tracep_high
-        # Declare integrand
-        def integrand(x):
-            coors = x[np.newaxis, :, :]
-            tracep = utils.eval_P1(tracep_side, coors)     
-            return (0 - tracep) ** 2
-        # Compute integral
-        error = method.integrate(integrand, elements)
-        return error
-    
-    # Get grids and data dictionaries
-    mg = d_e["mortar_grid"]
-    g_l, g_h = gb.nodes_of_edge(e)
-    d_h = gb.node_props(g_h)
-
-    # Face-cell map between higher- and lower-dimensional subdomains
-    frac_faces = sps.find(mg.master_to_mortar_avg().T)[0]
-     
-    # Obtain the trace of the higher-dimensional pressure
-    tracep_high = _get_tracep_high_1d(g_l, g_h, d_h, frac_faces)
-  
-    # Declare integration method
-    method = qp.c1.newton_cotes_closed(4)
-      
-    # Retrieve side-grids tuples
-    sides = mg.project_to_side_grids()
-    
-    # Compute the errors for each sidegrid
-    side_error = []
-    for side in sides:
-        side_error.append(compute_sidegrid_trace_error(side))
-    
-    # Concatenate into one numpy array
-    trace_error = np.concatenate(side_error)
-        
-    return np.sqrt(trace_error.sum())
-    
-
-def l2_mortar(gb, e, d_e):
-    
-
-    def _get_normal_vel(d_e, g_h, frac_faces):
-        """
-        Obtain the normal velocities, that is the mortar fluxes / frac areeas
-        
-        Parameters
-        ----------
-        d_e : Dictionary
-            Edge data dictionary.
-        g_h : PorePy object
-            Higher-dimesnional grid.
-        frac_faces : NumPy nd-Array
-            Higher-dimensional fracture faces.
-        
-        Returns
-        -------
-        normal_vel : NumPy nd-Array
-            Normal velocities.
-        
-        """
-        
-        mortar_flux = d_e[pp.STATE]["interface_flux"].copy()
-        frac_faces_areas = g_h.face_areas[frac_faces]
-        normal_vel = mortar_flux / frac_faces_areas
-        normal_vel = normal_vel.reshape(mortar_flux.size, 1)
-        
-        return normal_vel
-
-    def compute_sidegrid_mortar_error(side_tuple):
-        """
-        This functions projects a mortar quantity to the side grids, and then
-        performs the integration
-
-        Parameters
-        ----------
-        side_tuple : TYPE
-            DESCRIPTION.
-
-        Returns
-        -------
-        TYPE
-            DESCRIPTION.
-
-        """
-        # Get projector and sidegrid object
-        projector = side_tuple[0]
-        sidegrid = side_tuple[1]
-        # Rotate side-grid
-        sidegrid_rot = utils.rotate_embedded_grid(sidegrid)
-        # Obtain QuadPy elements
-        elements = utils.get_quadpy_elements(sidegrid, sidegrid_rot)
-        # Project normal velocities, pressure jump, and normal diffusivities
-        mortar_side = projector * normal_vel
-        # Declare integrand
-        def integrand(x):
-            coors = x[np.newaxis, :, :]
-            return (1 - mortar_side * np.ones_like(coors)) ** 2
-        # Compute integral
-        error = method.integrate(integrand, elements)
-        return error
-
-
-    # Get grids and data dictionaries
-    mg = d_e["mortar_grid"]
-    g_l, g_h = gb.nodes_of_edge(e)
-
-    # Face-cell map between higher- and lower-dimensional subdomains
-    frac_faces = sps.find(mg.master_to_mortar_avg().T)[0]
-       
-    # Obtain normal velocities
-    normal_vel = _get_normal_vel(d_e, g_h, frac_faces)
-
-    # Declare integration method
-    method = qp.c1.newton_cotes_closed(4)
-      
-    # Retrieve side-grids tuples
-    sides = mg.project_to_side_grids()
-        
-    # Compute the errors for each sidegrid
-    error_mortar = []
-    for side in sides:
-        error_mortar.append(compute_sidegrid_mortar_error(side))
-    
-    # Concatenate into one numpy array
-    error = np.concatenate(error_mortar)
-        
-    return np.sqrt(error.sum())
-
-
-def l2_cc_postp_p(g, d, kw, true_pcc):
-
-    # First, rotate grid
-    g_rot = utils.rotate_embedded_grid(g)
-
-    # Obtain volumes and cell centers
-    V = g.cell_volumes
-    cc = g_rot.cell_centers
-
-    # Retrieve post process pressure
-    postp_coeff = d["error_estimates"]["recon_p"].copy()
-
-    # Evaluate at the cell_centers
-    postp_cc = postp_coeff[:, 0]
-    for dim in range(g.dim):
-        postp_cc += (
-            postp_coeff[:, dim + 1] * cc[dim] + postp_coeff[:, -1] * cc[dim] ** 2
-        )
-
-    # Compute norm
-    error = np.sum((V * (postp_cc - true_pcc) ** 2) ** 0.5) / np.sum(
-        (V * (true_pcc) ** 2) ** 0.5
-    )
-
-    return error
-
-
-
-
-
-def l2_nv_conf_p(g, d, kw, true_nv):
-
-    # First, rotate the grid
-    g_rot = rotate_embedded_grid(g)
-
-    # Obtain node values
-    nv = g_rot.nodes
-
-    # Retrieve conforming coefficients
-    conf_coeff = d["error_estimates"]["sh"].copy()
-
-    # Evaluate at the nodes
-    nn = g.num_nodes
-    nc = g.num_cells
-    cell_nodes_map, _, _ = sps.find(g.cell_nodes())
-    nodes_cell = cell_nodes_map.reshape(np.array([nc, g.dim + 1]))
-    nodes_coor_cell = np.empty([g.dim, nc, g.dim + 1])
-    for dim in range(g.dim):
-        nodes_coor_cell[dim] = nv[dim][nodes_cell]
-
-    # Compute P1 reconstructed nodal pressures
-    rec_pnv = matlib.repmat(conf_coeff[:, 0].reshape([nc, 1]), 1, g.dim + 1)
-    for dim in range(g.dim):
-        rec_pnv += (
-            matlib.repmat(conf_coeff[:, dim + 1].reshape([nc, 1]), 1, g.dim + 1)
-            * nodes_coor_cell[dim]
-        )
-
-    # Flattening and formating
-    idx = np.array([np.where(nodes_cell.flatten() == x)[0][0] for x in np.arange(nn)])
-    rec_pnv_flat = rec_pnv.flatten()
-    recons_pnv = rec_pnv_flat[idx]
-
-    # Compute error
-    error = np.sum(((recons_pnv - true_nv) ** 2) ** 0.5) / np.sum(
-        ((true_nv) ** 2) ** 0.5
-    )
-
-    return error
-
-
-
-
-
-def l2_postp(g, d, idx_top, idx_middle, idx_bot):
-
-    # Rotate grid
-    g_rot = rotate_embedded_grid(g)
-
-    # Retrieve elements
-    elements = _get_quadpy_elements(g, g_rot)
-
-    # Declaring integration methods
-    if g.dim == 1:
-        method = qp.line_segment.newton_cotes_closed(5)
-        int_point = method.points.shape[0]
-    elif g.dim == 2:
-        method = qp.triangle.strang_fix_cowper_05()
-        int_point = method.points.shape[0]
-
-    # Retrieve postprocess pressure
-    ph_coeff = d["error_estimates"]["ph"].copy()
-
-    # Quadpyfying arrays
-    if g.dim == 1:
-        alpha = _quadpyfy(ph_coeff[:, 0], int_point)
-        beta = _quadpyfy(ph_coeff[:, 1], int_point)
-        epsilon = _quadpyfy(ph_coeff[:, 2], int_point)
-    elif g.dim == 2:
-        alpha = _quadpyfy(ph_coeff[:, 0], int_point)
-        beta = _quadpyfy(ph_coeff[:, 1], int_point)
-        gamma = _quadpyfy(ph_coeff[:, 2], int_point)
-        epsilon = _quadpyfy(ph_coeff[:, 3], int_point)
-
-    # Define fracture regions for the bulk
-    def top_subregion(X):
-        x = X[0]
-        y = X[1]
-
-        p_ex = ((x - 0.5) ** 2 + (y - 0.75) ** 2) ** 0.5
-        post = alpha + beta * x + gamma * y + epsilon * (x ** 2 + y ** 2)
-        int_ = (p_ex - post) ** 2
-
-        return int_
-
-    def mid_subregion(X):
-        x = X[0]
-        y = X[1]
-
-        p_ex = ((x - 0.5) ** 2) ** 0.5
-        post = alpha + beta * x + gamma * y + epsilon * (x ** 2 + y ** 2)
-        int_ = (p_ex - post) ** 2
-
-        return int_
-
-    def bot_subregion(X):
-        x = X[0]
-        y = X[1]
-
-        p_ex = ((x - 0.5) ** 2 + (y - 0.25) ** 2) ** 0.5
-        post = alpha + beta * x + gamma * y + epsilon * (x ** 2 + y ** 2)
-        int_ = (p_ex - post) ** 2
-
-        return int_
-
-    # Define integration regions for the fracture
-    def fracture(X):
-        x = X  # [0]
-
-        p_ex = -1
-        post = alpha + beta * x + epsilon * x ** 2
-
-        int_ = (p_ex - post) ** 2
-
-        return int_
-
-    # Compute errors
-    if g.dim == 2:
-
-        int_top = method.integrate(top_subregion, elements)
-        int_mid = method.integrate(mid_subregion, elements)
-        int_bot = method.integrate(bot_subregion, elements)
-        integral = int_top * idx_top + int_mid * idx_middle + int_bot * idx_bot
-    elif g.dim == 1:
-
-        integral = method.integrate(fracture, elements)
-
-    return integral.sum()
-
-
-
-
-
-def l2_new_postpro(gb):
-
-    for e, d_e in gb.edges():
-        # Obtain mortar grid, mortar fluxes, adjacent grids, and data dicts
-        g_m = d_e["mortar_grid"]
-        g_l, g_h = gb.nodes_of_edge(e)
-        d_h = gb.node_props(g_h)
-        d_l = gb.node_props(g_l)
-
-    lam = d_e[pp.STATE]["interface_flux"]
-    # Declare integration method, obtain number of integration points,
-    # normalize the integration points (quadpy uses -1 to 1), and obtain
-    # weights, which have to be divided by two for the same reason
-    num_points = 3
-    normalized_intpts = np.array([0, 0.5, 1])
-
-    # ------------- Treatment of the high-dimensional grid --------------------
-
-    # Retrieve mapped faces from master to mortar
-    face_high, _, _, = sps.find(g_m.mortar_to_master_avg())
-
-    # Find, to which cells "face_high" belong to
-    cell_faces_map, cell_idx, _ = sps.find(g_h.cell_faces)
-    _, facehit, _ = np.intersect1d(cell_faces_map, face_high, return_indices=True)
-    cell_high = cell_idx[facehit]  # these are the cells where face_high live
-
-    # Obtain the coordinates of the nodes of each relevant face
-    face_nodes_map, _, _ = sps.find(g_h.face_nodes)
-    node_faces = face_nodes_map.reshape((np.array([g_h.num_faces, g_h.dim])))
-    node_faces_high = node_faces[face_high]
-    nodescoor_faces_high = np.zeros(
-        [g_h.dim, node_faces_high.shape[0], node_faces_high.shape[1]]
-    )
-    for dim in range(g_h.dim):
-        nodescoor_faces_high[dim] = g_h.nodes[dim][node_faces_high]
-
-    # Reformat node coordinates to match size of integration point array
-    nodecoor_format_high = np.empty([g_h.dim, face_high.size, num_points * g_h.dim])
-    for dim in range(g_h.dim):
-        nodecoor_format_high[dim] = matlib.repeat(
-            nodescoor_faces_high[dim], num_points, axis=1
-        )
-
-    # Obtain evaluation points at the higher-dimensional faces
-    faces_high_intcoor = np.empty([g_h.dim, face_high.size, num_points])
-    for dim in range(g_h.dim):
-        faces_high_intcoor[dim] = (
-            nodecoor_format_high[dim][:, num_points:]
-            - nodecoor_format_high[dim][:, :num_points]
-        ) * normalized_intpts + nodecoor_format_high[dim][:, :num_points]
-
-    # Retrieve postprocessed pressure
-    ph = d_h["error_estimates"]["ph"].copy()
-    ph_cell_high = ph[cell_high]
-
-    # Evaluate postprocessed higher dimensional pressure at integration points
-    tracep_intpts = _quadpyfy(ph_cell_high[:, 0], num_points)
-    for dim in range(g_h.dim):
-        tracep_intpts += (
-            _quadpyfy(ph_cell_high[:, dim + 1], num_points) * faces_high_intcoor[dim]
-            + _quadpyfy(ph_cell_high[:, -1], num_points) * faces_high_intcoor[dim] ** 2
-        )
-
-    # -------------- Treatment of the low-dimensional grid --------------------
-
-    # First, rotate the grid
-    gl_rot = rotate_embedded_grid(g_l)
-
-    # Obtain indices of the cells, i.e., slave to mortar mapped cells
-    cell_low, _, _, = sps.find(g_m.mortar_to_slave_avg())
-
-    # Obtain n coordinates of the nodes of those cells
-    cell_nodes_map, _, _ = sps.find(g_l.cell_nodes())
-    nodes_cell = cell_nodes_map.reshape(np.array([g_l.num_cells, g_l.dim + 1]))
-    nodes_cell_low = nodes_cell[cell_low]
-    nodescoor_cell_low = np.zeros(
-        [g_l.dim, nodes_cell_low.shape[0], nodes_cell_low.shape[1]]
-    )
-    for dim in range(g_l.dim):
-        nodescoor_cell_low[dim] = gl_rot.nodes[dim][nodes_cell_low]
-
-    # Reformat node coordinates to match size of integration point array
-    nodecoor_format_low = np.empty([g_l.dim, cell_low.size, num_points * (g_l.dim + 1)])
-    for dim in range(g_l.dim):
-        nodecoor_format_low[dim] = matlib.repeat(
-            nodescoor_cell_low[dim], num_points, axis=1
-        )
-
-    # Obtain evaluation at the lower-dimensional cells
-    cells_low_intcoor = np.empty([g_l.dim, cell_low.size, num_points])
-    for dim in range(g_l.dim):
-        cells_low_intcoor[dim] = (
-            nodecoor_format_low[dim][:, num_points:]
-            - nodecoor_format_low[dim][:, :num_points]
-        ) * normalized_intpts + nodecoor_format_low[dim][:, :num_points]
-
-    mortar_highdim_areas = g_m.master_to_mortar_avg() * g_h.face_areas
-    lam_vel = lam / mortar_highdim_areas
-    lam_vel_broad = _quadpyfy(lam_vel, num_points)
-
-    # Obtain side grids and projection matrices
-    side0, side1 = g_m.project_to_side_grids()
-
-    proj_matrix_side0 = side0[0]
-    proj_matrix_side1 = side1[0]
-
-    p_low = -0.5 * (
-        (proj_matrix_side0 * lam_vel_broad + proj_matrix_side1 * lam_vel_broad)
-        - (proj_matrix_side0 * tracep_intpts + proj_matrix_side1 * tracep_intpts)
-    )
-
-    point_pressures = p_low
-    point_coordinates = cells_low_intcoor[0][: g_l.num_cells]
-
-    from error_estimates_reconstruction import _oswald_1d, P2_reconstruction
-
-    ph_coeff = P2_reconstruction(g_l, point_pressures, point_coordinates)
-    d_l["error_estimates"]["ph"] = ph_coeff.copy()
-
-    # Declare integration parameters
-    method = qp.line_segment.newton_cotes_closed(5)
-    int_point = method.points.shape[0]
-
-    # Retrieve elements
-    elements = _get_quadpy_elements(g_l, gl_rot)
-
-    # Apply Oswald interpolator
-    point_p, point_coor = _oswald_1d(g_l, gl_rot, "flow", d_l)
-
-    # Obain sh coeff
-    sh_coeff = P2_reconstruction(g_l, point_p, point_coor)
-
-    # Quadpyfying arrays
-    c0 = _quadpyfy(sh_coeff[:, 0], int_point)
-    c1 = _quadpyfy(sh_coeff[:, 1], int_point)
-    c2 = _quadpyfy(sh_coeff[:, 2], int_point)
-
-    # Define fracture regions for the bulk
-    # Define integration regions for the fracture
-    def fracture(X):
-        x = X  # [0]
-
-        p_ex = -1
-        conf = c0 * x ** 2 + c1 * x + c2
-
-        int_ = (p_ex - conf) ** 2
-
-        return int_
-
-    integral = method.integrate(fracture, elements)
-
-    return np.sum(integral[: int(integral.size)])
-
-
-def l2_sh(g, d):
-
-    kw = "flow"
-    sd_operator_name = "diffusion"
-    p_name = "pressure"
-
-    from error_estimates_utility import get_postp_coeff
-    from error_estimates_reconstruction import _oswald_1d, P2_reconstruction
-
-    # Rotate grid
-    g_rot = rotate_embedded_grid(g)
-
-    # Retrieve elements
-    elements = _get_quadpy_elements(g, g_rot)
-
-    # Declaring integration methods
-    method = qp.line_segment.newton_cotes_closed(5)
-    int_point = method.points.shape[0]
-
-    # Get postprocessed pressures coefficients
-    ph_coeff = get_postp_coeff(g, g_rot, d, kw, sd_operator_name, p_name)
-    d["error_estimates"]["ph"] = ph_coeff.copy()
-
-    # Apply Oswald interpolator
-    point_p, point_coor = _oswald_1d(g, g_rot, kw, d)
-
-    # Obain sh coeff
-    sh_coeff = P2_reconstruction(g, point_p, point_coor)
-
-    # Quadpyfying arrays
-    c0 = _quadpyfy(sh_coeff[:, 0], int_point)
-    c1 = _quadpyfy(sh_coeff[:, 1], int_point)
-    c2 = _quadpyfy(sh_coeff[:, 2], int_point)
-
-    # Define fracture regions for the bulk
-    # Define integration regions for the fracture
-    def fracture(X):
-        x = X  # [0]
-
-        p_ex = -1
-        conf = c0 * x ** 2 + c1 * x + c2
-
-        int_ = (p_ex - conf) ** 2
-
-        return int_
-
-    integral = method.integrate(fracture, elements)
-
-    return np.sum(integral[: int(integral.size)])
-
-
-# def l2_direct_recons(g, d, idx_top, idx_middle, idx_bot):
-
-#     from error_estimates_utility import _compute_node_pressure_kavg
-#     from error_estimates_reconstruction import _P1
-
-#     # Rotate grid
-#     g_rot = rotate_embedded_grid(g)
-
-#     # Nodal values
-#     p_nv = _compute_node_pressure_kavg(g, g_rot, d, "flow", "diffusion", "pressure")
-
-#     # Conforming coefficients
-#     sh_coeff = _P1(g, g_rot, p_nv)
-
-#     # Retrieve elements
-#     elements = _get_quadpy_elements(g, g_rot)
-
-#     # Declaring integration methods
-#     if g.dim == 1:
-#         method = qp.line_segment.newton_cotes_closed(5)
-#         int_point = method.points.shape[0]
-#     elif g.dim == 2:
-#         method = qp.triangle.strang_fix_cowper_05()
-#         int_point = method.points.shape[0]
-
-#     # Quadpyfying arrays
-#     if g.dim == 1:
-#         alpha = _quadpyfy(sh_coeff[:, 0], int_point)
-#         beta = _quadpyfy(sh_coeff[:, 1], int_point)
-#     elif g.dim == 2:
-#         alpha = _quadpyfy(sh_coeff[:, 0], int_point)
-#         beta = _quadpyfy(sh_coeff[:, 1], int_point)
-#         gamma = _quadpyfy(sh_coeff[:, 2], int_point)
-
-#     # Define fracture regions for the bulk
-#     def top_subregion(X):
-#         x = X[0]
-#         y = X[1]
-
-#         p_ex = ((x - 0.5) ** 2 + (y - 0.75) ** 2) ** 0.5
-#         conf = alpha + beta * x + gamma * y
-#         int_ = (p_ex - conf) ** 2
-
-#         return int_
-
-#     def mid_subregion(X):
-#         x = X[0]
-#         y = X[1]
-
-#         p_ex = ((x - 0.5) ** 2) ** 0.5
-#         conf = alpha + beta * x + gamma * y
-#         int_ = (p_ex - conf) ** 2
-
-#         return int_
-
-#     def bot_subregion(X):
-#         x = X[0]
-#         y = X[1]
-
-#         p_ex = ((x - 0.5) ** 2 + (y - 0.25) ** 2) ** 0.5
-#         conf = alpha + beta * x + gamma * y
-#         int_ = (p_ex - conf) ** 2
-
-#         return int_
-
-#     # Define integration regions for the fracture
-#     def fracture(X):
-#         x = X  # [0]
-
-#         p_ex = -1
-#         conf = alpha + beta * x
-
-#         int_ = (p_ex - conf) ** 2
-
-#         return int_
-
-#     # Compute errors
-#     if g.dim == 2:
-
-#         int_top = method.integrate(top_subregion, elements)
-#         int_mid = method.integrate(mid_subregion, elements)
-#         int_bot = method.integrate(bot_subregion, elements)
-#         integral = int_top * idx_top + int_mid * idx_middle + int_bot * idx_bot
-#     elif g.dim == 1:
-
-#         integral = method.integrate(fracture, elements)
-
-#     return integral.sum()
-
-
-def l2_grad_sh(g, d):
-
-    # Rotate grid
-    g_rot = rotate_embedded_grid(g)
-
-    # Retrieve elements
-    elements = _get_quadpy_elements(g, g_rot)
-
-    # Declaring integration methods
-    if g.dim == 1:
-        method = qp.line_segment.newton_cotes_closed(5)
-        int_point = method.points.shape[0]
-    elif g.dim == 2:
-        method = qp.triangle.strang_fix_cowper_05()
-        int_point = method.points.shape[0]
-
-    # Retrieve velocity coefficients
-    s_coeffs = d["error_estimates"]["sh"].copy()
-
-    # Quadpyfying arrays
-    if g.dim == 1:
-        beta = _quadpyfy(s_coeffs[:, 1], int_point)
-    elif g.dim == 2:
-        beta = _quadpyfy(s_coeffs[:, 1], int_point)
-        gamma = _quadpyfy(s_coeffs[:, 2], int_point)
-
-    # Define integration regions for 2D subdomain
-    def bulk(X):
-
-        grad_x = beta
-        grad_y = gamma
-
-        int_ = (grad_x + grad_y) ** 2
-
-        return int_
-
-    # Define integration regions for the fracture
-    def fracture(X):
-
-        grad_x = beta
-
-        int_ = (grad_x) ** 2
-
-        return int_
-
-    # Compute errors
-    if g.dim == 2:
-        integral = method.integrate(bulk, elements)
-    elif g.dim == 1:
-        integral = method.integrate(fracture, elements)
-
-    return integral.sum()
