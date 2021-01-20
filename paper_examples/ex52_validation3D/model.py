@@ -1302,8 +1302,8 @@ def model(gb, method):
     )
 
     I_eff_pressure = majorant / true_pressure_error
-
     I_eff_velocity = majorant / true_velocity_error
+    I_eff_combined = (3 * majorant) / (true_pressure_error + true_velocity_error)
 
     #%% Return
     return (
@@ -1325,4 +1325,5 @@ def model(gb, method):
         true_velocity_error.sum(),
         I_eff_pressure,
         I_eff_velocity,
+        I_eff_combined,
     )

@@ -76,6 +76,7 @@ for method in num_methods:
         "true_error_velocity": [],
         "I_eff_pressure": [],
         "I_eff_velocity": [],
+        "I_eff_combined": [],
     }
 
 #%% Populate fields (Warning: This loop may take considerable time)
@@ -105,6 +106,7 @@ for i in itertools.product(num_methods, grid_buckets):
         true_error_velocity,
         I_eff_pressure,
         I_eff_velocity,
+        I_eff_combined,
     ) = model(i[1], i[0])
     print(f"Done. Time {time() - tic}\n")
 
@@ -127,6 +129,8 @@ for i in itertools.product(num_methods, grid_buckets):
     d[i[0]]["true_error_velocity"].append(true_error_velocity)
     d[i[0]]["I_eff_pressure"].append(I_eff_pressure)
     d[i[0]]["I_eff_velocity"].append(I_eff_velocity)
+    d[i[0]]["I_eff_combined"].append(I_eff_combined)
+
 
 #%% Exporting
 
@@ -144,6 +148,7 @@ col_true_error_pressure = []
 col_true_error_velocity = []
 I_eff_pressure = []
 I_eff_velocity = []
+I_eff_combined = []
 
 # Populate lists
 for i in itertools.product(num_methods, range(len(grid_buckets))):
@@ -157,6 +162,7 @@ for i in itertools.product(num_methods, range(len(grid_buckets))):
     col_true_error_velocity.append(d[i[0]]["true_error_velocity"][i[1]])
     I_eff_pressure.append(d[i[0]]["I_eff_pressure"][i[1]])
     I_eff_velocity.append(d[i[0]]["I_eff_velocity"][i[1]])
+    I_eff_combined.append(d[i[0]]["I_eff_combined"][i[1]])
 
 # Prepare for exporting
 export = np.zeros(
@@ -172,6 +178,7 @@ export = np.zeros(
         ("var9", float),
         ("var10", float),
         ("var11", float),
+        ("var12", float),
     ],
 )
 
@@ -186,13 +193,15 @@ export["var8"] = col_true_error_pressure
 export["var9"] = col_true_error_velocity
 export["var10"] = I_eff_pressure
 export["var11"] = I_eff_velocity
+export["var12"] = I_eff_combined
+
 
 # Formatting string
-fmt = "%6s %2.3f %2.2e %2.2e %2.2e %2.2e %2.2e %2.2e %2.2f %2.2f"
+fmt = "%6s %2.3f %2.2e %2.2e %2.2e %2.2e %2.2e %2.2e %2.2f %2.2f %2.2f"
 
 # Headers
 header = "num_method h_max eta_3d eta_2d eta_mortar majorant true_error_p "
-header += "true_error_u  I_eff_p I_eff_u"
+header += "true_error_u  I_eff_p I_eff_u I_eff_pu"
 
 # Writing into txt
 np.savetxt("eff_analysis.txt", export, delimiter=",", fmt=fmt, header=header)
