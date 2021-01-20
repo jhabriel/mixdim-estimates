@@ -1,7 +1,5 @@
 *.pyc
 *.py#
-*.msh
-*.geo
 *.exe
 *.swp
 *.py~
@@ -10,7 +8,6 @@
 *.vtu
 *.pvd
 *.vrml
-*.csv
 *~
 *.swo
 *.mtx
