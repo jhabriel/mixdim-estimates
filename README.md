@@ -19,7 +19,7 @@ Now, install the dependencies:
  
      pip install -r requirements.txt
      
-Note that we assume that PorePy >= 1.2.6 is installed. If you do not have PorePy installed, please do so before installing the dependencies.
+We require the development version of PorePy >= 1.3.1 to be installed. If you do not have PorePy installed, please [do so](https://github.com/pmgbergen/porepy/blob/develop/Install.md) before installing **mdestimates**.
  
 To install **mdestimates**:
 
