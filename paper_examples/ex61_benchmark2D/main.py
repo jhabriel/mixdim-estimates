@@ -218,7 +218,8 @@ if __name__ == "__main__":
                     elif mesh_size == 0.0125:
                         paraview = pp.Exporter(gb, "mpfa_fine")
 
-                    paraview.write_vtu(["pressure", "diffusive_error"])
+                    # Uncomment to generate VTU file 
+                    # paraview.write_vtu(["pressure", "diffusive_error"])
 
 
 #%% Export
@@ -279,8 +280,8 @@ export["var9"] = col_global_error_scaled
 export["var10"] = col_global_error
 
 header = "num_method mesh_size eta_omega_2d eta_omega_1d_c eta_omega_1d_b "
-header = +"eta_gamma_1d_c eta_gamma_1d_b eta_gamma_0d eta_global_scaled "
-header = +"eta_global"
+header += "eta_gamma_1d_c eta_gamma_1d_b eta_gamma_0d eta_global_scaled "
+header += "eta_global"
 
 np.savetxt(
     "convergence_bench2d.txt",
