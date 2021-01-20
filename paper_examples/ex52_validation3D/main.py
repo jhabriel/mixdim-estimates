@@ -24,9 +24,7 @@ def make_constrained_mesh(mesh_size=0.2):
 
     """
     # Load fracture network: Fracture + Ghost Fractures
-    network_3d = pp.fracture_importer.network_3d_from_csv(
-        "network_constrained_nine_regions.csv"
-    )
+    network_3d = pp.fracture_importer.network_3d_from_csv("network.csv")
 
     # Create mesh_arg dictionary
     mesh_args = {
