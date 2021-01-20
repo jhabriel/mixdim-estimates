@@ -1,7 +1,5 @@
 *.pyc
 *.py#
-*.msh
-*.geo
 *.exe
 *.swp
 *.py~
