@@ -9,7 +9,7 @@
 
 If you use **mdestimates** in your research, we ask you to cite the following reference:
 
-*Add arXiv*
+Varela, J., E. Ahmed, E. Keilegavlen, J. Nordbotten and F. A. Radu. “A posteriori error estimates for hierarchical mixed-dimensional elliptic equations.” (2021). arXiv preprint 2101.08331. 
 
 ## Installation from source
 
@@ -38,7 +38,7 @@ A simple usage of **mdestimates** can be found in tutorials/basic_tutorial.ipynb
 
 ## Examples
 
-All the numerical examples included in *REF* can be found under the **paper_examples** folder. These include two validation cases and two benchmark problems.
+All the numerical examples included in the manuscript can be found in the **paper_examples** folder. These include two validation cases and two benchmark problems.
 
 ## Problems, suggestions, enhancements...
 Create an [issue](https://github.com/jhabriel/mixdim-estimates).
