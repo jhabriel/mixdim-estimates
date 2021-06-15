@@ -38,8 +38,12 @@ bin/*
 gmsh_frac_file.geo
 gmsh_frac_file.msh
 
-# Ignore tables
-eff_analysis.txt
-eff_analysis_tex.txt
-convergence_bench2d.txt
-convergence_bench3d.txt
+# Ignore the following txt files
+validation2d.txt
+validation2d_tex.txt
+validation3d.txt
+validation3d_tex.txt
+benchmark2d.txt
+benchmark2d_tex.txt
+benchmark3d.txt
+benchmark3d_tex.txt
