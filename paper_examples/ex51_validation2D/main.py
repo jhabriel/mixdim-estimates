@@ -347,7 +347,7 @@ header = "num_method h_2d, h_1d, h_mortar, eta_2d eta_1d eta_mortar "
 header += "majorant true_error_p true_error_u I_eff_p I_eff_u I_eff_pu"
 
 # Writing into txt
-np.savetxt('eff_analysis.txt', export, delimiter=',', fmt=fmt, header=header)
+np.savetxt('validation2d.txt', export, delimiter=',', fmt=fmt, header=header)
 
 #%% Exporting to LaTeX
 
@@ -435,7 +435,7 @@ fmt += "%1s %2.2e %1s %2.2e %1s %2.2e %1s %2.2f %1s %2.2f %1s %2.2f"
 header = "num_method h_2d h_1d h_mortar eta_2d & eta_1d & eta_mortar & "
 header += "majorant & true_error_p & true_error_u & I_eff_p & I_eff_u & I_eff_pu"
 
-np.savetxt('eff_analysis_tex.txt',
+np.savetxt('validation2d_tex.txt',
             export,
             delimiter=',',
             fmt=fmt,
