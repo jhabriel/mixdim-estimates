@@ -2,36 +2,10 @@ from time import time
 import helpers
 import porepy as pp
 import numpy as np
-import scipy.sparse as sps
 import scipy.sparse.linalg as spla
 import itertools
 import mdestimates as mde
-
-
-def make_grid(num):
-    """
-    Creates mixed-dimensional grid
-
-    Parameters
-    ----------
-    num : Integer
-        0 for coarse, 1 for intermediate, and 2 for fine.
-
-    Returns
-    -------
-    pp.Griddbucket
-        Grid bucket corresponding to the desired option.
-
-    """
-
-    if num == 0:
-        fn = "geiger_geo/mesh500.geo"
-    elif num == 1:
-        fn = "geiger_geo/mesh4k.geo"
-    elif num == 2:
-        fn = "geiger_geo/mesh32k.geo"
-
-    return pp.fracture_importer.dfm_from_gmsh(fn, 3)
+import pickle
 
 
 def low_zones(g):
@@ -51,7 +25,7 @@ def low_zones(g):
     """
 
     if g.dim < 3:
-        return np.zeros(g.num_cells, dtype=np.bool)
+        return np.zeros(g.num_cells, dtype=bool)
 
     zone_0 = np.logical_and(g.cell_centers[0, :] > 0.5, g.cell_centers[1, :] < 0.5)
 
@@ -195,9 +169,12 @@ for i in itertools.product(numerical_methods, mesh_resolutions):
         "error_global": [],
     }
 
-#%% Generate grid bucket
+#%% Import grid buckets
+file_to_read = open("grids.pkl", "rb")
+grid_buckets = pickle.load(file_to_read)
 folder = "geiger_3d"
 conductive = True  # Benchmark for the case of conductive domains
+
 for i in itertools.product(numerical_methods, mesh_resolutions):
 
     # Print simulation info in the console
@@ -209,14 +186,14 @@ for i in itertools.product(numerical_methods, mesh_resolutions):
     # Create grid bucket
     tic = time()
     if i[1] == "coarse":
-        gb = make_grid(0)
+        gb = grid_buckets["coarse"]
     elif i[1] == "intermediate":
-        gb = make_grid(1)
+        gb = grid_buckets["intermediate"]
     elif i[1] == "fine":
-        gb = make_grid(2)
+        gb = grid_buckets["fine"]
     else:
         raise ValueError(msg)
-
+    print(f"3D cells: {gb.grids_of_dimension(3)[0].num_cells}")
     print(f"Grid construction done. Time {time() - tic}")
 
     #%% Solve the problem
@@ -307,7 +284,7 @@ for i in itertools.product(numerical_methods, mesh_resolutions):
 # Permutations
 rows = len(numerical_methods) * len(mesh_resolutions)
 
-# Intialize lists
+# Initialize lists
 numerical_method_name = []
 mesh_resolution_name = []
 col_3d_node = []
@@ -368,33 +345,3 @@ np.savetxt(
     fmt="%4s %8s %2.2e %2.2e %2.2e %2.2e %2.2e %2.2e %2.2e",
     header=header,
 )
-
-
-#%% Exporting to Paraview
-g_3d = gb.grids_of_dimension(3)[0]
-tol = 1e-8
-b_faces = g_3d.tags["domain_boundary_faces"].nonzero()[0]
-bc_val = np.zeros(g_3d.num_faces)
-if b_faces.size != 0:
-    b_face_centers = g_3d.face_centers[:, b_faces]
-    b_inflow = np.logical_and.reduce(
-        tuple(b_face_centers[i, :] < 0.25 - tol for i in range(3))
-    )
-    b_outflow = np.logical_and.reduce(
-        tuple(b_face_centers[i, :] > 0.875 + tol for i in range(3))
-    )
-
-cells_inflow = np.unique(sps.find(g_3d.cell_faces[b_faces[b_inflow]])[1])
-cells_outflow = np.unique(sps.find(g_3d.cell_faces[b_faces[b_outflow]])[1])
-cell_boundaries = np.zeros(g_3d.num_cells)
-cell_boundaries[cells_inflow] = -2
-cell_boundaries[cells_outflow] = -1
-
-for g, d in gb:
-    if g.dim == gb.dim_max():
-        d[pp.STATE]["cell_bound"] = cell_boundaries
-    else:
-        d[pp.STATE]["cell_bound"] = np.zeros(g.num_cells)
-
-paraview = pp.Exporter(gb, "bench3d", folder_name="out")
-paraview.write_vtu(["pressure", "diffusive_error", "cell_bound"])
