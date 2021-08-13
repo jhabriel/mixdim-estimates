@@ -41,7 +41,7 @@ def make_constrained_mesh(mesh_size=0.2):
 
 
 #%% Defining mesh targets, numerical methods, and dictionary fields
-mesh_targets = np.array([0.2, 0.15, 0.10, 0.07, 0.04])
+mesh_targets = np.array([0.3, 0.15, 0.075, 0.0375])
 num_methods = ["TPFA", "MPFA", "RT0", "MVEM"]
 
 #%% Obtain grid buckets for each mesh size
@@ -202,7 +202,7 @@ header = "num_method h_max eta_3d eta_2d eta_mortar majorant true_error_p "
 header += "true_error_u  I_eff_p I_eff_u I_eff_pu"
 
 # Writing into txt
-np.savetxt("validation2D.txt", export, delimiter=",", fmt=fmt, header=header)
+np.savetxt("validation3d.txt", export, delimiter=",", fmt=fmt, header=header)
 
 #%% Exporting to LaTeX
 
@@ -281,7 +281,7 @@ header = "num_method h_max eta_3d & eta_2d & eta_mortar & majorant "
 header += "& true_error_p & true_error_u & I_eff_p & I_eff_u & I_eff_pu"
 
 # Write into txt
-np.savetxt('validation2d_tex.txt',
+np.savetxt('validation3d_tex.txt',
             exp,
             delimiter=',',
             fmt=fmt,
