@@ -226,25 +226,25 @@ def subdomain_residual_error(self, g, g_rot, d):
     u = utils.poly2col(recon_u)
         
     # Obtain contribution from mortar jump to local mass conservation
-    lmbda = (mortar_jump(self, g) / g.cell_volumes).reshape(g.num_cells, 1)
+    jump_in_mortars = (mortar_jump(self, g) / g.cell_volumes).reshape(g.num_cells, 1)
     
     # Declare integrands and prepare for integration
     def integrand(x):
         
         if g.dim == 1:
             ones = np.ones_like(x)
-            return (f * ones - u[0] + lmbda) ** 2
+            return (f * ones - u[0] + jump_in_mortars) ** 2
         
         elif g.dim == 2:
             ones = np.ones_like(x[0])
-            return (f * ones - 2 * u[0] + lmbda) ** 2
+            return (f * ones - 2 * u[0] + jump_in_mortars) ** 2
         
         else:
             ones = np.ones_like(x[0])
-            return (f * ones - 3 * u[0] + lmbda) ** 2
+            return (f * ones - 3 * u[0] + jump_in_mortars) ** 2
     
     # Compute the integral
-    residual_error = C.flatten()  * method.integrate(integrand, elements)
+    residual_error = C.flatten() * method.integrate(integrand, elements)
 
     return residual_error
 
@@ -291,8 +291,7 @@ def interface_diffusive_error(self, e, d_e):
     primary2mortar_hits = mg.primary_to_mortar_avg().nonzero()[0].size
     secondary2mortar_hits = mg.secondary_to_mortar_avg().nonzero()[0].size
     nc = mg.num_cells
-    
-    
+
     # Obtain diffusive error depending on the dimensionality of the grid
     if mg.dim == 0:
         diffusive_error = _interface_diffusive_error_0d(self, e, d_e)

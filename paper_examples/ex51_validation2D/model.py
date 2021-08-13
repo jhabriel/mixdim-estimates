@@ -6,6 +6,7 @@ import quadpy as qp
 import mdestimates as mde
 
 import mdestimates.estimates_utils as utils
+from mdestimates._velocity_reconstruction import _internal_source_term_contribution as mortar_jump
 
 
 def model(gb, method):
@@ -72,7 +73,7 @@ def model(gb, method):
         elif scheme in ["rt0", "RT0", "mvem", "MVEM"]:
             return False
         else:
-            raise ("Method unrecognized")
+            raise ValueError("Method unrecognized")
 
     # Get hold of grids and dictionaries
     g_2d = gb.grids_of_dimension(2)[0]
@@ -97,7 +98,6 @@ def model(gb, method):
         pp.set_state(d)
 
     for e, d in gb.edges():
-        mg = d["mortar_grid"]
         pp.set_state(d)
 
     def get_2d_boundary_indices(g):
@@ -182,7 +182,7 @@ def model(gb, method):
         # Create a list containing the different indices for exporting
         cell_idx_list = [bottom, middle, top]
 
-        # It is useful to assing a label to them, so we con plot them in Paraview
+        # It is useful to assign a label to them, so we con plot them in Paraview
         subregions = 1 * bottom + 2 * middle + 3 * top
 
         return cell_idx_list, subregions
@@ -234,7 +234,7 @@ def model(gb, method):
         # Define the three-dimensional exact form for each subregion. See also the
         # Appendix of the paper.
         p2d_bottom_sym = ((x - 0.5) ** 2 + (y - 0.25) ** 2) ** 0.5
-        p2d_middle_sym = ((x - 0.5) ** 2) ** (0.5)
+        p2d_middle_sym = ((x - 0.5) ** 2) ** 0.5
         p2d_top_sym = ((x - 0.5) ** 2 + (y - 0.75) ** 2) ** 0.5
 
         # Create a list that contains all symbolic expressions
@@ -284,7 +284,7 @@ def model(gb, method):
         # Get face-center coordinates
         x = g.face_centers
 
-        # Intialize boundary values array
+        # Initialize boundary values array
         bc_values = np.zeros(g.num_faces)
 
         # Evaluate exact pressure at external boundary faces at each region
@@ -491,7 +491,7 @@ def model(gb, method):
     # Get hold of exact source term
     f2d_sym_list, f2d_numpy_list, f2d_cc = get_exact_2d_source_term(g_2d, u2d_sym_list)
 
-    # Get hold of external boundary values (#TEST IF WE'RE RETRIEVING THE RIGHT VALUES)
+    # Get hold of external boundary values
     bc_vals_2d = get_2d_boundary_values(g_2d, bound_idx_list, p2d_numpy_list)
 
     #%% Obtain integrated source terms
@@ -656,14 +656,102 @@ def model(gb, method):
         d[pp.STATE][flux_variable] = flux
 
     #%% Obtain error estimates (and transfer them to d[pp.STATE])
+    # NOTE: Residual errors must be obtained separately!
     estimates = mde.ErrorEstimate(gb, lam_name=edge_variable)
     estimates.estimate_error()
     estimates.transfer_error_to_state()
-    majorant = estimates.get_majorant()
-    error_estimate_2d = estimates.get_local_errors(g_2d, d_2d)
-    error_estimate_1d = estimates.get_local_errors(g_1d, d_1d)
-    error_estimate_mortar = estimates.get_local_errors(mg, d_e)
-    estimates.print_summary(scaled=False)
+    kwe = estimates.estimates_kw
+    bulk_diffusive_squared = d_2d[kwe]["diffusive_error"].sum()
+    fracture_diffusive_squared = d_1d[kwe]["diffusive_error"].sum()
+    mortar_diffusive_squared = d_e[kwe]["diffusive_error"].sum()
+    diffusive_error = np.sqrt(
+        bulk_diffusive_squared + fracture_diffusive_squared + mortar_diffusive_squared
+        )  # T_1 in the paper
+
+        #%% Obtain residual error
+    def compute_residual_error(g, d, estimates):
+        """
+        Computes residual errors for each subdomain grid
+
+        Parameters
+        ----------
+        g: Grid
+        d: Data dictionary
+        estimates: Estimates object
+
+        Returns
+        -------
+        Residual error (squared) for each cell of the subdomain.
+        """
+
+        # Retrieve reconstructed velocity
+        recon_u = d[estimates.estimates_kw]["recon_u"].copy()
+
+        # Retrieve permeability
+        perm = d[pp.PARAMETERS][estimates.kw]["second_order_tensor"].values
+        k = perm[0][0].reshape(g.num_cells, 1)
+
+        # Obtain (square of the) constant multiplying the norm:
+        # (C_{p,K} h_K / ||k^{-1/2}||_K)^2 = k_K h_K^2 / pi^2
+        const = k * g.cell_diameters().reshape(g.num_cells, 1) ** 2 / np.pi ** 2
+
+        # Obtain coefficients of the full flux and compute its divergence
+        u = utils.poly2col(recon_u)
+        if g.dim == 2:
+            div_u = 2 * u[0]
+        elif g.dim == 1:
+            div_u = u[0]
+
+        # Obtain contribution from mortar jump to local mass conservation
+        jump_in_mortars = (mortar_jump(estimates, g) / g.cell_volumes).reshape(g.num_cells, 1)
+
+        # Declare integration method and get hold of elements in QuadPy format
+        if g.dim == 2:
+            int_method = qp.t2.get_good_scheme(4)  # since f is quadratic, we need at least order 4
+            elements = utils.get_quadpy_elements(g, g)
+        elif g.dim == 1:
+            int_method = qp.c1.newton_cotes_closed(4)
+            elements = utils.get_quadpy_elements(g, utils.rotate_embedded_grid(g))
+
+        # We now declare the different integrand regions and compute the norms
+        integral = np.zeros(g.num_cells)
+        if g.dim == 2:
+            for (f, idx) in zip(f2d_numpy_list, cell_idx_list):
+                # Declare integrand
+                def integrand(x):
+                    return (f(x[0], x[1]) - div_u + jump_in_mortars) ** 2
+                # Integrate, and add the contribution of each subregion
+                integral += int_method.integrate(integrand, elements) * idx
+        elif g.dim == 1:
+            # Declare integrand
+            def integrand(x):
+                f_1d = -2 * np.ones_like(x)
+                return (f_1d - div_u + jump_in_mortars) ** 2
+            integral = int_method.integrate(integrand, elements)
+
+        # Finally, obtain residual error
+        residual_error = const.flatten() * integral
+
+        return residual_error
+
+    bulk_residual_squared = compute_residual_error(g_2d, d_2d, estimates).sum()
+    fracture_residual_squared = compute_residual_error(g_1d, d_1d, estimates).sum()
+    residual_error = np.sqrt(bulk_residual_squared + fracture_residual_squared)  # T_2 in the paper
+
+    # %% Evaluation of the majorant
+    majorant = diffusive_error + residual_error
+
+    # Distinguishing between subdomain and mortar errors
+    bulk_error = np.sqrt(bulk_diffusive_squared + bulk_residual_squared)
+    fracture_error = np.sqrt(fracture_diffusive_squared + fracture_residual_squared)
+    mortar_error = np.sqrt(mortar_diffusive_squared)
+
+    print("------------------------------------------------")
+    print(f'Majorant: {majorant}')
+    print(f'Bulk error: {bulk_error}')
+    print(f'Fracture error: {fracture_error}')
+    print(f'Mortar error: {mortar_error}')
+    print("------------------------------------------------")
 
     #%% Evaluate reconstructed quantities
     def get_cc_reconp(estimates, cell_idx_list):
@@ -1183,58 +1271,50 @@ def model(gb, method):
 
         return true_error_mortar
 
-    #%% Obtain true errors
+    #%% Obtain true primal, dual, and combined errors
+    # Pressure true errors -> tpe = true pressure error
+    tpe_bulk_squared = compute_pressure_2d_true_error(g_2d, d_2d, estimates, gradp2d_numpy_list, cell_idx_list).sum()
+    tpe_fracture_squared = compute_pressure_1d_true_error(g_1d, d_1d, estimates).sum()
+    tpe_mortar_squared = compute_pressure_mortar_true_error(d_e, estimates).sum()
+    true_pressure_error = np.sqrt(tpe_bulk_squared + tpe_fracture_squared + tpe_mortar_squared)
 
-    # Pressure true errors
-    true_pressure_error_2d = compute_pressure_2d_true_error(
-        g_2d, d_2d, estimates, gradp2d_numpy_list, cell_idx_list
-    )
-    true_pressure_error_1d = compute_pressure_1d_true_error(g_1d, d_1d, estimates)
-    true_pressure_error_mortar = compute_pressure_mortar_true_error(d_e, estimates)
+    # Velocity true errors -> tve = true velocity error
+    tve_bulk_squared = compute_velocity_2d_true_error(g_2d, d_2d, estimates, u2d_numpy_list, cell_idx_list).sum()
+    tve_fracture_squared = compute_velocity_1d_true_error(g_1d, d_1d, estimates).sum()
+    tve_mortar_squared = compute_velocity_mortar_true_error(d_e, estimates).sum()
+    true_velocity_error = np.sqrt(tve_bulk_squared + tve_fracture_squared + tve_mortar_squared)
 
-    # Velocity true errors
-    true_velocity_error_2d = compute_velocity_2d_true_error(
-        g_2d, d_2d, estimates, u2d_numpy_list, cell_idx_list
-    )
-    true_velocity_error_1d = compute_velocity_1d_true_error(g_1d, d_1d, estimates)
-    true_velocity_error_mortar = compute_velocity_mortar_true_error(d_e, estimates)
+    # True error for the primal-dual variable
+    true_combined_error = true_pressure_error + true_velocity_error + residual_error
 
-    #%% Compute effectivity index
-    true_pressure_error = np.sqrt(
-        true_pressure_error_2d.sum()
-        + true_pressure_error_1d.sum()
-        + true_pressure_error_mortar.sum()
-    )
+    #%% Compute efficiency indices
+    i_eff_p = majorant / true_pressure_error  # (Eq. 4.27)
+    i_eff_u = majorant / true_velocity_error  # (Eq. 4.28)
+    i_eff_pu = (3 * majorant) / true_combined_error  # (Eq. 4.29)
 
-    true_velocity_error = np.sqrt(
-        true_velocity_error_2d.sum()
-        + true_velocity_error_1d.sum()
-        + true_velocity_error_mortar.sum()
-    )
-
-    I_eff_p = majorant / true_pressure_error
-    I_eff_u = majorant / true_velocity_error
-    I_eff_combined = (3 * majorant) / (true_pressure_error + true_velocity_error)
+    print(f"Efficiency index (pressure): {i_eff_p}")
+    print(f"Efficiency index (velocity): {i_eff_u}")
+    print(f"Efficiency index (combined): {i_eff_pu}")
 
     #%% Return
     return (
         h_max,
-        error_estimate_2d,
-        true_pressure_error_2d.sum() ** 0.5,
-        true_velocity_error_2d.sum() ** 0.5,
+        bulk_error,
+        np.sqrt(tpe_bulk_squared),
+        np.sqrt(tve_bulk_squared),
         h_1partial2,
-        error_estimate_1d,
-        true_pressure_error_1d.sum() ** 0.5,
-        true_velocity_error_1d.sum() ** 0.5,
+        fracture_error,
+        np.sqrt(tpe_fracture_squared),
+        np.sqrt(tve_fracture_squared),
         h_1,
-        error_estimate_mortar,
-        true_pressure_error_mortar.sum() ** 0.5,
-        true_velocity_error_mortar.sum() ** 0.5,
+        mortar_error,
+        np.sqrt(tpe_mortar_squared),
+        np.sqrt(tve_mortar_squared),
         h_gamma,
         majorant,
-        true_pressure_error.sum(),
-        true_velocity_error.sum(),
-        I_eff_p,
-        I_eff_u,
-        I_eff_combined,
+        true_pressure_error,
+        true_velocity_error,
+        i_eff_p,
+        i_eff_u,
+        i_eff_pu,
     )

@@ -54,16 +54,16 @@ def setup_flow_assembler(gb, method, data_key=None, coupler=None):
 
     assembler = pp.Assembler(gb)
 
-    num_blocks = assembler.full_dof.size
+    num_blocks = assembler._dof_manager.full_dof.size
     block_info = np.zeros((num_blocks, 5))
 
-    block_start = np.hstack((0, np.cumsum(assembler.full_dof)))
+    block_start = np.hstack((0, np.cumsum(assembler._dof_manager.full_dof)))
 
     # map from grids to block dof index. Will be unique, since there is a single
     # dof per subdomain
     subdom_block_map = {}
 
-    for (g, var), ind in assembler.block_dof.items():
+    for (g, var), ind in assembler._dof_manager.block_dof.items():
         is_mortar = 0
 
         if var == "mortar_flux":
@@ -77,7 +77,7 @@ def setup_flow_assembler(gb, method, data_key=None, coupler=None):
 
     # Second loop over the blocks. This time, we will fill in the two last
     # columns, on neighboring subdomains.
-    for (g, var), ind in assembler.block_dof.items():
+    for (g, var), ind in assembler._dof_manager.block_dof.items():
         if var == "mortar_flux":
             block_info[ind, 3] = subdom_block_map[g[0]]
             block_info[ind, 4] = subdom_block_map[g[1]]

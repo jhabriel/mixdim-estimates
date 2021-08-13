@@ -41,7 +41,7 @@ def make_constrained_mesh(mesh_size=0.2):
 
 
 #%% Defining mesh targets, numerical methods, and dictionary fields
-mesh_targets = np.array([0.2, 0.15, 0.10, 0.07, 0.04])
+mesh_targets = np.array([0.3, 0.15, 0.075, 0.0375])
 num_methods = ["TPFA", "MPFA", "RT0", "MVEM"]
 
 #%% Obtain grid buckets for each mesh size
@@ -202,4 +202,88 @@ header = "num_method h_max eta_3d eta_2d eta_mortar majorant true_error_p "
 header += "true_error_u  I_eff_p I_eff_u I_eff_pu"
 
 # Writing into txt
-np.savetxt("eff_analysis.txt", export, delimiter=",", fmt=fmt, header=header)
+np.savetxt("validation3d.txt", export, delimiter=",", fmt=fmt, header=header)
+
+#%% Exporting to LaTeX
+
+# Permutations
+rows = len(num_methods) * len(mesh_targets)
+
+# Intialize lists
+ampersend = []
+for i in range(rows): ampersend.append('&')
+num_method_name = []
+h_max = []
+col_3d_estimate = []
+col_2d_estimate = []
+col_mortar_estimate = []
+col_majorant = []
+col_true_error_pressure = []
+col_true_error_velocity = []
+I_eff_pressure = []
+I_eff_velocity = []
+I_eff_combined = []
+
+# Populate lists
+for i in itertools.product(num_methods, range(len(grid_buckets))):
+    num_method_name.append(i[0])
+    h_max.append(d[i[0]]["mesh_size"][i[1]])
+    col_3d_estimate.append(d[i[0]]["error_estimate_3d"][i[1]])
+    col_2d_estimate.append(d[i[0]]["error_estimate_2d"][i[1]])
+    col_mortar_estimate.append(d[i[0]]["error_estimate_mortar"][i[1]])
+    col_majorant.append(d[i[0]]["majorant"][i[1]])
+    col_true_error_pressure.append(d[i[0]]["true_error_pressure"][i[1]])
+    col_true_error_velocity.append(d[i[0]]["true_error_velocity"][i[1]])
+    I_eff_pressure.append(d[i[0]]["I_eff_pressure"][i[1]])
+    I_eff_velocity.append(d[i[0]]["I_eff_velocity"][i[1]])
+    I_eff_combined.append(d[i[0]]["I_eff_combined"][i[1]])
+
+exp = np.zeros(rows,
+              dtype=[ ('var2', 'U6'),
+                      ('var3', float), ('var4', float),
+                      ('amp1', 'U6'), ('var5', float),
+                      ('amp2', 'U6'), ('var6', float),
+                      ('amp3', 'U6'), ('var7', float),
+                      ('amp4', 'U6'), ('var8', float),
+                      ('amp5', 'U6'), ('var9', float),
+                      ('amp6', 'U6'), ('var10', float),
+                      ('amp7', 'U6'), ('var11', float),
+                      ('amp8', 'U6'), ('var12', float)]
+              )
+
+# Declare column variables
+exp['var2'] = num_method_name
+exp['var3'] = h_max
+exp['var4'] = col_3d_estimate
+exp['amp1'] = ampersend
+exp['var5'] = col_2d_estimate
+exp['amp2'] = ampersend
+exp['var6'] = col_mortar_estimate
+exp['amp3'] = ampersend
+exp['var7'] = col_majorant
+exp['amp4'] = ampersend
+exp['var8'] = col_true_error_pressure
+exp['amp5'] = ampersend
+exp['var9'] = col_true_error_velocity
+exp['amp6'] = ampersend
+exp['var10'] = I_eff_pressure
+exp['amp7'] = ampersend
+exp['var11'] = I_eff_velocity
+exp['amp8'] = ampersend
+exp['var12'] = I_eff_combined
+
+# Formatting string
+fmt = "%6s %2.3f %2.2e %1s %2.2e %1s %2.2e %1s %2.2e "
+fmt += "%1s %2.2e %1s %2.2e %1s %2.2f %1s %2.2f %1s %2.2f"
+
+# Headers
+header = "num_method h_max eta_3d & eta_2d & eta_mortar & majorant "
+header += "& true_error_p & true_error_u & I_eff_p & I_eff_u & I_eff_pu"
+
+# Write into txt
+np.savetxt('validation3d_tex.txt',
+            exp,
+            delimiter=',',
+            fmt=fmt,
+            header=header,
+            )
