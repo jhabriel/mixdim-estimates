@@ -13,7 +13,7 @@ Varela, J., E. Ahmed, E. Keilegavlen, J. Nordbotten and F. A. Radu. “A posteri
 
 ## Installation from source
 
-**mdestimates** is developed under Python >= 3.6. Get the latest version by cloning this repository, i.e.:
+**mdestimates** is developed under Python >= 3.8. Get the latest version by cloning this repository, i.e.:
 
     git clone https://github.com/jhabriel/mixdim-estimates.git
     cd mixdim-estimates
