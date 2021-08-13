@@ -656,16 +656,19 @@ def model(gb, method):
         d[pp.STATE][flux_variable] = flux
 
     #%% Obtain error estimates (and transfer them to d[pp.STATE])
-    # NOTE: Residual errors must be obtained separately
+    # NOTE: Residual errors must be obtained separately!
     estimates = mde.ErrorEstimate(gb, lam_name=edge_variable)
     estimates.estimate_error()
     estimates.transfer_error_to_state()
     kwe = estimates.estimates_kw
-    eta_DF_omega2_squared = d_2d[kwe]["diffusive_error"]
-    eta_DF_omega1_squared = d_1d[kwe]["diffusive_error"]
-    eta_DF_gamma12_squared = d_e[kwe]["diffusive_error"]
+    bulk_diffusive_squared = d_2d[kwe]["diffusive_error"].sum()
+    fracture_diffusive_squared = d_1d[kwe]["diffusive_error"].sum()
+    mortar_diffusive_squared = d_e[kwe]["diffusive_error"].sum()
+    diffusive_error = np.sqrt(
+        bulk_diffusive_squared + fracture_diffusive_squared + mortar_diffusive_squared
+        )  # T_1 in the paper
 
-    #%% Obtain residual error
+        #%% Obtain residual error
     def compute_residual_error(g, d, estimates):
         """
         Computes residual errors for each subdomain grid
@@ -731,43 +734,23 @@ def model(gb, method):
 
         return residual_error
 
-    eta_R_omega2_squared = compute_residual_error(g_2d, d_2d, estimates)
-    eta_R_omega1_squared = compute_residual_error(g_1d, d_1d, estimates)
+    bulk_residual_squared = compute_residual_error(g_2d, d_2d, estimates).sum()
+    fracture_residual_squared = compute_residual_error(g_1d, d_1d, estimates).sum()
+    residual_error = np.sqrt(bulk_residual_squared + fracture_residual_squared)  # T_2 in the paper
 
-    # %% Computation of majorant and local errors
-
-    # Majorant
-    diffusive_error = (eta_DF_omega2_squared.sum() + eta_DF_omega1_squared.sum() + eta_DF_gamma12_squared.sum()) ** 0.5
-    residual_error = (eta_R_omega2_squared.sum() + eta_R_omega1_squared.sum()) ** 0.5
+    # %% Evaluation of the majorant
     majorant = diffusive_error + residual_error
 
-    # Local errors
-    # Omega_2
-    epsilon_DF_omega2_squared = eta_DF_omega2_squared.sum()
-    epsilon_R_omega2_squared = eta_R_omega2_squared.sum()
-    epsilon_omega2 = (epsilon_DF_omega2_squared + epsilon_R_omega2_squared) ** 0.5
-    # Omega_1
-    epsilon_DF_omega1_squared = eta_DF_omega1_squared.sum()
-    epsilon_R_omega1_squared = eta_R_omega1_squared.sum()
-    epsilon_omega1 = (epsilon_DF_omega1_squared + epsilon_R_omega1_squared) ** 0.5
-    # Gamma_12
-    epsilon_DF_gamma12_squared = eta_DF_gamma12_squared.sum()
-    epsilon_gamma12 = epsilon_DF_gamma12_squared ** 0.5
+    # Distinguishing between subdomain and mortar errors
+    bulk_error = np.sqrt(bulk_diffusive_squared + bulk_residual_squared)
+    fracture_error = np.sqrt(fracture_diffusive_squared + fracture_residual_squared)
+    mortar_error = np.sqrt(mortar_diffusive_squared)
 
     print("------------------------------------------------")
     print(f'Majorant: {majorant}')
-    print(f'Combined diffusive error: {diffusive_error}')
-    print(f'Combined residual error: {residual_error}')
-    print("------------------------------------------------")
-    print(f'Bulk diffusive error: {epsilon_DF_omega2_squared ** 0.5}')
-    print(f'Bulk residual error: {epsilon_R_omega2_squared ** 0.5}')
-    print(f'Bulk error: {epsilon_omega2}')
-    print("------------------------------------------------")
-    print(f'Fracture diffusive error: {epsilon_DF_omega1_squared ** 0.5}')
-    print(f'Fracture residual error: {epsilon_R_omega1_squared ** 0.5}')
-    print(f'Fracture error: {epsilon_omega1}')
-    print("------------------------------------------------")
-    print(f'Mortar (diffusive) error: {epsilon_gamma12}')
+    print(f'Bulk error: {bulk_error}')
+    print(f'Fracture error: {fracture_error}')
+    print(f'Mortar error: {mortar_error}')
     print("------------------------------------------------")
 
     #%% Evaluate reconstructed quantities
@@ -1288,62 +1271,50 @@ def model(gb, method):
 
         return true_error_mortar
 
-    #%% Obtain true errors
+    #%% Obtain true primal, dual, and combined errors
+    # Pressure true errors -> tpe = true pressure error
+    tpe_bulk_squared = compute_pressure_2d_true_error(g_2d, d_2d, estimates, gradp2d_numpy_list, cell_idx_list).sum()
+    tpe_fracture_squared = compute_pressure_1d_true_error(g_1d, d_1d, estimates).sum()
+    tpe_mortar_squared = compute_pressure_mortar_true_error(d_e, estimates).sum()
+    true_pressure_error = np.sqrt(tpe_bulk_squared + tpe_fracture_squared + tpe_mortar_squared)
 
-    # Pressure true errors
-    true_pressure_error_2d = compute_pressure_2d_true_error(
-        g_2d, d_2d, estimates, gradp2d_numpy_list, cell_idx_list
-    )
-    true_pressure_error_1d = compute_pressure_1d_true_error(g_1d, d_1d, estimates)
-    true_pressure_error_mortar = compute_pressure_mortar_true_error(d_e, estimates)
+    # Velocity true errors -> tve = true velocity error
+    tve_bulk_squared = compute_velocity_2d_true_error(g_2d, d_2d, estimates, u2d_numpy_list, cell_idx_list).sum()
+    tve_fracture_squared = compute_velocity_1d_true_error(g_1d, d_1d, estimates).sum()
+    tve_mortar_squared = compute_velocity_mortar_true_error(d_e, estimates).sum()
+    true_velocity_error = np.sqrt(tve_bulk_squared + tve_fracture_squared + tve_mortar_squared)
 
-    # Velocity true errors
-    true_velocity_error_2d = compute_velocity_2d_true_error(
-        g_2d, d_2d, estimates, u2d_numpy_list, cell_idx_list
-    )
-    true_velocity_error_1d = compute_velocity_1d_true_error(g_1d, d_1d, estimates)
-    true_velocity_error_mortar = compute_velocity_mortar_true_error(d_e, estimates)
+    # True error for the primal-dual variable
+    true_combined_error = true_pressure_error + true_velocity_error + residual_error
 
-    #%% Compute effectivity index
-    true_pressure_error = np.sqrt(
-        true_pressure_error_2d.sum()
-        + true_pressure_error_1d.sum()
-        + true_pressure_error_mortar.sum()
-    )
+    #%% Compute efficiency indices
+    i_eff_p = majorant / true_pressure_error  # (Eq. 4.27)
+    i_eff_u = majorant / true_velocity_error  # (Eq. 4.28)
+    i_eff_pu = (3 * majorant) / true_combined_error  # (Eq. 4.29)
 
-    true_velocity_error = np.sqrt(
-        true_velocity_error_2d.sum()
-        + true_velocity_error_1d.sum()
-        + true_velocity_error_mortar.sum()
-    )
-
-    I_eff_p = majorant / true_pressure_error
-    I_eff_u = majorant / true_velocity_error
-    I_eff_combined = (3 * majorant) / (true_pressure_error + true_velocity_error + residual_error)
-
-    print(f"Efficiency index (pressure): {I_eff_p}")
-    print(f"Efficiency index (velocity): {I_eff_u}")
-    print(f"Efficiency index (combined): {I_eff_combined}")
+    print(f"Efficiency index (pressure): {i_eff_p}")
+    print(f"Efficiency index (velocity): {i_eff_u}")
+    print(f"Efficiency index (combined): {i_eff_pu}")
 
     #%% Return
     return (
         h_max,
-        epsilon_omega2,
-        true_pressure_error_2d.sum() ** 0.5,
-        true_velocity_error_2d.sum() ** 0.5,
+        bulk_error,
+        np.sqrt(tpe_bulk_squared),
+        np.sqrt(tve_bulk_squared),
         h_1partial2,
-        epsilon_omega1,
-        true_pressure_error_1d.sum() ** 0.5,
-        true_velocity_error_1d.sum() ** 0.5,
+        fracture_error,
+        np.sqrt(tpe_fracture_squared),
+        np.sqrt(tve_fracture_squared),
         h_1,
-        epsilon_gamma12,
-        true_pressure_error_mortar.sum() ** 0.5,
-        true_velocity_error_mortar.sum() ** 0.5,
+        mortar_error,
+        np.sqrt(tpe_mortar_squared),
+        np.sqrt(tve_mortar_squared),
         h_gamma,
         majorant,
-        true_pressure_error.sum(),
-        true_velocity_error.sum(),
-        I_eff_p,
-        I_eff_u,
-        I_eff_combined,
+        true_pressure_error,
+        true_velocity_error,
+        i_eff_p,
+        i_eff_u,
+        i_eff_pu,
     )
