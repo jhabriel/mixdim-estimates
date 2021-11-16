@@ -36,6 +36,7 @@ def rotate_embedded_grid(g):
             face_normals,
             face_centers,
             rotation_matrix,
+            dim,
             dim_bool,
             nodes,
         ):
@@ -45,6 +46,7 @@ def rotate_embedded_grid(g):
             self.face_centers = face_centers
             self.rotation_matrix = rotation_matrix
             self.dim_bool = dim_bool
+            self.dim = dim
             self.nodes = nodes
     
         def __str__(self):
@@ -57,6 +59,7 @@ def rotate_embedded_grid(g):
                 + "face_normals\n"
                 + "face_centers\n"
                 + "rotation_matrix\n"
+                + "dim\n"
                 + "dim_bool\n"
                 + "nodes"
             )
@@ -72,8 +75,9 @@ def rotate_embedded_grid(g):
     ) = pp.map_geometry.map_grid(g)
 
     # Create rotated grid object
+    dim = dim_bool.sum()
     rotated_object = RotatedGrid(
-        cell_centers, face_normals, face_centers, rotation_matrix, dim_bool, nodes
+        cell_centers, face_normals, face_centers, rotation_matrix, dim, dim_bool, nodes
     )
 
     return rotated_object
@@ -240,6 +244,7 @@ def get_quadpy_elements(g, g_rot):
 
     return elements
 
+
 def get_qp_elements_from_union_grid_1d(union_grid):
     
     nc = union_grid.shape[0]
@@ -261,6 +266,7 @@ def get_qp_elements_from_union_grid_1d(union_grid):
         elements = elements.reshape(dim + 1, nc)
         
     return elements
+
 
 #%% Interpolation and polynomial-related functions
 def interpolate_P1(point_val, point_coo):

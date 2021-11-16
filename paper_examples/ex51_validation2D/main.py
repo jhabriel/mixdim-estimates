@@ -1,7 +1,6 @@
 # Importing modules
 import numpy as np
 import porepy as pp
-import itertools
 
 from time import time
 from model_LC import model_LC
@@ -116,30 +115,28 @@ for counter in range(levels):
 grid_buckets = grid_buckets[::-1]
 print(f"\u2713 Time {time() - tic}\n")
 
-#%% Create dictionary and initialize fields
-d = {k: {} for k in num_methods}
-for method in num_methods:
-    d[method] = {
-        "bulk_diffusive": [],
-        "bulk_residual": [],
-        "frac_diffusive": [],
-        "frac_residual": [],
-        "mortar_diffusive": [],
-        "majorant": [],
-        "true_pressure_error": [],
-        "true_velocity_error": [],
-        "true_combined_error": [],
-        "efficiency_pressure": [],
-        "efficiency_velocity": [],
-        "efficiency_combined": [],
-    }
-
 #%% Loop over the models
-models = [model_LC, model_NC]
+models = [model_NC, model_LC]
 models = [model_LC]
 for model in models:
-
-    #%% Populate fields (NOTE: This loop may take considerable time)
+    # Create dictionary and initialize fields
+    d = {k: {} for k in num_methods}
+    for method in num_methods:
+        d[method] = {
+            "bulk_diffusive": [],
+            "bulk_residual": [],
+            "frac_diffusive": [],
+            "frac_residual": [],
+            "mortar_diffusive": [],
+            "majorant": [],
+            "true_pressure_error": [],
+            "true_velocity_error": [],
+            "true_combined_error": [],
+            "efficiency_pressure": [],
+            "efficiency_velocity": [],
+            "efficiency_combined": [],
+        }
+    # Populate fields (NOTE: This loop may take considerable time)
     for method in num_methods:
         for idx, gb in enumerate(grid_buckets):
             print(f"Solving with {method} for refinement level {idx+1}.")
@@ -257,11 +254,11 @@ for model in models:
             ("var6", float),
             ("amp6", "U6"),
             ("var7", float),
-            ("amp10", "U6"),
+            ("amp7", "U6"),
             ("var8", float),
-            ("amp11", "U6"),
+            ("amp8", "U6"),
             ("var9", float),
-            ("amp12", "U6"),
+            ("amp9", "U6"),
             ("var10", float),
         ],
     )

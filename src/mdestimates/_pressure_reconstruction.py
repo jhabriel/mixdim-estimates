@@ -107,9 +107,28 @@ def inverse_local_gradp(self, g, g_rot, d):
     )
 
     # Project fluxes using RT0
-    d_RT0 = d.copy()
-    pp.RT0(self.kw).discretize(g, d_RT0)
-    proj_flux = pp.RT0(self.kw).project_flux(g, flux, d_RT0)[: g.dim]
+    #d_RT0 = d.copy()
+    #pp.RT0(self.kw).discretize(g, d_RT0)
+    #proj_flux = pp.RT0(self.kw).project_flux(g, flux, d_RT0)[: g.dim]
+
+    # Retrieve reconstructed velocities
+    coeff = d[self.estimates_kw]["recon_u"]
+    if g.dim == 3:
+        proj_flux = np.array([
+            coeff[:, 0] * g_rot.cell_centers[0] + coeff[:, 1],
+            coeff[:, 0] * g_rot.cell_centers[1] + coeff[:, 2],
+            coeff[:, 0] * g_rot.cell_centers[2] + coeff[:, 3],
+        ])
+    elif g.dim == 2:
+        proj_flux = np.array([
+            coeff[:, 0] * g_rot.cell_centers[0] + coeff[:, 1],
+            coeff[:, 0] * g_rot.cell_centers[1] + coeff[:, 2],
+        ])
+    else:
+        proj_flux = np.array([
+            coeff[:, 0] * g_rot.cell_centers[0] + coeff[:, 1],
+        ])
+
 
     # Obtain local gradients
     loc_grad = np.zeros((g.dim, nc))
@@ -126,7 +145,7 @@ def inverse_local_gradp(self, g, g_rot, d):
 
     for col in range(g.dim + 1):
         nodes = cell_node_matrix[:, col]
-        dist = g.nodes[: g.dim, nodes] - g.cell_centers[: g.dim]
+        dist = g_rot.nodes[: g.dim, nodes] - g_rot.cell_centers[: g.dim]
         scaling = cell_nodes_scaled[nodes, np.arange(nc)]
         contribution = (
             np.asarray(scaling) * (p_cc + np.sum(dist * loc_grad, axis=0))

@@ -558,6 +558,7 @@ def model_NC(gb, method):
         # (Integrated) source terms are given by the exact solution
         if g.dim == max_dim:
             source_term = integrated_f2d
+            source_term = f2d_cc * g.cell_volumes
         else:
             source_term = -2 * g.cell_volumes
 
@@ -644,7 +645,7 @@ def model_NC(gb, method):
     assembler = pp.Assembler(gb)
     assembler.discretize()
     A, b = assembler.assemble_matrix_rhs()
-    C_sqrt = 1 / (np.pi ** 2)
+    C_P = (np.sqrt(2) / np.pi) ** 2  # squared of Poincare constant
     sol = sps.linalg.spsolve(A, b)
     assembler.distribute_variable(sol)
 
@@ -692,9 +693,6 @@ def model_NC(gb, method):
         perm = d[pp.PARAMETERS][estimates.kw]["second_order_tensor"].values
         k = perm[0][0].reshape(g.num_cells, 1)
 
-        # Obtain (square of the) constant multiplying the norm:
-        cons = C_sqrt # This is now the global constant
-
         # Obtain coefficients of the full flux and compute its divergence
         u = utils.poly2col(recon_u)
         if g.dim == 2:
@@ -730,13 +728,14 @@ def model_NC(gb, method):
             integral = int_method.integrate(integrand, elements)
 
         # Finally, obtain residual error
-        residual_error = const.flatten() * integral
+        residual_error = integral
 
         return residual_error
 
     bulk_residual_squared = compute_residual_error(g_2d, d_2d, estimates).sum()
     fracture_residual_squared = compute_residual_error(g_1d, d_1d, estimates).sum()
-    residual_error = np.sqrt(bulk_residual_squared + fracture_residual_squared)  # T_2 in the paper
+    residual_error_squared = C_P * (bulk_residual_squared + fracture_residual_squared)
+    residual_error = np.sqrt(residual_error_squared)  # T_2,NC in the paper
 
     # %% Evaluation of the majorant
     majorant = diffusive_error + residual_error

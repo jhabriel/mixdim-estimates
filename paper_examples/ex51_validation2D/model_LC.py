@@ -233,9 +233,9 @@ def model_LC(gb, method):
 
         # Define the three-dimensional exact form for each subregion. See also the
         # Appendix of the paper.
-        p2d_bottom_sym = ((x - 0.5) ** 2 + (y - 0.25) ** 2) ** 0.5
-        p2d_middle_sym = ((x - 0.5) ** 2) ** 0.5
-        p2d_top_sym = ((x - 0.5) ** 2 + (y - 0.75) ** 2) ** 0.5
+        p2d_bottom_sym = sym.sin(x * sym.pi) * sym.cos(y * sym.pi)
+        p2d_middle_sym = sym.sin(x * sym.pi) * sym.cos(y * sym.pi)
+        p2d_top_sym = sym.sin(x * sym.pi) * sym.cos(y * sym.pi)
 
         # Create a list that contains all symbolic expressions
         p2d_sym_list = [p2d_bottom_sym, p2d_middle_sym, p2d_top_sym]
