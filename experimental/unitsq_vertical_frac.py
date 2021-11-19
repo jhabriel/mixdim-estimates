@@ -5,6 +5,7 @@ import sympy as sym
 import quadpy as qp
 import mdestimates as mde
 import matplotlib.pyplot as plt
+import os
 
 import mdestimates.estimates_utils as utils
 import model_utils as mutils
@@ -267,3 +268,139 @@ print(f"True velocity error mortar: {true_velocity_error_mortar}")
 # plt.xlabel("Source term in the fracture")
 # plt.ylabel("y")
 # plt.show()
+
+#%% Print into latex
+
+# Pressure in the matrix
+p2_bot = "p2_bot = " + sym.latex(te.p2d("sym")[0]) + "\n"
+p2_mid = "p2_mid = " + sym.latex(te.p2d("sym")[1]) + "\n"
+p2_top = "p2_top = " + sym.latex(te.p2d("sym")[2]) + "\n"
+p2_txt = [p2_bot, p2_mid, p2_top]
+
+# Velocity in the matrix
+u2_bot_x = "u2_bot_x = " + sym.latex(te.u2d("sym")[0][0]) + "\n"
+u2_bot_y = "u2_bot_y = " + sym.latex(te.u2d("sym")[0][1]) + "\n"
+u2_mid_x = "u2_mid_x = " + sym.latex(te.u2d("sym")[1][0]) + "\n"
+u2_mid_y = "u2_mid_y = " + sym.latex(te.u2d("sym")[1][1]) + "\n"
+u2_top_x = "u2_top_x = " + sym.latex(te.u2d("sym")[2][0]) + "\n"
+u2_top_y = "u2_top_y = " + sym.latex(te.u2d("sym")[2][1]) + "\n"
+u2_txt = [u2_bot_x, u2_bot_y, u2_mid_x, u2_mid_y, u2_top_x, u2_top_y]
+
+# Source in the matrix
+f2_bot = "f2_bot = " + sym.latex(te.f2d("sym")[0])+ "\n"
+f2_mid = "f2_mid = " + sym.latex(te.f2d("sym")[1]) + "\n"
+f2_top = "f2_top = " + sym.latex(te.f2d("sym")[2]) + "\n"
+f2_txt = [f2_bot, f2_mid, f2_top]
+
+file_name = "sols.txt"
+if os.path.exists(file_name):
+    os.remove(file_name)
+
+file = open("sols.txt", "a")
+
+file.writelines(p2_txt)
+file.write("\n")
+file.writelines(u2_txt)
+file.write("\n")
+file.writelines(f2_txt)
+
+file.close()
+
+#%%
+
+# Atomic symbols
+x, y, z = sym.symbols("x y z", positive=True)
+alpha = sym.symbols("alpha")
+beta1, beta2 = sym.symbols("beta1, beta2")
+gamma1, gamma2 = sym.symbols("gamma1, gamma2")
+n = sym.symbols("n", positive=True)
+dbot, dmid, dtop = sym.symbols("d_2^a d_2^b d_2^c", positive=True)
+omega = sym.symbols("omega2", positive=True)
+
+alpha_exp = x - sym.Rational(1, 2)
+dalpha_dx = sym.Integer(1)
+dalpha_dy = sym.Integer(0)
+dalpha_dz = sym.Integer(0)
+
+beta1_exp = y - sym.Rational(1, 4)
+dbeta1_dx = sym.Integer(0)
+dbeta1_dy = sym.Integer(1)
+dbeta1_dz = sym.Integer(0)
+
+beta2_exp = y - sym.Rational(3, 4)
+dbeta2_dx = sym.Integer(0)
+dbeta2_dy = sym.Integer(1)
+dbeta2_dz = sym.Integer(0)
+
+gamma1_exp = z - 0.25
+dgamma1_dx = sym.Integer(0)
+dgamma1_dy = sym.Integer(0)
+dgamma1_dz = sym.Integer(1)
+
+gamma2_exp = z - 0.75
+dgamma2_dx = sym.Integer(0)
+dgamma2_dy = sym.Integer(0)
+dgamma2_dz = sym.Integer(1)
+
+omega_exp = beta1 ** 2 + beta2 ** 2
+domega_dbeta1 = sym.diff(omega_exp, beta1)
+domega_dbeta2 = sym.diff(omega_exp, beta2)
+domega_dx = domega_dbeta1 * dbeta1_dx + domega_dbeta2 * dbeta2_dx
+domega_dy = domega_dbeta1 * dbeta1_dy + domega_dbeta2 * dbeta2_dy
+
+dbot_exp = sym.sqrt(alpha ** 2 + beta1 ** 2)
+ddbot_dalpha = sym.diff(dbot_exp, alpha)
+ddbot_dbeta1 = sym.diff(dbot_exp, beta1)
+ddbot_dx = ddbot_dalpha * dalpha_dx + ddbot_dbeta1 * dbeta1_dx
+ddbot_dy = ddbot_dalpha * dalpha_dy + ddbot_dbeta1 * dbeta1_dy
+
+dmid_exp = (alpha ** 2) ** 0.5
+ddmid_dalpha = sym.diff(dmid_exp, alpha)
+ddmid_dx = ddmid_dalpha * dalpha_dx
+ddmid_dy = ddmid_dalpha * dalpha_dy
+
+dtop_exp = (alpha ** 2 + beta2 ** 2) ** 0.5
+ddtop_dalpha = sym.diff(dtop_exp, alpha)
+ddtop_dbeta1 = sym.diff(dtop_exp, beta2)
+
+# Derivatives of the pressure
+pbot = dbot ** (n + 1)
+dpbot_ddbot = sym.diff(pbot, dbot)
+dpbot_dx = sym.simplify(dpbot_ddbot * ddbot_dx)
+dpbot_dy = sym.simplify(dpbot_ddbot * ddbot_dy)
+
+pmid = dmid ** (n + 1) + omega * dmid
+dpmid_ddmid = sym.diff(pmid, dmid)
+dpmid_domega = sym.diff(pmid, omega)
+dpmid_dx = dpmid_ddmid * ddmid_dx + dpmid_domega * domega_dx
+dpmid_dy = dpmid_ddmid * ddmid_dy + dpmid_domega * domega_dy
+
+print([print(sym.latex(-dpbot_dx)), print(sym.latex(-dpbot_dy))])
+print([print(sym.latex(-dpmid_dx)), print(sym.latex(-dpmid_dy))])
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
