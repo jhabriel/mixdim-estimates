@@ -14,7 +14,7 @@ from analytical_2d import ExactSolution2D
 from true_errors_2d import TrueErrors2D
 
 #%% Create mesh
-h = 1/160
+h = 1/20
 gb = mutils.make_constrained_mesh(h=h)
 g_2d = gb.grids_of_dimension(2)[0]
 g_1d = gb.grids_of_dimension(1)[0]
@@ -145,14 +145,12 @@ print(50*"-")
 
 # Get hold of residual errors
 te = TrueErrors2D(gb, estimates)
-resq_2d = te.residual_error_squared_2d()
-resq_1d = te.residual_error_squared_1d()
-residual_error_2d = resq_2d.sum() ** 0.5
-residual_error_1d = resq_1d.sum() ** 0.5
+residual_norm_2d = te.residual_norm_squared_2d().sum() ** 0.5
+residual_norm_1d = te.residual_norm_squared_1d().sum() ** 0.5
 residual_error_NC = te.residual_error_global_poincare()
 residual_error_LC = te.residual_error_local_poincare()
-print(f"Residual error 2d: {residual_error_2d}")
-print(f"Residual error 1d: {residual_error_1d}")
+print(f"Residual error 2d: {residual_norm_2d}")
+print(f"Residual error 1d: {residual_norm_1d}")
 print(f"Residual error NC: {residual_error_NC}")
 print(f"Residual error LC: {residual_error_LC}")
 print(50*"-")
@@ -200,155 +198,34 @@ print(f"True velocity error 2D: {true_velocity_error_2d}")
 print(f"True velocity error 1D: {true_velocity_error_1d}")
 print(f"True velocity error mortar: {true_velocity_error_mortar}")
 
-# #%% Pressure
-# g_rot = utils.rotate_embedded_grid(g_1d)
-# p1d_cc = te.p1d()
-# coeffs = d_1d["estimates"]["recon_p"].copy()
-# reconp_cc = coeffs[:, 0] * g_rot.cell_centers[0] + coeffs[:, 1]
-# plt.plot(p1d_cc, label="Exact Pressure")
-# plt.plot(reconp_cc, label="Reconstructed Pressure")
-# plt.legend()
-# plt.show()
-#
-# #%% Pressure gradient
-# gradp1d_cc = np.array([np.zeros(g_1d.num_cells), te.gradp1d(), np.zeros(g_1d.num_cells)])
-# gradp1d_cc_rotated = np.dot(g_rot.rotation_matrix, gradp1d_cc)[g_rot.dim_bool]
-# recongradp_cc = coeffs[:, 0]
-# plt.plot(gradp1d_cc_rotated[0], label="Exact Pressure Gradient")
-# plt.plot(recongradp_cc, label="Reconstructed Pressure Gradient")
-# plt.legend()
-# plt.show()
-#
-# #%% Velocity reconstruction
-# # Reconstructed cell center velocities
-# coeffs = d_1d["estimates"]["recon_u"].copy()
-#
-# u_recon_cc = coeffs[:, 0] * g_rot.cell_centers[0] + coeffs[:, 1]
-# # Rotated exact velocities
-# u1_cc = np.array([np.zeros(g_1d.num_cells), te.u1d(), np.zeros(g_1d.num_cells)])
-# u_cc_rot = np.dot(g_rot.rotation_matrix, u1_cc)[g_rot.dim_bool]
-#
-#
-# #%% PLOTS
-# plt.title(f"Mesh size: {h}")
-# plt.plot(te.p1d(), label="Exact p")
-# plt.plot(te.reconstructed_p1d(), label="Recon p")
-# plt.legend()
-# plt.show()
-#
-# plt.title(f"Mesh size: {h}")
-# plt.plot(te.gradp1d(), label="Exact gradp")
-# plt.plot(te.reconstructed_gradp1()[0], label="Recon gradp")
-# #plt.plot(-1 * te.reconstructed_u1d()[0], label="-recon u")
-# plt.legend()
-# plt.show()
-#
-# # pp.plot_grid(g_2d, ex.p2d(), plot_2d=True)
-# # pp.plot_grid(g_2d, ex.f2d(), plot_2d=True)
-# # pp.plot_grid(g_2d, residual_error_squared, plot_2d=True)
-# # pp.plot_grid(g_2d, diffusive_error_squared, plot_2d=True)
-#
-# #%%
-# plt.plot(te.lmbda()[:20], mg.cell_centers[1][:20])
-# plt.xlabel("Mortar flux")
-# plt.ylabel("y")
-# plt.show()
-#
-# plt.plot(te.p1d(), g_1d.cell_centers[1])
-# plt.xlabel("Fracture pressure")
-# plt.ylabel("y")
-# plt.show()
-#
-# plt.plot(te.u1d(), g_1d.cell_centers[1])
-# plt.xlabel("Fracture flux")
-# plt.ylabel("y")
-# plt.show()
-#
-# plt.plot(te.f1d(), g_1d.cell_centers[1])
-# plt.xlabel("Source term in the fracture")
-# plt.ylabel("y")
-# plt.show()
-
-#%% Print into latex
-
-# Pressure in the matrix
-p2_bot = "p2_bot = " + sym.latex(te.p2d("sym")[0]) + "\n"
-p2_mid = "p2_mid = " + sym.latex(te.p2d("sym")[1]) + "\n"
-p2_top = "p2_top = " + sym.latex(te.p2d("sym")[2]) + "\n"
-p2_txt = [p2_bot, p2_mid, p2_top]
-
-# Velocity in the matrix
-u2_bot_x = "u2_bot_x = " + sym.latex(te.u2d("sym")[0][0]) + "\n"
-u2_bot_y = "u2_bot_y = " + sym.latex(te.u2d("sym")[0][1]) + "\n"
-u2_mid_x = "u2_mid_x = " + sym.latex(te.u2d("sym")[1][0]) + "\n"
-u2_mid_y = "u2_mid_y = " + sym.latex(te.u2d("sym")[1][1]) + "\n"
-u2_top_x = "u2_top_x = " + sym.latex(te.u2d("sym")[2][0]) + "\n"
-u2_top_y = "u2_top_y = " + sym.latex(te.u2d("sym")[2][1]) + "\n"
-u2_txt = [u2_bot_x, u2_bot_y, u2_mid_x, u2_mid_y, u2_top_x, u2_top_y]
-
-# Source in the matrix
-f2_bot = "f2_bot = " + sym.latex(te.f2d("sym")[0])+ "\n"
-f2_mid = "f2_mid = " + sym.latex(te.f2d("sym")[1]) + "\n"
-f2_top = "f2_top = " + sym.latex(te.f2d("sym")[2]) + "\n"
-f2_txt = [f2_bot, f2_mid, f2_top]
-
-file_name = "sols.txt"
-if os.path.exists(file_name):
-    os.remove(file_name)
-
-file = open("sols.txt", "a")
-
-file.writelines(p2_txt)
-file.write("\n")
-file.writelines(u2_txt)
-file.write("\n")
-file.writelines(f2_txt)
-
-file.close()
-
-#%%
-
-# Atomic symbols
-x, y, z = sym.symbols("x y z", positive=True)
+#%% Atomic symbols
+x, y = sym.symbols("x y")
 alpha = sym.symbols("alpha")
 beta1, beta2 = sym.symbols("beta1, beta2")
 gamma1, gamma2 = sym.symbols("gamma1, gamma2")
-n = sym.symbols("n", positive=True)
-dbot, dmid, dtop = sym.symbols("d_2^a d_2^b d_2^c", positive=True)
-omega = sym.symbols("omega2", positive=True)
+n = sym.symbols("n")
+dbot, dmid, dtop = sym.symbols("d_2^a d_2^b d_2^c")
+omega = sym.symbols("omega2")
 
-alpha_exp = x - sym.Rational(1, 2)
+alpha_exp = x - 0.5
 dalpha_dx = sym.Integer(1)
 dalpha_dy = sym.Integer(0)
-dalpha_dz = sym.Integer(0)
 
-beta1_exp = y - sym.Rational(1, 4)
+beta1_exp = y - 0.25
 dbeta1_dx = sym.Integer(0)
 dbeta1_dy = sym.Integer(1)
-dbeta1_dz = sym.Integer(0)
 
-beta2_exp = y - sym.Rational(3, 4)
+beta2_exp = y - 0.75
 dbeta2_dx = sym.Integer(0)
 dbeta2_dy = sym.Integer(1)
-dbeta2_dz = sym.Integer(0)
 
-gamma1_exp = z - 0.25
-dgamma1_dx = sym.Integer(0)
-dgamma1_dy = sym.Integer(0)
-dgamma1_dz = sym.Integer(1)
-
-gamma2_exp = z - 0.75
-dgamma2_dx = sym.Integer(0)
-dgamma2_dy = sym.Integer(0)
-dgamma2_dz = sym.Integer(1)
-
-omega_exp = beta1 ** 2 + beta2 ** 2
+omega_exp = beta1 ** 2 * beta2 ** 2
 domega_dbeta1 = sym.diff(omega_exp, beta1)
 domega_dbeta2 = sym.diff(omega_exp, beta2)
 domega_dx = domega_dbeta1 * dbeta1_dx + domega_dbeta2 * dbeta2_dx
 domega_dy = domega_dbeta1 * dbeta1_dy + domega_dbeta2 * dbeta2_dy
 
-dbot_exp = sym.sqrt(alpha ** 2 + beta1 ** 2)
+dbot_exp = (alpha ** 2 + beta1 ** 2) ** 0.5
 ddbot_dalpha = sym.diff(dbot_exp, alpha)
 ddbot_dbeta1 = sym.diff(dbot_exp, beta1)
 ddbot_dx = ddbot_dalpha * dalpha_dx + ddbot_dbeta1 * dbeta1_dx
@@ -361,7 +238,9 @@ ddmid_dy = ddmid_dalpha * dalpha_dy
 
 dtop_exp = (alpha ** 2 + beta2 ** 2) ** 0.5
 ddtop_dalpha = sym.diff(dtop_exp, alpha)
-ddtop_dbeta1 = sym.diff(dtop_exp, beta2)
+ddtop_dbeta2 = sym.diff(dtop_exp, beta2)
+ddtop_dx = ddtop_dalpha * dalpha_dx + ddtop_dbeta2 * dbeta2_dx
+ddtop_dy = ddtop_dalpha * dalpha_dy + ddtop_dbeta2 * dbeta2_dy
 
 # Derivatives of the pressure
 pbot = dbot ** (n + 1)
@@ -375,24 +254,130 @@ dpmid_domega = sym.diff(pmid, omega)
 dpmid_dx = dpmid_ddmid * ddmid_dx + dpmid_domega * domega_dx
 dpmid_dy = dpmid_ddmid * ddmid_dy + dpmid_domega * domega_dy
 
-print([print(sym.latex(-dpbot_dx)), print(sym.latex(-dpbot_dy))])
-print([print(sym.latex(-dpmid_dx)), print(sym.latex(-dpmid_dy))])
+ptop = dtop ** (n + 1)
+dptop_ddtop = sym.diff(ptop, dtop)
+dptop_dx = sym.simplify(dptop_ddtop * ddtop_dx)
+dptop_dy = sym.simplify(dptop_ddtop * ddtop_dy)
 
+ubotx = - alpha * (n + 1) * dbot ** (n - 1)
+dubotx_dalpha = sym.diff(ubotx, alpha)
+dubotx_ddbot = sym.diff(ubotx, dbot)
+dubotx_dx = dubotx_dalpha * dalpha_dx + dubotx_ddbot * ddbot_dx
 
+uboty = - beta1 * (n + 1) * dbot ** (n - 1)
+duboty_dbeta1 = sym.diff(uboty, beta1)
+duboty_ddbot = sym.diff(uboty, dbot)
+duboty_dy = duboty_dbeta1 * dbeta1_dy + duboty_ddbot * ddbot_dy
 
+umidx = - (alpha ** 2) ** 0.5 * alpha ** (-1) * (omega + (n + 1) * dmid ** n)
+dumidx_dalpha = sym.diff(umidx, alpha)
+dumidx_domega = sym.diff(umidx, omega)
+dumidx_ddmid = sym.diff(umidx, dmid)
+dumidx_dx = dumidx_dalpha * dalpha_dx + dumidx_domega * domega_dx + dumidx_ddmid * ddmid_dx
 
+umidy = - dmid * (2 * beta1 ** 2 * beta2 + 2 * beta1 * beta2 ** 2)
+dumidy_ddmid = sym.diff(umidy, dmid)
+dumidy_dbeta1 = sym.diff(umidy, beta1)
+dumidy_dbeta2 = sym.diff(umidy, beta2)
+dumidy_dy = dumidy_ddmid * ddmid_dy + dumidy_dbeta1 * dbeta1_dy + dumidy_dbeta2 * dbeta2_dy
 
+utopx = -alpha * (n + 1) * dtop ** (n - 1)
+dutopx_dalpha = sym.diff(utopx, alpha)
+dutopx_ddtop = sym.diff(utopx, dtop)
+dutopx_dx = dutopx_dalpha * dalpha_dx + dutopx_ddtop * ddtop_dx
 
+utopy = - beta2 * (n + 1) * dtop ** (n - 1)
+dutopy_dbeta2 = sym.diff(utopy, beta2)
+dutopy_ddtop = sym.diff(utopy, dtop)
+dutopy_dy = dutopy_dbeta2 * dbeta2_dy + dutopy_ddtop * ddtop_dy
 
+fbot = sym.simplify(dubotx_dx + duboty_dy)
+fmid = sym.simplify(dumidx_dx + dumidy_dy)
+ftop = sym.simplify(dutopx_dx + dutopy_dy)
 
+#%%
+x, y = sym.symbols("x y")
+alpha = x - 0.5
+beta1 = y - 0.25
+beta2 = y - 0.75
+dbot = (alpha ** 2 + beta1 ** 2) ** 0.5
+dmid = (alpha ** 2) ** 0.5
+dtop = (alpha ** 2 + beta2 ** 2) ** 0.5
+omega = beta1 ** 2 * beta2**2
+n = 1.5
 
+# Test bulk pressure
+p2d = [dbot ** (n + 1), dmid ** (n + 1) + omega * dmid, dtop ** (n + 1)]
+for region in range(3):
+    val = p2d[region].subs([(x, 3.123), (y, -2.251)])
+    known = te.p2d("sym")[region].subs([(x, 3.123), (y, -2.251)])
+    np.testing.assert_almost_equal(val, known)
 
+# Test bulk velocity
+u2d = [
+    [
+        - alpha * (n + 1) * dbot ** (n - 1),
+        - beta1 * (n + 1) * dbot ** (n - 1)
+    ],
+    [
+        - (alpha ** 2) ** 0.5 * alpha ** (-1) * (omega + (n + 1) * dmid ** n),
+        - dmid * (2 * beta1 ** 2 * beta2 + 2 * beta1 * beta2 ** 2)
+    ],
+    [
+        - alpha * (n + 1) * dtop ** (n - 1),
+        - beta2 * (n + 1) * dtop ** (n - 1)
+    ],
+    ]
+for region in range(3):
+    for dim in range(g_2d.dim):
+        val = u2d[region][dim].subs([(x, 3.123), (y, -2.251)])
+        known = te.u2d("sym")[region][dim].subs([(x, 3.123), (y, -2.251)])
+        np.testing.assert_almost_equal(val, known)
 
+# Test bulk source term
+f2d = [
+    -(n + 1) * dbot ** (-2) * (alpha ** 2 * (n - 1) * dbot ** (n - 1)
+                                 + beta1 ** 2 * (n - 1) * dbot ** (n - 1)
+                                 + 2 * dbot ** (n + 1)
+                                 ),
+    - alpha ** (-2) * dmid ** (-1) * (
+        2 * alpha ** 2 * dmid ** 2 * (
+            beta1 * (beta1 + 2 * beta2) + beta2 * (2 * beta1 + beta2)) +
+        alpha ** 2 * n * (n + 1) * dmid ** n
+    ),
+    -(n + 1) * dtop ** (-2) * (alpha ** 2 * (n - 1) * dtop ** (n - 1)
+                                 + beta2 ** 2 * (n - 1) * dtop ** (n - 1)
+                                 + 2 * dtop ** (n + 1)
+                                 )
+    ]
+for region in range(3):
+    val = f2d[region].subs([(x, 3.123), (y, -2.251)])
+    known = te.f2d("sym")[region].subs([(x, 3.123), (y, -2.251)])
+    np.testing.assert_almost_equal(val, known)
 
+# Test mortar flux
+lmbda = omega
+val = lmbda.subs([(x, 3.123), (y, -2.251)])
+known = te.lmbda("sym").subs([(x, 3.123), (y, -2.251)])
+np.testing.assert_almost_equal(val, known)
 
+# Test fracture pressure
+p1d = - omega
+val = p1d.subs([(x, 3.123), (y, -2.251)])
+known = te.p1d("sym").subs([(x, 3.123), (y, -2.251)])
+np.testing.assert_almost_equal(val, known)
 
+# Test fracture velocity
+u1d = 2 * (beta1 ** 2 * beta2 + beta1 * beta2 ** 2)
+val = u1d.subs([(x, 3.123), (y, -2.251)])
+known = te.u1d("sym").subs([(x, 3.123), (y, -2.251)])
+np.testing.assert_almost_equal(val, known)
 
-
+# Test fracture source
+f1d = 8 * beta1 * beta2 + 2 * (beta1 ** 2 + beta2 ** 2) - 2 * omega
+val = f1d.subs([(x, 3.123), (y, -2.251)])
+known = te.f1d("sym").subs([(x, 3.123), (y, -2.251)])
+np.testing.assert_almost_equal(val, known)
 
 
 
