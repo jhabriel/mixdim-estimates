@@ -57,7 +57,7 @@ def model_global(gb, method):
     mg = d_e["mortar_grid"]
 
     # Get hold of mesh sizes
-    h_1partial2 = 0.5 / g_2d.frac_pairs.shape[1]
+    # h_1partial2 = 0.5 / g_2d.frac_pairs.shape[1]
     h_1 = 0.5 / g_1d.num_cells
     h_gamma = 0.5 / (mg.num_cells / 2)
 
@@ -74,24 +74,24 @@ def model_global(gb, method):
 
     # Retrieve true error object and exact expressions
     ex = ExactSolution2D(gb)
-    cell_idx_list = ex.cell_idx
-    bound_idx_list = ex.bc_idx
+    # cell_idx_list = ex.cell_idx
+    # bound_idx_list = ex.bc_idx
 
-    p2d_sym_list = ex.p2d("sym")
-    p2d_numpy_list = ex.p2d("fun")
-    p2d_cc = ex.p2d("cc")
+    # p2d_sym_list = ex.p2d("sym")
+    # p2d_numpy_list = ex.p2d("fun")
+    # p2d_cc = ex.p2d("cc")
 
-    gradp2d_sym_list = ex.gradp2d("sym")
-    gradp2d_numpy_list = ex.gradp2d("fun")
-    gradp2d_cc = ex.gradp2d("cc")
+    # gradp2d_sym_list = ex.gradp2d("sym")
+    # gradp2d_numpy_list = ex.gradp2d("fun")
+    # gradp2d_cc = ex.gradp2d("cc")
 
-    u2d_sym_list = ex.u2d("sym")
-    u2d_numpy_list = ex.u2d("fun")
-    u2d_cc = ex.u2d("cc")
+    # u2d_sym_list = ex.u2d("sym")
+    # u2d_numpy_list = ex.u2d("fun")
+    # u2d_cc = ex.u2d("cc")
 
-    f2d_sym_list = ex.f2d("sym")
-    f2d_numpy_list = ex.f2d("fun")
-    f2d_cc = ex.f2d("cc")
+    # f2d_sym_list = ex.f2d("sym")
+    # f2d_numpy_list = ex.f2d("fun")
+    # f2d_cc = ex.f2d("cc")
 
     bc_vals_2d = ex.dir_bc_values()
 
@@ -196,10 +196,12 @@ def model_global(gb, method):
     for e, d in gb.edges():
         # Get the grids of the neighboring subdomains
         g1, g2 = gb.nodes_of_edge(e)
-        # The interface variable has one degree of freedom per cell in the mortar grid
+        # The interface variable has one degree of freedom per cell in the
+        # mortar grid
         d[pp.PRIMARY_VARIABLES] = {edge_variable: {"cells": 1}}
 
-        # The coupling discretization links an edge discretization with variables
+        # The coupling discretization links an edge discretization with
+        # variables
         d[pp.COUPLING_DISCRETIZATION] = {
             coupling_operator_keyword: {
                 g1: (subdomain_variable, subdomain_operator_keyword),
@@ -215,7 +217,8 @@ def model_global(gb, method):
     sol = sps.linalg.spsolve(A, b)
     assembler.distribute_variable(sol)
 
-    # Overwrite d[pp.STATE][subdomain_variable] to be consistent with FEM methods
+    # Overwrite d[pp.STATE][subdomain_variable] to be consistent with FEM
+    # methods
     for g, d in gb:
         discr = d[pp.DISCRETIZATION][subdomain_variable][
             subdomain_operator_keyword
@@ -264,15 +267,15 @@ def model_global(gb, method):
     # %% Obtain true errors
 
     # Pressure error
-    pressure_error_squared_2d = te.pressure_error_squared_2d()
-    pressure_error_squared_1d = te.pressure_error_squared_1d()
-    pressure_error_squared_mortar = te.pressure_error_squared_mortar()
+    # pressure_error_squared_2d = te.pressure_error_squared_2d()
+    # pressure_error_squared_1d = te.pressure_error_squared_1d()
+    # pressure_error_squared_mortar = te.pressure_error_squared_mortar()
     true_pressure_error = te.pressure_error()
 
     # Velocity error
-    velocity_error_squared_2d = te.velocity_error_squared_2d()
-    velocity_error_squared_1d = te.velocity_error_squared_1d()
-    velocity_error_squared_mortar = te.velocity_error_squared_mortar()
+    # velocity_error_squared_2d = te.velocity_error_squared_2d()
+    # velocity_error_squared_1d = te.velocity_error_squared_1d()
+    # velocity_error_squared_mortar = te.velocity_error_squared_mortar()
     true_velocity_error = te.velocity_error()
 
     # True combined error

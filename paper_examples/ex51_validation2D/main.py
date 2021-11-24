@@ -6,7 +6,7 @@ from time import time
 from model_local import model_local
 from model_global import model_global
 
-#%% Functions
+# %% Functions
 def make_constrained_mesh(h=0.1):
     """
     Creates unstructured mesh for a given target mesh size for the case of a
@@ -98,7 +98,7 @@ def create_non_matching_gridbucket(h_2d, h_1d, h_mortar):
     return gb
 
 
-#%% Defining numerical methods, and obtaining grid buckets
+# %% Defining numerical methods, and obtaining grid buckets
 num_methods = ["TPFA", "MPFA", "RT0", "MVEM"]
 
 levels = 5  # coarsening levels
@@ -122,7 +122,7 @@ for counter in range(levels):
 grid_buckets = grid_buckets[::-1]
 print(f"\u2713 Time {time() - tic}\n")
 
-#%% Loop over the models
+# %% Loop over the models
 models = [model_global, model_local]
 for model in models:
     # Create dictionary and initialize fields
@@ -164,7 +164,7 @@ for model in models:
             d[method]["efficiency_velocity"].append(out["efficiency_velocity"])
             d[method]["efficiency_combined"].append(out["efficiency_combined"])
 
-    #%% Exporting
+    # %% Exporting
     # Permutations
     rows = len(num_methods) * len(grid_buckets)
 
@@ -251,7 +251,7 @@ for model in models:
             header=header,
         )
 
-    #%% Exporting to LaTeX
+    # %% Exporting to LaTeX
     # Initialize lists
     ampersend = []
     for i in range(rows):
@@ -326,8 +326,8 @@ for model in models:
     fmt += "%2.2f "  # efficiency combined
 
     # Headers
-    header = "num_method & eta_DF_2d & eta_R_2d & eta_DF_1d & eta_R_1d & eta_DF_mortar & "
-    header += "majorant & I_eff_p & I_eff_u & I_eff_pu"
+    header = "num_method & eta_DF_2d & eta_R_2d & eta_DF_1d & eta_R_1d & "
+    header += "eta_DF_mortar & majorant & I_eff_p & I_eff_u & I_eff_pu"
 
     if model.__name__ == "model_local":
         np.savetxt(
