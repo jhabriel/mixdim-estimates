@@ -14,7 +14,7 @@ from analytical_2d import ExactSolution2D
 from true_errors_2d import TrueErrors2D
 
 #%% Create mesh
-h = 1/20
+h = 1/100
 gb = mutils.make_constrained_mesh(h=h)
 g_2d = gb.grids_of_dimension(2)[0]
 g_1d = gb.grids_of_dimension(1)[0]
@@ -378,11 +378,11 @@ known = te.f1d("sym").subs([(x, 3.123), (y, -2.251)])
 np.testing.assert_almost_equal(val, known)
 
 
-
-
-
-
-
+#%% Export
+d_2d[pp.STATE]["pressure_ex"] = te.p2d()
+d_1d[pp.STATE]["pressure_ex"] = te.p1d()
+export = pp.Exporter(gb, "exact_2d")
+export.write_vtu(["pressure_ex"])
 
 
 
