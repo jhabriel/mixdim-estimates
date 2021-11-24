@@ -340,10 +340,8 @@ f2d = [
                                  + beta1 ** 2 * (n - 1) * dbot ** (n - 1)
                                  + 2 * dbot ** (n + 1)
                                  ),
-    - alpha ** (-2) * dmid ** (-1) * (
-        2 * alpha ** 2 * dmid ** 2 * (
-            beta1 * (beta1 + 2 * beta2) + beta2 * (2 * beta1 + beta2)) +
-        alpha ** 2 * n * (n + 1) * dmid ** n
+    (- 2 * dmid * (beta1 * (beta1 + 2 * beta2) + beta2 * (2 * beta1 + beta2))
+        - dmid ** (n - 1) * n * (n + 1)
     ),
     -(n + 1) * dtop ** (-2) * (alpha ** 2 * (n - 1) * dtop ** (n - 1)
                                  + beta2 ** 2 * (n - 1) * dtop ** (n - 1)
