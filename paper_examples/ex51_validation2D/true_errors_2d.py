@@ -1,7 +1,6 @@
 import mdestimates as mde
 import porepy as pp
 import numpy as np
-import sympy as sym
 import quadpy as qp
 
 import mdestimates.estimates_utils as utils
@@ -9,7 +8,7 @@ from mdestimates._velocity_reconstruction import (
     _internal_source_term_contribution as mortar_jump,
 )
 from analytical_2d import ExactSolution2D
-from typing import Tuple, List
+from typing import List
 
 
 class TrueErrors2D(ExactSolution2D):
@@ -122,7 +121,7 @@ class TrueErrors2D(ExactSolution2D):
         ru_cc_2d = [
             ru_cc_2d_x.flatten(),
             ru_cc_2d_y.flatten(),
-            ru_cc_2d_z.flatten()
+            ru_cc_2d_z.flatten(),
         ]
 
         return ru_cc_2d
@@ -147,11 +146,13 @@ class TrueErrors2D(ExactSolution2D):
     def residual_error_local_poincare(self) -> float:
         """Global matrix residual error using local Poincare constants"""
 
-        residual_error_2d = \
+        residual_error_2d = (
             np.sum(self.residual_error_2d_local_poincare()) ** 0.5
+        )
 
-        residual_error_1d = \
+        residual_error_1d = (
             np.sum(self.residual_error_1d_local_poincare()) ** 0.5
+        )
 
         residual_error = residual_error_1d + residual_error_2d
 
@@ -160,11 +161,13 @@ class TrueErrors2D(ExactSolution2D):
     def residual_error_global_poincare(self) -> float:
         """Global matrix residual error using global Poincare constants"""
 
-        residual_error_2d = \
+        residual_error_2d = (
             np.sum(self.residual_error_2d_global_poincare()) ** 0.5
+        )
 
-        residual_error_1d = \
+        residual_error_1d = (
             np.sum(self.residual_error_1d_global_poincare()) ** 0.5
+        )
 
         residual_error = residual_error_1d + residual_error_2d
 
@@ -325,7 +328,9 @@ class TrueErrors2D(ExactSolution2D):
         # Compute the true error
         def integrand(x):
             # Exact pressure gradient
-            gradp_exact_rot = -self.gradp1d("fun")(x)  # due to rotation (hardcoded)
+            gradp_exact_rot = -self.gradp1d("fun")(
+                x
+            )  # due to rotation (hardcoded)
             # Reconstructed pressure gradient
             gradp_recon_x = pr[0] * np.ones_like(x[0])
             # integral
@@ -365,7 +370,9 @@ class TrueErrors2D(ExactSolution2D):
         for side in sides:
 
             # Get rotated grids and sorted elements
-            high_grid, frac_faces = _sorted_highdim_edge_grid(g_h, g_l, mg, side)
+            high_grid, frac_faces = _sorted_highdim_edge_grid(
+                g_h, g_l, mg, side
+            )
             mortar_grid, mortar_cells = _sorted_side_grid(mg, g_l, side)
             low_grid, low_cells = _sorted_low_grid(g_l)
 
@@ -373,15 +380,23 @@ class TrueErrors2D(ExactSolution2D):
             merged_grid = _merge_grids(low_grid, mortar_grid, high_grid)
 
             # Note that the following mappings are local for each merged grid.
-            # For example, to retrieve the global fracture faces indices, we should
-            # write frac_faces[merged_high_ele], and to retrieve the global mortar
-            # cells, we should write mortar_cells[merged_mortar_ele]
+            # For example, to retrieve the global fracture faces indices, we
+            # should write frac_faces[merged_high_ele], and to retrieve the
+            # global mortar cells, we should write
+            # mortar_cells[merged_mortar_ele]
             # Retrieve element mapping from sorted grids to merged grid
-            merged_high_ele = _get_grid_uniongrid_elements(merged_grid, high_grid)
-            merged_mortar_ele = _get_grid_uniongrid_elements(merged_grid, mortar_grid)
-            merged_low_ele = _get_grid_uniongrid_elements(merged_grid, low_grid)
+            merged_high_ele = _get_grid_uniongrid_elements(
+                merged_grid, high_grid
+            )
+            merged_mortar_ele = _get_grid_uniongrid_elements(
+                merged_grid, mortar_grid
+            )
+            merged_low_ele = _get_grid_uniongrid_elements(
+                merged_grid, low_grid
+            )
 
-            # Get projected pressure jump, normal permeabilities, and normal velocities
+            # Get projected pressure jump, normal permeabilities, and
+            # normal velocities
             pressure_jump, k_perp, _ = _project_poly_to_merged_grid(
                 self.estimates,
                 self.e,
@@ -409,8 +424,13 @@ class TrueErrors2D(ExactSolution2D):
             # Sum errors corresponding to a mortar cell
             diffusive_error_side = np.zeros(len(mortar_cells))
             for mortar_element in range(len(mortar_cells)):
-                idx = mortar_cells[mortar_element] == mortar_cells[merged_mortar_ele]
-                diffusive_error_side[mortar_element] = diffusive_error_merged[idx].sum()
+                idx = (
+                    mortar_cells[mortar_element]
+                    == mortar_cells[merged_mortar_ele]
+                )
+                diffusive_error_side[mortar_element] = diffusive_error_merged[
+                    idx
+                ].sum()
 
             # Append into the list
             true_error[mortar_cells] = diffusive_error_side
@@ -472,7 +492,8 @@ class TrueErrors2D(ExactSolution2D):
 
         # Compute the true error
         def integrand(x):
-            # -x to use physical coordinates, and -self. to account for the rotation
+            # -x to use physical coordinates, and -self. to account for
+            # the rotation
             vel_exact_x = -self.u1d("fun")(-x)
             vel_recon_x = u[0] * x + u[1]
             int_x = (vel_exact_x - vel_recon_x) ** 2
