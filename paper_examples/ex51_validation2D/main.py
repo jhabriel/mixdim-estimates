@@ -3,8 +3,8 @@ import numpy as np
 import porepy as pp
 
 from time import time
-from model_LC import model_LC
-from model_NC import model_NC
+from model_local import model_local
+from model_global import model_global
 
 #%% Functions
 def make_constrained_mesh(h=0.1):
@@ -116,8 +116,7 @@ grid_buckets = grid_buckets[::-1]
 print(f"\u2713 Time {time() - tic}\n")
 
 #%% Loop over the models
-models = [model_NC, model_LC]
-models = [model_LC]
+models = [model_global, model_local]
 for model in models:
     # Create dictionary and initialize fields
     d = {k: {} for k in num_methods}
@@ -226,7 +225,7 @@ for model in models:
     header += "I_eff_p I_eff_u I_eff_pu"
 
     # Writing into txt
-    if model.__name__ == "model_LC":
+    if model.__name__ == "model_local":
         np.savetxt("validation2d_LC.txt", export, delimiter=",", fmt=fmt, header=header)
     else:
         np.savetxt("validation2d_NC.txt", export, delimiter=",", fmt=fmt, header=header)
@@ -311,7 +310,7 @@ for model in models:
     )
     header += "majorant & I_eff_p & I_eff_u & I_eff_pu"
 
-    if model.__name__ == "model_LC":
+    if model.__name__ == "model_local":
         np.savetxt(
             "validation2dtex_LC.txt", export, delimiter=",", fmt=fmt, header=header
         )

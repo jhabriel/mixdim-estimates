@@ -1,6 +1,7 @@
 import mdestimates as mde
 import porepy as pp
 import numpy as np
+import sympy as sym
 import quadpy as qp
 
 import mdestimates.estimates_utils as utils

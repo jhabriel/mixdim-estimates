@@ -353,8 +353,6 @@ class ErrorEstimate():
         else:
             self._print_summary_original()
 
-        return None
-
     def _print_summary_original(self):
         """
         Prints summary of the global and local errors
@@ -401,8 +399,6 @@ class ErrorEstimate():
                     error += self.get_local_errors(mg, d)
             print(f'{dim}D Interface error: {error}')
 
-        return None
-
     def _print_summary_scaled(self):
         """
         Prints summary of scaled global and local errors
@@ -448,5 +444,3 @@ class ErrorEstimate():
                 if mg.dim == dim:
                     error += self.get_scaled_local_errors(mg, d)
             print(f'{dim}D Interface scaled error: {error}')
-
-        return None
