@@ -9,7 +9,6 @@ from mdestimates._velocity_reconstruction import (
     _internal_source_term_contribution as mortar_jump,
 )
 from analytical_3d import ExactSolution3D
-from typing import List
 
 
 class TrueErrors3D(ExactSolution3D):
@@ -461,7 +460,7 @@ class TrueErrors3D(ExactSolution3D):
     def velocity_error_squared_3d(self) -> np.ndarray:
 
         # Get hold of numerical velocities and create list of coefficients
-        recon_u = self.d2d[self.estimates.estimates_kw]["recon_u"].copy()
+        recon_u = self.d3d[self.estimates.estimates_kw]["recon_u"].copy()
         u = utils.poly2col(recon_u)
 
         # Obtain elements and declare integration method
@@ -499,7 +498,7 @@ class TrueErrors3D(ExactSolution3D):
         u = utils.poly2col(recon_u)
 
         # Obtain elements and declare integration method
-        method = qp.c1.newton_cotes_closed(10)
+        method = qp.t2.get_good_scheme(10)
         g_rot = utils.rotate_embedded_grid(self.g2d)
         elements = utils.get_quadpy_elements(self.g2d, g_rot)
 
@@ -522,52 +521,52 @@ class TrueErrors3D(ExactSolution3D):
     def velocity_error_squared_mortar(self) -> np.ndarray:
 
         # Import functions
-        from mdestimates._error_evaluation import (
-            _sorted_side_grid,
-            _get_normal_velocity,
-        )
+        from mdestimates._error_evaluation import _get_normal_velocity
 
-        # Get hold of grids and dictionaries
-        g_l, g_h = self.gb.nodes_of_edge(self.e)
-        mg = self.mg
+        def compute_sidegrid_error(side_tuple):
 
-        # Get hold normal velocities
-        normal_vel = _get_normal_velocity(self.estimates, self.de)
+            # Get projector and sidegrid object
+            projector = side_tuple[0]
+            sidegrid = side_tuple[1]
 
-        # Loop over the sides of the mortar grid
-        true_error = np.zeros(mg.num_cells)
+            # Rotate side-grid
+            sidegrid_rot = utils.rotate_embedded_grid(sidegrid)
 
-        # Obtain the number of sides of the mortar grid
-        num_sides = mg.num_sides()
-        if num_sides == 2:
-            sides = [-1, 1]
-        else:
-            sides = [1]
+            # Obtain QuadPy elements
+            elements = utils.get_quadpy_elements(sidegrid, sidegrid_rot)
 
-        for side in sides:
+            # Project relevant quanitites to the side grid
+            normalvel_side = projector * normal_vel
 
-            # Get rotated grids and sorted elements
-            mortar_grid, mortar_cells = _sorted_side_grid(mg, g_l, side)
-
-            # Retrieve normal velocities from the side grid
-            normal_vel_side = normal_vel[mortar_cells]
-
-            # Define integration method and obtain quadpy elements
-            method = qp.t2.get_good_scheme(10)
-            # FIXME: POSSIBLE BUG HERE SINCE WERE NOT USING THE MORTAR GRID
-            qp_ele = utils.get_quadpy_elements(self.g2d, self.g2d_rot)
-            qp_ele *= -1  # To use real coordinates
-
-            # Define integrand
+            # Declare integrand
             def integrand(x):
                 lmbda_ex = self.lmbda("fun")(x[0], x[1])
-                lmbda_num = normal_vel_side
+                lmbda_num = normalvel_side
                 return (lmbda_ex - lmbda_num) ** 2
 
-            # Evaluate integral
-            side_error = method.integrate(integrand, qp_ele)
+            # Compute integral
+            diffusive_error_side = method.integrate(integrand, elements)
 
-            # Append into the list
-            true_error[mortar_cells] = side_error
+            return diffusive_error_side
+
+        # Get mortar grid and check dimensionality
+        mg = self.mg
+
+        # Obtain normal velocities
+        normal_vel = _get_normal_velocity(self.estimates, self.de)
+
+        # Declare integration method
+        method = qp.t2.get_good_scheme(5)
+
+        # Retrieve side-grids tuples
+        sides = mg.project_to_side_grids()
+
+        # Compute the errors for each sidegrid
+        true_error_side = []
+        for side in sides:
+            true_error_side.append(compute_sidegrid_error(side))
+
+        # Concatenate into one numpy array
+        true_error = np.concatenate(true_error_side)
 
         return true_error
