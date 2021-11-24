@@ -4,11 +4,10 @@ import sympy as sym
 import quadpy as qp
 import mdestimates.estimates_utils as utils
 
-from typing import Tuple
+from typing import List, Tuple
 
 
 class ExactSolution3D:
-
     def __init__(self, gb: pp.GridBucket):
 
         # Grid bucket
@@ -18,12 +17,12 @@ class ExactSolution3D:
         self.g3d: pp.Grid = self.gb.grids_of_dimension(3)[0]
         self.d3d: dict = self.gb.node_props(self.g3d)
 
-        # 2D grid and its dictionary
+        # 2D grid, its dictionary and the corresponding rotated grid
         self.g2d: pp.Grid = self.gb.grids_of_dimension(2)[0]
         self.d2d: dict = self.gb.node_props(self.g2d)
         self.g2d_rot = utils.rotate_embedded_grid(self.g2d)
 
-        # Mortar grid and its dictionary
+        # Edge, its dictionary, and the mortar grid
         self.e: Tuple[pp.Grid, pp.Grid] = (self.g3d, self.g2d)
         self.de: dict = self.gb.edge_props((self.g3d, self.g2d))
         self.mg: pp.MortarGrid = self.de["mortar_grid"]
@@ -34,14 +33,27 @@ class ExactSolution3D:
         bottom_middle_cc = (cc[1] < 0.25) & (cc[2] > 0.25) & (cc[2] < 0.75)
         bottom_back_cc = (cc[1] < 0.25) & (cc[2] > 0.75)
         front_cc = (cc[1] > 0.25) & (cc[1] < 0.75) & (cc[2] < 0.25)
-        middle_cc = (cc[1] >= 0.25) & (cc[1] <= 0.75) & (cc[2] >= 0.25) & (cc[2] <= 0.75)
+        middle_cc = (
+            (cc[1] >= 0.25)
+            & (cc[1] <= 0.75)
+            & (cc[2] >= 0.25)
+            & (cc[2] <= 0.75)
+        )
         back_cc = (cc[1] > 0.25) & (cc[1] < 0.75) & (cc[2] > 0.75)
         top_front_cc = (cc[1] > 0.75) & (cc[2] < 0.25)
         top_middle_cc = (cc[1] > 0.75) & (cc[2] > 0.25) & (cc[2] < 0.75)
         top_back_cc = (cc[1] > 0.75) & (cc[2] > 0.75)
-        self.cell_idx: list = [bottom_front_cc, bottom_middle_cc, bottom_back_cc,
-                               front_cc, middle_cc, back_cc,
-                               top_front_cc, top_middle_cc, top_back_cc]
+        self.cell_idx: List[np.ndarray] = [
+            bottom_front_cc,
+            bottom_middle_cc,
+            bottom_back_cc,
+            front_cc,
+            middle_cc,
+            back_cc,
+            top_front_cc,
+            top_middle_cc,
+            top_back_cc,
+        ]
 
         # Get list of boundary indices
         fc = self.g3d.face_centers
@@ -49,28 +61,54 @@ class ExactSolution3D:
         bottom_middle_bc = (fc[1] < 0.25) & (fc[2] > 0.25) & (fc[2] < 0.75)
         bottom_back_bc = (fc[1] < 0.25) & (fc[2] > 0.75)
         front_bc = (fc[1] > 0.25) & (fc[1] < 0.75) & (fc[2] < 0.25)
-        middle_bc = ((fc[1] >= 0.25) & (fc[1] <= 0.75) & (fc[2] >= 0.25) & (fc[2] <= 0.75))
+        middle_bc = (
+            (fc[1] >= 0.25)
+            & (fc[1] <= 0.75)
+            & (fc[2] >= 0.25)
+            & (fc[2] <= 0.75)
+        )
         back_bc = (fc[1] > 0.25) & (fc[1] < 0.75) & (fc[2] > 0.75)
         top_front_bc = (fc[1] > 0.75) & (fc[2] < 0.25)
         top_middle_bc = (fc[1] > 0.75) & (fc[2] > 0.25) & (fc[2] < 0.75)
         top_back_bc = (fc[1] > 0.75) & (fc[2] > 0.75)
-        self.bc_idx: list = [bottom_front_bc, bottom_middle_bc, bottom_back_bc,
-                             front_bc, middle_bc, back_bc,
-                             top_front_bc, top_middle_bc, top_back_bc]
+        self.bc_idx: List[np.ndarray] = [
+            bottom_front_bc,
+            bottom_middle_bc,
+            bottom_back_bc,
+            front_bc,
+            middle_bc,
+            back_bc,
+            top_front_bc,
+            top_middle_bc,
+            top_back_bc,
+        ]
 
         # Save as private attributes some useful expressions
         x, y, z = sym.symbols("x y z")
         self._alpha = 1.5
-        self._dist_bottom_front = ((x - 0.5) ** 2 + (y - 0.25) ** 2 + (z - 0.25) ** 2) ** 0.5
+        self._dist_bottom_front = (
+            (x - 0.5) ** 2 + (y - 0.25) ** 2 + (z - 0.25) ** 2
+        ) ** 0.5
         self._dist_bottom_middle = ((x - 0.5) ** 2 + (y - 0.25) ** 2) ** 0.5
-        self._dist_bottom_back = ((x - 0.5) ** 2 + (y - 0.25) ** 2 + (z - 0.75) ** 2) ** 0.5
+        self._dist_bottom_back = (
+            (x - 0.5) ** 2 + (y - 0.25) ** 2 + (z - 0.75) ** 2
+        ) ** 0.5
         self._dist_front = ((x - 0.5) ** 2 + (z - 0.25) ** 2) ** 0.5
         self._dist_middle = ((x - 0.5) ** 2) ** 0.5
         self._dist_back = ((x - 0.5) ** 2 + (z - 0.75) ** 2) ** 0.5
-        self._dist_top_front = ((x - 0.5) ** 2 + (y - 0.75) ** 2 + (z - 0.25) ** 2) ** 0.5
+        self._dist_top_front = (
+            (x - 0.5) ** 2 + (y - 0.75) ** 2 + (z - 0.25) ** 2
+        ) ** 0.5
         self._dist_top_middle = ((x - 0.5) ** 2 + (y - 0.75) ** 2) ** 0.5
-        self._dist_top_back = ((x - 0.5) ** 2 + (y - 0.75) ** 2 + (z - 0.75) ** 2) ** 0.5
-        self._bubble = (y - 0.25) ** 2 * (y - 0.75) ** 2 * (z - 0.25) ** 2 * (z - 0.75) ** 2
+        self._dist_top_back = (
+            (x - 0.5) ** 2 + (y - 0.75) ** 2 + (z - 0.75) ** 2
+        ) ** 0.5
+        self._bubble = (
+            (y - 0.25) ** 2
+            * (y - 0.75) ** 2
+            * (z - 0.25) ** 2
+            * (z - 0.75) ** 2
+        )
 
     def __repr__(self) -> str:
         return "Exact solution  object for 3D problem"
@@ -81,8 +119,9 @@ class ExactSolution3D:
 
         Parameters
         ----------
-        which (str): "cc" for the cell center evaluation, "sym" for the symbolic
-            expressions, and "fun" for the lambda functions depending on (x, y, z).
+        which (str): "cc" for the cell center evaluation, "sym" for the
+            symbolic expressions, and "fun" for the lambda functions
+            depending on (x, y, z).
 
         Returns
         -------
@@ -97,14 +136,25 @@ class ExactSolution3D:
         p3_bottom_middle = self._dist_bottom_middle ** (1 + self._alpha)
         p3_bottom_back = self._dist_bottom_back ** (1 + self._alpha)
         p3_front = self._dist_front ** (1 + self._alpha)
-        p3_middle = self._dist_front ** (1 + self._alpha) + self._bubble * self._dist_front
+        p3_middle = (
+            self._dist_front ** (1 + self._alpha)
+            + self._bubble * self._dist_front
+        )
         p3_back = self._dist_back ** (1 + self._alpha)
         p3_top_front = self._dist_top_front ** (1 + self._alpha)
         p3_top_middle = self._dist_top_middle ** (1 + self._alpha)
         p3_top_back = self._dist_top_back ** (1 + self._alpha)
-        p3_sym: list = [p3_bottom_front, p3_bottom_middle, p3_bottom_back,
-                        p3_front, p3_middle, p3_back,
-                        p3_top_front, p3_top_middle, p3_top_back]
+        p3_sym: list = [
+            p3_bottom_front,
+            p3_bottom_middle,
+            p3_bottom_back,
+            p3_front,
+            p3_middle,
+            p3_back,
+            p3_top_front,
+            p3_top_middle,
+            p3_top_back,
+        ]
 
         p3_fun = [sym.lambdify((x, y, z), p, "numpy") for p in p3_sym]
         p3_cc = np.zeros(self.g3d.num_cells)
@@ -120,12 +170,13 @@ class ExactSolution3D:
 
     def gradp3d(self, which="cc"):
         """
-        Computation of the pressure gradients in the bulk
+        Computation of the exact pressure gradients in the bulk
 
         Parameters
         ----------
-        which (str): "cc" for the cell center evaluation, "sym" for the symbolic
-            expressions, and "fun" for the lambda functions depending on (x, y, z).
+        which (str): "cc" for the cell center evaluation, "sym" for the
+            symbolic expressions, and "fun" for the lambda functions
+            depending on (x, y, z).
 
         Returns
         -------
@@ -142,9 +193,9 @@ class ExactSolution3D:
 
         gradp3_fun = [
             [
-                sym.lambdify((x, y), gradp[0], "numpy"),
-                sym.lambdify((x, y), gradp[1], "numpy"),
-                sym.lambdify((x, y), gradp[2], "numpy"),
+                sym.lambdify((x, y, z), gradp[0], "numpy"),
+                sym.lambdify((x, y, z), gradp[1], "numpy"),
+                sym.lambdify((x, y, z), gradp[2], "numpy"),
             ]
             for gradp in gradp3_sym
         ]
@@ -155,7 +206,7 @@ class ExactSolution3D:
         for (u, idx) in zip(gradp3_fun, self.cell_idx):
             gradp3x_cc += u[0](cc[0], cc[1], cc[2]) * idx
             gradp3y_cc += u[1](cc[0], cc[1], cc[2]) * idx
-            gradp3y_cc += u[1](cc[0], cc[1], cc[2]) * idx
+            gradp3z_cc += u[2](cc[0], cc[1], cc[2]) * idx
         gradp3_cc = np.array([gradp3x_cc, gradp3y_cc, gradp3z_cc])
 
         if which == "sym":
@@ -171,8 +222,9 @@ class ExactSolution3D:
 
         Parameters
         ----------
-        which (str): "cc" for the cell center evaluation, "sym" for the symbolic
-            expressions, and "fun" for the lambda functions depending on (x, y, z).
+        which (str): "cc" for the cell center evaluation, "sym" for the
+            symbolic expressions, and "fun" for the lambda functions
+            depending on (x, y, z).
 
         Returns
         -------
@@ -219,15 +271,16 @@ class ExactSolution3D:
 
         Parameters
         ----------
-        which (str): "cc" for the cell center evaluation, "sym" for the symbolic
-            expressions, and "fun" for the lambda functions depending on (x, y, z).
+        which (str): "cc" for the cell center evaluation, "sym" for the
+            symbolic expressions, and "fun" for the lambda functions
+            depending on (x, y, z).
 
         Returns
         -------
         Appropiate object according to which.
 
         """
-        x, y, z = sym.symbols("x y")
+        x, y, z = sym.symbols("x y z")
         cc = self.g3d.cell_centers
 
         f3_sym = [
@@ -254,8 +307,9 @@ class ExactSolution3D:
 
         Parameters
         ----------
-        which (str): "cc" for the cell center evaluation, "sym" for the symbolic
-            expressions, and "fun" for the lambda functions depending on (y, z).
+        which (str): "cc" for the cell center evaluation, "sym" for the
+            symbolic expressions, and "fun" for the lambda functions
+            depending on (y, z).
 
         Returns
         -------
@@ -284,8 +338,9 @@ class ExactSolution3D:
 
         Parameters
         ----------
-        which (str): "cc" for the cell center evaluation, "sym" for the symbolic
-           expressions, and "fun" for the lambda functions depending on (y, z).
+        which (str): "cc" for the cell center evaluation, "sym" for the
+            symbolic expressions, and "fun" for the lambda functions
+            depending on (y, z).
 
         Returns
         -------
@@ -317,8 +372,9 @@ class ExactSolution3D:
 
         Parameters
         ----------
-        which (str): "cc" for the cell center evaluation, "sym" for the symbolic
-           expressions, and "fun" for the lambda functions depending on (y).
+        which (str): "cc" for the cell center evaluation, "sym" for the
+            symbolic expressions, and "fun" for the lambda functions
+            depending on (y, z).
 
         Returns
         -------
@@ -328,12 +384,19 @@ class ExactSolution3D:
         y, z = sym.symbols("y z")
         cc = self.g2d.cell_centers
 
-        gradp2_sym = [sym.diff(self.p2d(which="sym"), y), sym.diff(self.p2d(which="sym"), z)]
+        gradp2_sym = [
+            sym.diff(self.p2d("sym"), y),
+            sym.diff(self.p2d("sym"), z),
+        ]
 
-        gradp2_fun = [sym.lambdify((y, z), gradp2_sym[0], "numpy"),
-                      sym.lambdify((y, z), gradp2_sym[1], "numpy")]
+        gradp2_fun = [
+            sym.lambdify((y, z), gradp2_sym[0], "numpy"),
+            sym.lambdify((y, z), gradp2_sym[1], "numpy"),
+        ]
 
-        gradp2_cc = np.array([gradp2_fun[0](cc[1], cc[2]), gradp2_fun[1](cc[1], cc[2])])
+        gradp2_cc = np.array(
+            [gradp2_fun[0](cc[1], cc[2]), gradp2_fun[1](cc[1], cc[2])]
+        )
 
         if which == "sym":
             return gradp2_sym
@@ -348,8 +411,9 @@ class ExactSolution3D:
 
         Parameters
         ----------
-        which (str): "cc" for the cell center evaluation, "sym" for the symbolic
-           expressions, and "fun" for the lambda functions depending on (y, z).
+        which (str): "cc" for the cell center evaluation, "sym" for the
+            symbolic expressions, and "fun" for the lambda functions
+            depending on (y, z).
 
         Returns
         -------
@@ -359,12 +423,17 @@ class ExactSolution3D:
         y, z = sym.symbols("y z")
         cc = self.g2d.cell_centers
 
-        u2_sym = [-sym.diff(self.p2d(which="sym"), y), -sym.diff(self.p2d(which="sym"), z)]
+        u2_sym = [
+            -sym.diff(self.p2d("sym"), y),
+            -sym.diff(self.p2d("sym"), z),
+        ]
 
-        u2_fun = [sym.lambdify((y, z), u2_sym[0], "numpy"),
-                  sym.lambdify((y, z), u2_sym[1], "numpy")]
+        u2_fun = [
+            sym.lambdify((y, z), u2_sym[0], "numpy"),
+            sym.lambdify((y, z), u2_sym[1], "numpy"),
+        ]
 
-        u2_cc = np.array([u2_fun[0](cc[1], cc[2]), u2_fun[0](cc[1], cc[2])])
+        u2_cc = np.array([u2_fun[0](cc[1], cc[2]), u2_fun[1](cc[1], cc[2])])
 
         if which == "sym":
             return u2_sym
@@ -379,8 +448,9 @@ class ExactSolution3D:
 
         Parameters
         ----------
-        which (str): "cc" for the cell center evaluation, "sym" for the symbolic
-           expressions, and "fun" for the lambda functions depending on (y).
+        which (str): "cc" for the cell center evaluation, "sym" for the
+            symbolic expressions, and "fun" for the lambda functions
+            depending on (y).
 
         Returns
         -------
@@ -391,7 +461,9 @@ class ExactSolution3D:
         cc = self.g2d.cell_centers
 
         jump_lmbda_sym = 2 * self.lmbda("sym")
-        div_u2_sym = sym.diff(self.u2d("sym")[0], y) + sym.diff(self.u2d("sym")[1], z)
+        div_u2_sym = (sym.diff(self.u2d("sym")[0], y)
+                      + sym.diff(self.u2d("sym")[1], z)
+        )
         f2_sym = div_u2_sym - jump_lmbda_sym
 
         f2_fun = sym.lambdify((y, z), f2_sym, "numpy")
@@ -407,7 +479,7 @@ class ExactSolution3D:
 
     def dir_bc_values(self):
         """
-        Computation of the exact Dirichlet values for the bulk
+        Computation of the exact Dirichlet data for the bulk
 
         Returns
         -------
@@ -438,6 +510,7 @@ class ExactSolution3D:
             # Declare integrand
             def integrand(x):
                 return f(x[0], x[1], x[2]) * np.ones_like(x[0])
+
             # Integrate, and add the contribution of each subregion
             integral += int_method.integrate(integrand, elements) * idx
 
@@ -449,7 +522,7 @@ class ExactSolution3D:
         g_rot = utils.rotate_embedded_grid(self.g2d)
         elements = utils.get_quadpy_elements(self.g2d, g_rot)
         elements *= -1  # we have to use the real y coordinates here
-        #TODO: CHECK IF THIS TRICK STILL WORKS FOR 3D
+        # TODO: CHECK IF THIS TRICK STILL WORKS FOR 3D
 
         def integrand(x):
             return self.f2d("fun")(x[0], x[1])
