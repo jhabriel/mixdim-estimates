@@ -1,10 +1,9 @@
 # Importing modules
 import numpy as np
 import porepy as pp
-import itertools
 
 from time import time
-from model import model
+from model_local import model_local
 
 #%% Functions
 def make_constrained_mesh(mesh_size=0.2):
@@ -42,6 +41,7 @@ def make_constrained_mesh(mesh_size=0.2):
 
 #%% Defining mesh targets, numerical methods, and dictionary fields
 mesh_targets = np.array([0.3, 0.15, 0.075, 0.0375])
+mesh_targets = np.array([0.3])
 num_methods = ["TPFA", "MPFA", "RT0", "MVEM"]
 
 #%% Obtain grid buckets for each mesh size
@@ -52,238 +52,232 @@ for h in mesh_targets:
     grid_buckets.append(make_constrained_mesh(h))
 print(f"\u2713 Time {time() - tic}.\n")
 
-#%% Create dictionary and initialize fields
-d = {k: {} for k in num_methods}
-for method in num_methods:
-    d[method] = {
-        "mesh_size": [],
-        "error_estimate_3d": [],
-        "true_error_pressure_3d": [],
-        "true_error_velocity_3d": [],
-        "num_cells_3d": [],
-        "error_estimate_2d": [],
-        "true_error_pressure_2d": [],
-        "true_error_velocity_2d": [],
-        "num_cells_2d": [],
-        "error_estimate_mortar": [],
-        "true_error_pressure_mortar": [],
-        "true_error_velocity_mortar": [],
-        "num_cells_mortar": [],
-        "majorant": [],
-        "true_error_pressure": [],
-        "true_error_velocity": [],
-        "I_eff_pressure": [],
-        "I_eff_velocity": [],
-        "I_eff_combined": [],
-    }
+# %% Loop over the models
+models = [model_local]
+for model in models:
+    # Create dictionary and initialize fields
+    d = {k: {} for k in num_methods}
+    for method in num_methods:
+        d[method] = {
+            "bulk_error": [],
+            "frac_error": [],
+            "mortar_error": [],
+            "majorant": [],
+            "true_pressure_error": [],
+            "true_velocity_error": [],
+            "true_combined_error": [],
+            "efficiency_pressure": [],
+            "efficiency_velocity": [],
+            "efficiency_combined": [],
+        }
+    # Populate fields (NOTE: This loop may take considerable time)
+    for method in num_methods:
+        for idx, gb in enumerate(grid_buckets):
+            print(f"Solving with {method} for refinement level {idx+1}.")
+            # Get hold of errors
+            tic = time()
+            out = model(gb, method)
+            print(f"Done. Time {time() - tic}\n")
+            # Store errors in the dictionary
+            d[method]["bulk_error"].append(out["bulk"]["error"])
+            d[method]["frac_error"].append(out["frac"]["error"])
+            d[method]["mortar_error"].append(out["mortar"]["error"])
+            d[method]["majorant"].append(out["majorant"])
+            d[method]["true_pressure_error"].append(out["true_pressure_error"])
+            d[method]["true_velocity_error"].append(out["true_velocity_error"])
+            d[method]["true_combined_error"].append(out["true_combined_error"])
+            d[method]["efficiency_pressure"].append(out["efficiency_pressure"])
+            d[method]["efficiency_velocity"].append(out["efficiency_velocity"])
+            d[method]["efficiency_combined"].append(out["efficiency_combined"])
 
-#%% Populate fields (Warning: This loop may take considerable time)
-for i in itertools.product(num_methods, grid_buckets):
+    # %% Exporting
+    # Permutations
+    rows = len(num_methods) * len(grid_buckets)
 
-    # Print info in the console
-    print("Solving with", i[0], "for mesh size:", i[1].diameter())
+    # Initialize lists
+    num_method_name = []
+    bulk_error = []
+    frac_error = []
+    mortar_error = []
+    majorant = []
+    true_pressure_error = []
+    true_velocity_error = []
+    true_combined_error = []
+    I_eff_pressure = []
+    I_eff_velocity = []
+    I_eff_combined = []
 
-    # Get hold of errors
-    tic = time()
-    (
-        h_max,
-        error_estimate_3d,
-        true_error_pressure_3d,
-        true_error_velocity_3d,
-        num_cells_3d,
-        error_estimate_2d,
-        true_error_pressure_2d,
-        true_error_velocity_2d,
-        num_cells_2d,
-        error_estimates_mortar,
-        true_error_pressure_mortar,
-        true_error_velocity_mortar,
-        num_cells_mortar,
-        majorant,
-        true_error_pressure,
-        true_error_velocity,
-        I_eff_pressure,
-        I_eff_velocity,
-        I_eff_combined,
-    ) = model(i[1], i[0])
-    print(f"Done. Time {time() - tic}\n")
+    # Populate lists
+    for method in num_methods:
+        for idx in range(len(mesh_targets)):
+            num_method_name.append(method)
+            bulk_error.append(d[method]["bulk_error"][idx])
+            frac_error.append(d[method]["frac_error"][idx])
+            mortar_error.append(d[method]["mortar_error"][idx])
+            majorant.append(d[method]["majorant"][idx])
+            true_pressure_error.append(d[method]["true_pressure_error"][idx])
+            true_velocity_error.append(d[method]["true_velocity_error"][idx])
+            true_combined_error.append(d[method]["true_combined_error"][idx])
+            I_eff_pressure.append(d[method]["efficiency_pressure"][idx])
+            I_eff_velocity.append(d[method]["efficiency_velocity"][idx])
+            I_eff_combined.append(d[method]["efficiency_combined"][idx])
 
-    # Store errors in the dictionary
-    d[i[0]]["mesh_size"].append(h_max)
-    d[i[0]]["error_estimate_3d"].append(error_estimate_3d)
-    d[i[0]]["true_error_pressure_3d"].append(true_error_pressure_3d)
-    d[i[0]]["true_error_velocity_3d"].append(true_error_velocity_3d)
-    d[i[0]]["num_cells_3d"].append(num_cells_3d)
-    d[i[0]]["error_estimate_2d"].append(error_estimate_2d)
-    d[i[0]]["true_error_pressure_2d"].append(true_error_pressure_2d)
-    d[i[0]]["true_error_velocity_2d"].append(true_error_velocity_2d)
-    d[i[0]]["num_cells_2d"].append(num_cells_2d)
-    d[i[0]]["error_estimate_mortar"].append(error_estimates_mortar)
-    d[i[0]]["true_error_pressure_mortar"].append(true_error_pressure_mortar)
-    d[i[0]]["true_error_velocity_mortar"].append(true_error_velocity_mortar)
-    d[i[0]]["num_cells_mortar"].append(num_cells_mortar)
-    d[i[0]]["majorant"].append(majorant)
-    d[i[0]]["true_error_pressure"].append(true_error_pressure)
-    d[i[0]]["true_error_velocity"].append(true_error_velocity)
-    d[i[0]]["I_eff_pressure"].append(I_eff_pressure)
-    d[i[0]]["I_eff_velocity"].append(I_eff_velocity)
-    d[i[0]]["I_eff_combined"].append(I_eff_combined)
+    # Prepare for exporting
+    export = np.zeros(
+        rows,
+        dtype=[
+            ("var1", "U6"),
+            ("var2", float),
+            ("var3", float),
+            ("var4", float),
+            ("var5", float),
+            ("var6", float),
+            ("var7", float),
+            ("var8", float),
+            ("var9", float),
+            ("var10", float),
+            ("var11", float),
+        ],
+    )
 
+    # Declaring column variables
+    export["var1"] = num_method_name
+    export["var2"] = bulk_error
+    export["var3"] = frac_error
+    export["var4"] = mortar_error
+    export["var5"] = majorant
+    export["var6"] = true_pressure_error
+    export["var7"] = true_velocity_error
+    export["var8"] = true_combined_error
+    export["var9"] = I_eff_pressure
+    export["var10"] = I_eff_velocity
+    export["var11"] = I_eff_combined
 
-#%% Exporting
+    # Formatting string
+    fmt = "%6s %2.2e %2.2e %2.2e "
+    fmt += "%2.2e %2.2e %2.2e %2.2e %2.2f %2.2f %2.2f"
 
-# Permutations
-rows = len(num_methods) * len(mesh_targets)
+    # Headers
+    header = (
+        "num_method eta_3d eta_2d eta_mortar majorant tpe tve tce"
+    )
+    header += "I_eff_p I_eff_u I_eff_pu"
 
-# Initialize lists
-num_method_name = []
-h_max = []
-col_3d_estimate = []
-col_2d_estimate = []
-col_mortar_estimate = []
-col_majorant = []
-col_true_error_pressure = []
-col_true_error_velocity = []
-I_eff_pressure = []
-I_eff_velocity = []
-I_eff_combined = []
-
-# Populate lists
-for i in itertools.product(num_methods, range(len(grid_buckets))):
-    num_method_name.append(i[0])
-    h_max.append(d[i[0]]["mesh_size"][i[1]])
-    col_3d_estimate.append(d[i[0]]["error_estimate_3d"][i[1]])
-    col_2d_estimate.append(d[i[0]]["error_estimate_2d"][i[1]])
-    col_mortar_estimate.append(d[i[0]]["error_estimate_mortar"][i[1]])
-    col_majorant.append(d[i[0]]["majorant"][i[1]])
-    col_true_error_pressure.append(d[i[0]]["true_error_pressure"][i[1]])
-    col_true_error_velocity.append(d[i[0]]["true_error_velocity"][i[1]])
-    I_eff_pressure.append(d[i[0]]["I_eff_pressure"][i[1]])
-    I_eff_velocity.append(d[i[0]]["I_eff_velocity"][i[1]])
-    I_eff_combined.append(d[i[0]]["I_eff_combined"][i[1]])
-
-# Prepare for exporting
-export = np.zeros(
-    rows,
-    dtype=[
-        ("var2", "U6"),
-        ("var3", float),
-        ("var4", float),
-        ("var5", float),
-        ("var6", float),
-        ("var7", float),
-        ("var8", float),
-        ("var9", float),
-        ("var10", float),
-        ("var11", float),
-        ("var12", float),
-    ],
-)
-
-# Declare column variables
-export["var2"] = num_method_name
-export["var3"] = h_max
-export["var4"] = col_3d_estimate
-export["var5"] = col_2d_estimate
-export["var6"] = col_mortar_estimate
-export["var7"] = col_majorant
-export["var8"] = col_true_error_pressure
-export["var9"] = col_true_error_velocity
-export["var10"] = I_eff_pressure
-export["var11"] = I_eff_velocity
-export["var12"] = I_eff_combined
-
-
-# Formatting string
-fmt = "%6s %2.3f %2.2e %2.2e %2.2e %2.2e %2.2e %2.2e %2.2f %2.2f %2.2f"
-
-# Headers
-header = "num_method h_max eta_3d eta_2d eta_mortar majorant true_error_p "
-header += "true_error_u  I_eff_p I_eff_u I_eff_pu"
-
-# Writing into txt
-np.savetxt("validation3d.txt", export, delimiter=",", fmt=fmt, header=header)
-
-#%% Exporting to LaTeX
-
-# Permutations
-rows = len(num_methods) * len(mesh_targets)
-
-# Intialize lists
-ampersend = []
-for i in range(rows): ampersend.append('&')
-num_method_name = []
-h_max = []
-col_3d_estimate = []
-col_2d_estimate = []
-col_mortar_estimate = []
-col_majorant = []
-col_true_error_pressure = []
-col_true_error_velocity = []
-I_eff_pressure = []
-I_eff_velocity = []
-I_eff_combined = []
-
-# Populate lists
-for i in itertools.product(num_methods, range(len(grid_buckets))):
-    num_method_name.append(i[0])
-    h_max.append(d[i[0]]["mesh_size"][i[1]])
-    col_3d_estimate.append(d[i[0]]["error_estimate_3d"][i[1]])
-    col_2d_estimate.append(d[i[0]]["error_estimate_2d"][i[1]])
-    col_mortar_estimate.append(d[i[0]]["error_estimate_mortar"][i[1]])
-    col_majorant.append(d[i[0]]["majorant"][i[1]])
-    col_true_error_pressure.append(d[i[0]]["true_error_pressure"][i[1]])
-    col_true_error_velocity.append(d[i[0]]["true_error_velocity"][i[1]])
-    I_eff_pressure.append(d[i[0]]["I_eff_pressure"][i[1]])
-    I_eff_velocity.append(d[i[0]]["I_eff_velocity"][i[1]])
-    I_eff_combined.append(d[i[0]]["I_eff_combined"][i[1]])
-
-exp = np.zeros(rows,
-              dtype=[ ('var2', 'U6'),
-                      ('var3', float), ('var4', float),
-                      ('amp1', 'U6'), ('var5', float),
-                      ('amp2', 'U6'), ('var6', float),
-                      ('amp3', 'U6'), ('var7', float),
-                      ('amp4', 'U6'), ('var8', float),
-                      ('amp5', 'U6'), ('var9', float),
-                      ('amp6', 'U6'), ('var10', float),
-                      ('amp7', 'U6'), ('var11', float),
-                      ('amp8', 'U6'), ('var12', float)]
-              )
-
-# Declare column variables
-exp['var2'] = num_method_name
-exp['var3'] = h_max
-exp['var4'] = col_3d_estimate
-exp['amp1'] = ampersend
-exp['var5'] = col_2d_estimate
-exp['amp2'] = ampersend
-exp['var6'] = col_mortar_estimate
-exp['amp3'] = ampersend
-exp['var7'] = col_majorant
-exp['amp4'] = ampersend
-exp['var8'] = col_true_error_pressure
-exp['amp5'] = ampersend
-exp['var9'] = col_true_error_velocity
-exp['amp6'] = ampersend
-exp['var10'] = I_eff_pressure
-exp['amp7'] = ampersend
-exp['var11'] = I_eff_velocity
-exp['amp8'] = ampersend
-exp['var12'] = I_eff_combined
-
-# Formatting string
-fmt = "%6s %2.3f %2.2e %1s %2.2e %1s %2.2e %1s %2.2e "
-fmt += "%1s %2.2e %1s %2.2e %1s %2.2f %1s %2.2f %1s %2.2f"
-
-# Headers
-header = "num_method h_max eta_3d & eta_2d & eta_mortar & majorant "
-header += "& true_error_p & true_error_u & I_eff_p & I_eff_u & I_eff_pu"
-
-# Write into txt
-np.savetxt('validation3d_tex.txt',
-            exp,
-            delimiter=',',
+    # Writing into txt
+    if model.__name__ == "model_local":
+        np.savetxt(
+            "validation3d_LC.txt",
+            export,
+            delimiter=",",
             fmt=fmt,
             header=header,
-            )
+        )
+    else:
+        np.savetxt(
+            "validation3d_NC.txt",
+            export,
+            delimiter=",",
+            fmt=fmt,
+            header=header,
+        )
+
+    # %% Exporting to LaTeX
+    # Initialize lists
+    ampersend = []
+    for i in range(rows):
+        ampersend.append("&")
+
+    # Prepare for exporting
+    export = np.zeros(
+        rows,
+        dtype=[
+            ("var1", "U6"),
+            ("amp1", "U6"),
+            ("var2", float),
+            ("amp2", "U6"),
+            ("var3", float),
+            ("amp3", "U6"),
+            ("var4", float),
+            ("amp4", "U6"),
+            ("var5", float),
+            ("amp5", "U6"),
+            ("var6", float),
+            ("amp6", "U6"),
+            ("var7", float),
+            ("amp7", "U6"),
+            ("var8", float),
+            ("amp8", "U6"),
+            ("var9", float),
+            ("amp9", "U6"),
+            ("var10", float),
+            ("amp10", "U6"),
+            ("var11", float),
+        ],
+    )
+
+    # Prepare for exporting
+    export["var1"] = num_method_name
+    export["var2"] = bulk_error
+    export["var3"] = frac_error
+    export["var4"] = mortar_error
+    export["var5"] = majorant
+    export["var6"] = true_pressure_error
+    export["var7"] = true_velocity_error
+    export["var8"] = true_combined_error
+    export["var9"] = I_eff_pressure
+    export["var10"] = I_eff_velocity
+    export["var11"] = I_eff_combined
+    export["amp1"] = ampersend
+    export["amp2"] = ampersend
+    export["amp3"] = ampersend
+    export["amp4"] = ampersend
+    export["amp5"] = ampersend
+    export["amp6"] = ampersend
+    export["amp7"] = ampersend
+    export["amp8"] = ampersend
+    export["amp9"] = ampersend
+    export["amp10"] = ampersend
+
+    # Formatting string
+    fmt = "%6s "  # method
+    fmt += "%1s "  # amp
+    fmt += "%2.2e "  # bulk error
+    fmt += "%1s "  # amp
+    fmt += "%2.2e "  # frac error
+    fmt += "%1s "  # amp
+    fmt += "%2.2e "  # mortar error
+    fmt += "%1s "  # amp
+    fmt += "%2.2e "  # majorant
+    fmt += "%1s "  # amp
+    fmt += "%2.2e "  # true pressure error
+    fmt += "%1s "  # amp
+    fmt += "%2.2e "  # true velocity error
+    fmt += "%1s "  # amp
+    fmt += "%2.2e "  # true combined error
+    fmt += "%1s "  # amp
+    fmt += "%2.2f "  # efficiency pressure
+    fmt += "%1s "  # amp
+    fmt += "%2.2f "  # efficiency velocity
+    fmt += "%1s "  # amp
+    fmt += "%2.2f "  # efficiency combined
+
+    # Headers
+    header = "num_method & eta_3d & eta_2d & eta_mortar & majorant & "
+    header += "tpe & tve & & tce & I_eff_p & I_eff_u & I_eff_pu"
+
+    if model.__name__ == "model_local":
+        np.savetxt(
+            "validation3dtex_LC.txt",
+            export,
+            delimiter=",",
+            fmt=fmt,
+            header=header,
+        )
+    else:
+        np.savetxt(
+            "validation3dtex_NC.txt",
+            export,
+            delimiter=",",
+            fmt=fmt,
+            header=header,
+        )
