@@ -127,7 +127,9 @@ def model_global(gb, method):
         specified_parameters["source"] = source_term
 
         # Initialize default data
-        pp.initialize_default_data(g, d, parameter_keyword, specified_parameters)
+        pp.initialize_default_data(
+            g, d, parameter_keyword, specified_parameters
+        )
 
     # Next loop over the edges
     for e, d in gb.edges():
@@ -169,7 +171,9 @@ def model_global(gb, method):
     # Loop over all subdomains in the GridBucket
     if fv(method):  # FV methods
         for g, d in gb:
-            d[pp.PRIMARY_VARIABLES] = {subdomain_variable: {"cells": 1, "faces": 0}}
+            d[pp.PRIMARY_VARIABLES] = {
+                subdomain_variable: {"cells": 1, "faces": 0}
+            }
             d[pp.DISCRETIZATION] = {
                 subdomain_variable: {
                     subdomain_operator_keyword: subdomain_discretization,
@@ -178,7 +182,9 @@ def model_global(gb, method):
             }
     else:  # FEM methods
         for g, d in gb:
-            d[pp.PRIMARY_VARIABLES] = {subdomain_variable: {"cells": 1, "faces": 1}}
+            d[pp.PRIMARY_VARIABLES] = {
+                subdomain_variable: {"cells": 1, "faces": 1}
+            }
             d[pp.DISCRETIZATION] = {
                 subdomain_variable: {
                     subdomain_operator_keyword: subdomain_discretization,
@@ -211,8 +217,12 @@ def model_global(gb, method):
 
     # Overwrite d[pp.STATE][subdomain_variable] to be consistent with FEM methods
     for g, d in gb:
-        discr = d[pp.DISCRETIZATION][subdomain_variable][subdomain_operator_keyword]
-        pressure = discr.extract_pressure(g, d[pp.STATE][subdomain_variable], d).copy()
+        discr = d[pp.DISCRETIZATION][subdomain_variable][
+            subdomain_operator_keyword
+        ]
+        pressure = discr.extract_pressure(
+            g, d[pp.STATE][subdomain_variable], d
+        ).copy()
         flux = discr.extract_flux(g, d[pp.STATE][subdomain_variable], d).copy()
         d[pp.STATE][subdomain_variable] = pressure
         d[pp.STATE][flux_variable] = flux
@@ -228,22 +238,27 @@ def model_global(gb, method):
     diffusive_error_squared_2d = d_2d[pp.STATE]["diffusive_error"]
     diffusive_error_squared_1d = d_1d[pp.STATE]["diffusive_error"]
     diffusive_error_squared_mortar = d_e[pp.STATE]["diffusive_error"]
-    diffusive_error = (diffusive_error_squared_2d.sum()
-                       + diffusive_error_squared_1d.sum()
-                       + diffusive_error_squared_mortar.sum()) ** 0.5
+    diffusive_error = (
+        diffusive_error_squared_2d.sum()
+        + diffusive_error_squared_1d.sum()
+        + diffusive_error_squared_mortar.sum()
+    ) ** 0.5
 
     residual_error_squared_2d = te.residual_error_2d_global_poincare()
     residual_error_squared_1d = te.residual_error_1d_global_poincare()
-    residual_error = (residual_error_squared_2d.sum()
-                      + residual_error_squared_1d.sum()) ** 0.5
+    residual_error = (
+        residual_error_squared_2d.sum() + residual_error_squared_1d.sum()
+    ) ** 0.5
 
     majorant = diffusive_error + residual_error
 
     # Distinguishing between subdomain and mortar errors
-    bulk_error = (diffusive_error_squared_2d.sum()
-                  + residual_error_squared_2d.sum()) ** 0.5
-    fracture_error = (diffusive_error_squared_1d.sum()
-                      + residual_error_squared_1d.sum()) ** 0.5
+    bulk_error = (
+        diffusive_error_squared_2d.sum() + residual_error_squared_2d.sum()
+    ) ** 0.5
+    fracture_error = (
+        diffusive_error_squared_1d.sum() + residual_error_squared_1d.sum()
+    ) ** 0.5
     mortar_error = diffusive_error_squared_mortar.sum() ** 0.5
 
     # %% Obtain true errors
@@ -261,26 +276,27 @@ def model_global(gb, method):
     true_velocity_error = te.velocity_error()
 
     # True combined error
-    true_combined_error = true_pressure_error + true_velocity_error + residual_error
+    true_combined_error = (
+        true_pressure_error + true_velocity_error + residual_error
+    )
 
     # %% Compute efficiency indices
     i_eff_p = majorant / true_pressure_error
     i_eff_u = majorant / true_velocity_error
     i_eff_pu = (3 * majorant) / true_combined_error
 
-    print(50*"-")
-    print(f'Majorant: {majorant}')
-    print(f'Bulk error: {bulk_error}')
-    print(f'Fracture error: {fracture_error}')
-    print(f'Mortar error: {mortar_error}')
+    print(50 * "-")
+    print(f"Majorant: {majorant}")
+    print(f"Bulk error: {bulk_error}")
+    print(f"Fracture error: {fracture_error}")
+    print(f"Mortar error: {mortar_error}")
     print(f"True error (pressure): {true_pressure_error}")
     print(f"True error (velocity): {true_velocity_error}")
     print(f"True error (combined): {true_combined_error}")
     print(f"Efficiency index (pressure): {i_eff_p}")
     print(f"Efficiency index (velocity): {i_eff_u}")
     print(f"Efficiency index (combined): {i_eff_pu}")
-    print(50*"-")
-
+    print(50 * "-")
 
     # Prepare return dictionary
     out = {}
