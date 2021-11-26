@@ -251,7 +251,9 @@ def model_local(gb, method):
         residual_error_squared_2d.sum() + residual_error_squared_1d.sum()
     ) ** 0.5
 
-    majorant = diffusive_error + residual_error
+    majorant_pressure = diffusive_error + residual_error
+    majorant_velocity = majorant_pressure
+    majorant_combined = majorant_pressure + majorant_velocity + residual_error
 
     # Distinguishing between subdomain and mortar errors
     bulk_error = (
@@ -282,12 +284,14 @@ def model_local(gb, method):
     )
 
     # %% Compute efficiency indices
-    i_eff_p = majorant / true_pressure_error
-    i_eff_u = majorant / true_velocity_error
-    i_eff_pu = (3 * majorant) / true_combined_error
+    i_eff_p = majorant_pressure / true_pressure_error
+    i_eff_u = majorant_velocity / true_velocity_error
+    i_eff_pu = majorant_combined / true_combined_error
 
     print(50 * "-")
-    print(f"Majorant: {majorant}")
+    print(f"Majorant pressure: {majorant_pressure}")
+    print(f"Majorant velocity: {majorant_velocity}")
+    print(f"Majorant combined: {majorant_combined}")
     print(f"Bulk error: {bulk_error}")
     print(f"Fracture error: {fracture_error}")
     print(f"Mortar error: {mortar_error}")
@@ -302,7 +306,9 @@ def model_local(gb, method):
     # Prepare return dictionary
     out = {}
 
-    out["majorant"] = majorant
+    out["majorant_pressure"] = majorant_pressure
+    out["majorant_velocity"] = majorant_velocity
+    out["majorant_combined"] = majorant_combined
     out["true_pressure_error"] = true_pressure_error
     out["true_velocity_error"] = true_velocity_error
     out["true_combined_error"] = true_combined_error
