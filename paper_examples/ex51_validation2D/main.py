@@ -99,7 +99,7 @@ def create_non_matching_gridbucket(h_2d, h_1d, h_mortar):
 
 
 # %% Defining numerical methods, and obtaining grid buckets
-num_methods = ["TPFA", "MPFA", "RT0", "MVEM"]
+num_methods = ["RT0", "MVEM", "MPFA", "TPFA"]
 
 levels = 5  # coarsening levels
 coarsening_factor = 2
@@ -134,7 +134,9 @@ for model in models:
             "frac_diffusive": [],
             "frac_residual": [],
             "mortar_diffusive": [],
-            "majorant": [],
+            "majorant_pressure": [],
+            "majorant_velocity": [],
+            "majorant_combined": [],
             "true_pressure_error": [],
             "true_velocity_error": [],
             "true_combined_error": [],
@@ -156,7 +158,9 @@ for model in models:
             d[method]["frac_diffusive"].append(out["frac"]["diffusive_error"])
             d[method]["frac_residual"].append(out["frac"]["residual_error"])
             d[method]["mortar_diffusive"].append(out["mortar"]["error"])
-            d[method]["majorant"].append(out["majorant"])
+            d[method]["majorant_pressure"].append(out["majorant_pressure"])
+            d[method]["majorant_velocity"].append(out["majorant_velocity"])
+            d[method]["majorant_combined"].append(out["majorant_combined"])
             d[method]["true_pressure_error"].append(out["true_pressure_error"])
             d[method]["true_velocity_error"].append(out["true_velocity_error"])
             d[method]["true_combined_error"].append(out["true_combined_error"])
@@ -175,7 +179,9 @@ for model in models:
     frac_diffusive = []
     frac_residual = []
     mortar_diffusive = []
-    majorant = []
+    majorant_pressure = []
+    majorant_velocity = []
+    majorant_combined = []
     I_eff_pressure = []
     I_eff_velocity = []
     I_eff_combined = []
@@ -189,7 +195,9 @@ for model in models:
             frac_diffusive.append(d[method]["frac_diffusive"][idx])
             frac_residual.append(d[method]["frac_residual"][idx])
             mortar_diffusive.append(d[method]["mortar_diffusive"][idx])
-            majorant.append(d[method]["majorant"][idx])
+            majorant_pressure.append(d[method]["majorant_pressure"][idx])
+            majorant_velocity.append(d[method]["majorant_velocity"][idx])
+            majorant_combined.append(d[method]["majorant_combined"][idx])
             I_eff_pressure.append(d[method]["efficiency_pressure"][idx])
             I_eff_velocity.append(d[method]["efficiency_velocity"][idx])
             I_eff_combined.append(d[method]["efficiency_combined"][idx])
@@ -208,6 +216,8 @@ for model in models:
             ("var8", float),
             ("var9", float),
             ("var10", float),
+            ("var11", float),
+            ("var12", float),
         ],
     )
 
@@ -218,20 +228,22 @@ for model in models:
     export["var4"] = frac_diffusive
     export["var5"] = frac_residual
     export["var6"] = mortar_diffusive
-    export["var7"] = majorant
-    export["var8"] = I_eff_pressure
-    export["var9"] = I_eff_velocity
-    export["var10"] = I_eff_combined
+    export["var7"] = majorant_pressure
+    export["var8"] = majorant_velocity
+    export["var9"] = majorant_combined
+    export["var10"] = I_eff_pressure
+    export["var11"] = I_eff_velocity
+    export["var12"] = I_eff_combined
 
     # Formatting string
-    fmt = "%6s %2.2e %2.2e %2.2e "
-    fmt += "%2.2e %2.2e %2.2e %2.2f %2.2f %2.2f"
+    fmt = "%6s %2.2e %2.2e %2.2e %2.2e %2.2e"
+    fmt += " %2.2e %2.2e %2.2e %2.2f %2.2f %2.2f"
 
     # Headers
     header = (
-        "num_method eta_DF_2d eta_R_2d eta_DF_1d eta_R_1d eta_mortar majorant "
+        "num_method eta_DF_2d eta_R_2d eta_DF_1d eta_R_1d eta_mortar "
     )
-    header += "I_eff_p I_eff_u I_eff_pu"
+    header += "majorant_p majorant_u majorant_pu I_eff_p I_eff_u I_eff_pu"
 
     # Writing into txt
     if model.__name__ == "model_local":
@@ -280,6 +292,10 @@ for model in models:
             ("var9", float),
             ("amp9", "U6"),
             ("var10", float),
+            ("amp10", "U6"),
+            ("var11", float),
+            ("amp11", "U6"),
+            ("var12", float),
         ],
     )
 
@@ -290,10 +306,12 @@ for model in models:
     export["var4"] = frac_diffusive
     export["var5"] = frac_residual
     export["var6"] = mortar_diffusive
-    export["var7"] = majorant
-    export["var8"] = I_eff_pressure
-    export["var9"] = I_eff_velocity
-    export["var10"] = I_eff_combined
+    export["var7"] = majorant_pressure
+    export["var8"] = majorant_velocity
+    export["var9"] = majorant_combined
+    export["var10"] = I_eff_pressure
+    export["var11"] = I_eff_velocity
+    export["var12"] = I_eff_combined
     export["amp1"] = ampersend
     export["amp2"] = ampersend
     export["amp3"] = ampersend
@@ -303,6 +321,8 @@ for model in models:
     export["amp7"] = ampersend
     export["amp8"] = ampersend
     export["amp9"] = ampersend
+    export["amp10"] = ampersend
+    export["amp11"] = ampersend
 
     # Formatting string
     fmt = "%6s "  # method
@@ -317,7 +337,11 @@ for model in models:
     fmt += "%1s "  # amp
     fmt += "%2.2e "  # mortar diffusive
     fmt += "%1s "  # amp
-    fmt += "%2.2e "  # majorant
+    fmt += "%2.2e "  # majorant pressure
+    fmt += "%1s "  # amp
+    fmt += "%2.2e "  # majorant velocity
+    fmt += "%1s "  # amp
+    fmt += "%2.2e "  # majorant combined
     fmt += "%1s "  # amp
     fmt += "%2.2f "  # efficiency pressure
     fmt += "%1s "  # amp
@@ -327,7 +351,8 @@ for model in models:
 
     # Headers
     header = "num_method & eta_DF_2d & eta_R_2d & eta_DF_1d & eta_R_1d & "
-    header += "eta_DF_mortar & majorant & I_eff_p & I_eff_u & I_eff_pu"
+    header += "eta_DF_mortar & majorant_p & majorant_u & majorant_pu & "
+    header += "I_eff_p & I_eff_u & I_eff_pu"
 
     if model.__name__ == "model_local":
         np.savetxt(
