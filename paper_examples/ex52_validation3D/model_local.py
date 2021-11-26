@@ -2,12 +2,7 @@
 import numpy as np
 import porepy as pp
 import scipy.sparse as sps
-import sympy as sym
-import quadpy as qp
 import mdestimates as mde
-
-import mdestimates.estimates_utils as utils
-from mdestimates._velocity_reconstruction import _internal_source_term_contribution as mortar_jump
 
 from analytical_3d import ExactSolution3D
 from true_errors_3d import TrueErrors3D
@@ -64,29 +59,9 @@ def model_local(gb, method):
     d_e = gb.edge_props([g_2d, g_3d])
     mg = d_e["mortar_grid"]
 
-    # Exact solutions
+    # Retrieve boundary values and integrated source terms
     ex = ExactSolution3D(gb)
-    cell_idx_list = ex.cell_idx
-    bound_idx_list = ex.bc_idx
-
-    p3d_sym_list = ex.p3d("sym")
-    p3d_numpy_list = ex.p3d("fun")
-    p3d_cc = ex.p3d("cc")
-
-    gradp3d_sym_list = ex.gradp3d("sym")
-    gradp3d_numpy_list = ex.gradp3d("fun")
-    gradp3d_cc = ex.gradp3d("cc")
-
-    u3d_sym_list = ex.u3d("sym")
-    u3d_numpy_list = ex.u3d("fun")
-    u3d_cc = ex.u3d("cc")
-
-    f3d_sym_list = ex.f3d("sym")
-    f3d_numpy_list = ex.f3d("fun")
-    f3d_cc = ex.f3d("cc")
-
     bc_vals_3d = ex.dir_bc_values()
-
     integrated_f3d = ex.integrate_f3d()
     integrated_f2d = ex.integrate_f2d()
 
@@ -211,7 +186,6 @@ def model_local(gb, method):
         d[pp.STATE][flux_variable] = flux
 
     # %% Obtain error estimates (and transfer them to d[pp.STATE])
-    # NOTE: Residual errors must be obtained separately
     estimates = mde.ErrorEstimate(gb, lam_name=edge_variable)
     estimates.estimate_error()
     estimates.transfer_error_to_state()
@@ -231,7 +205,9 @@ def model_local(gb, method):
     residual_error = (residual_error_squared_3d.sum()
                       + residual_error_squared_2d.sum()) ** 0.5
 
-    majorant = diffusive_error + residual_error
+    majorant_pressure = diffusive_error + residual_error
+    majorant_velocity = majorant_pressure
+    majorant_combined = majorant_pressure + majorant_velocity + residual_error
 
     # Distinguishing between subdomain and mortar errors
     bulk_error = (diffusive_error_squared_3d.sum()
@@ -242,29 +218,19 @@ def model_local(gb, method):
 
     # %% Obtain true errors
 
-    # Pressure error
-    pressure_error_squared_3d = te.pressure_error_squared_3d()
-    pressure_error_squared_2d = te.pressure_error_squared_2d()
-    pressure_error_squared_mortar = te.pressure_error_squared_mortar()
     true_pressure_error = te.pressure_error()
-
-    # Velocity error
-    velocity_error_squared_3d = te.velocity_error_squared_3d()
-    velocity_error_squared_2d = te.velocity_error_squared_2d()
-    velocity_error_squared_mortar = te.velocity_error_squared_mortar()
     true_velocity_error = te.velocity_error()
-
-    # True combined error
-    true_combined_error = (true_pressure_error + true_velocity_error
-                           + residual_error)
+    true_combined_error = te.combined_error_local_poincare()
 
     # %% Compute efficiency indices
-    i_eff_p = majorant / true_pressure_error
-    i_eff_u = majorant / true_velocity_error
-    i_eff_pu = (3 * majorant) / true_combined_error
+    i_eff_p = majorant_pressure / true_pressure_error
+    i_eff_u = majorant_velocity / true_velocity_error
+    i_eff_pu = majorant_combined / true_combined_error
 
     print(50 * "-")
-    print(f'Majorant: {majorant}')
+    print(f'Majorant pressure: {majorant_pressure}')
+    print(f'Majorant velocity: {majorant_velocity}')
+    print(f'Majorant combined: {majorant_combined}')
     print(f'Bulk error: {bulk_error}')
     print(f'Fracture error: {fracture_error}')
     print(f'Mortar error: {mortar_error}')
@@ -279,7 +245,9 @@ def model_local(gb, method):
     # Prepare return dictionary
     out = {}
 
-    out["majorant"] = majorant
+    out["majorant_pressure"] = majorant_pressure
+    out["majorant_velocity"] = majorant_velocity
+    out["majorant_combined"] = majorant_combined
     out["true_pressure_error"] = true_pressure_error
     out["true_velocity_error"] = true_velocity_error
     out["true_combined_error"] = true_combined_error
