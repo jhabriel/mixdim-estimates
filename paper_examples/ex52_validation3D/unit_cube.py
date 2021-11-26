@@ -5,10 +5,10 @@ import sympy as sym
 import quadpy as qp
 import mdestimates as mde
 import matplotlib.pyplot as plt
-import os
 
 from analytical_3d import ExactSolution3D
 from true_errors_3d import TrueErrors3D
+
 
 def make_constrained_mesh(mesh_size=0.2):
     """
@@ -134,6 +134,13 @@ assembler.discretize()
 A, b = assembler.assemble_matrix_rhs()
 sol = sps.linalg.spsolve(A, b)
 assembler.distribute_variable(sol)
+
+#%% Exporting to paraview
+d_3d[pp.STATE]["pressure_ex"] = ex.p3d()
+d_2d[pp.STATE]["pressure_ex"] = ex.p2d()
+export = pp.Exporter(gb, "val_3d")
+export.write_vtu(["pressure", "pressure_ex"])
+
 
 #%% Obtain error estimates
 estimates = mde.ErrorEstimate(gb, lam_name=edge_variable)
