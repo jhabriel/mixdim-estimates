@@ -554,3 +554,20 @@ class TrueErrors2D(ExactSolution2D):
             true_error[mortar_cells] = side_error
 
         return true_error
+
+    # Exact combined error
+    def combined_error_local_poincare(self) -> float:
+        """Computes combined error using local Poincare constants"""
+
+        combined_error = (self.pressure_error() + self.velocity_error()
+                          + self.residual_error_local_poincare())
+
+        return combined_error
+
+    def combined_error_global_poincare(self) -> float:
+        """Computes combined error using the global Poincare constant"""
+
+        combined_error = (self.pressure_error() + self.velocity_error()
+                          + self.residual_error_global_poincare())
+
+        return combined_error

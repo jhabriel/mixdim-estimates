@@ -83,32 +83,24 @@ class ExactSolution3D:
             top_back_bc,
         ]
 
-        # Save as private attributes some useful expressions
+        # Save exact forms as attributes of the class
         x, y, z = sym.symbols("x y z")
-        self._alpha = 1.5
-        self._dist_bottom_front = (
-            (x - 0.5) ** 2 + (y - 0.25) ** 2 + (z - 0.25) ** 2
-        ) ** 0.5
-        self._dist_bottom_middle = ((x - 0.5) ** 2 + (y - 0.25) ** 2) ** 0.5
-        self._dist_bottom_back = (
-            (x - 0.5) ** 2 + (y - 0.25) ** 2 + (z - 0.75) ** 2
-        ) ** 0.5
-        self._dist_front = ((x - 0.5) ** 2 + (z - 0.25) ** 2) ** 0.5
-        self._dist_middle = ((x - 0.5) ** 2) ** 0.5
-        self._dist_back = ((x - 0.5) ** 2 + (z - 0.75) ** 2) ** 0.5
-        self._dist_top_front = (
-            (x - 0.5) ** 2 + (y - 0.75) ** 2 + (z - 0.25) ** 2
-        ) ** 0.5
-        self._dist_top_middle = ((x - 0.5) ** 2 + (y - 0.75) ** 2) ** 0.5
-        self._dist_top_back = (
-            (x - 0.5) ** 2 + (y - 0.75) ** 2 + (z - 0.75) ** 2
-        ) ** 0.5
-        self._bubble = (
-            (y - 0.25) ** 2
-            * (y - 0.75) ** 2
-            * (z - 0.25) ** 2
-            * (z - 0.75) ** 2
-        )
+        self.alpha = x - 0.5
+        self.beta1 = y - 0.25
+        self.beta2 = y - 0.75
+        self.gamma1 = z - 0.25
+        self.gamma2 = z - 0.75
+        self.n = 1.5
+        self.dist_bottom_front = (self.alpha ** 2 + self.beta1 ** 2 + self.gamma1 ** 2) ** 0.5
+        self.dist_bottom_middle = (self.alpha ** 2 + self.beta1 ** 2) ** 0.5
+        self.dist_bottom_back = (self.alpha ** 2 + self.beta1 ** 2 + self.gamma2 ** 2) ** 0.5
+        self.dist_front = (self.alpha ** 2 + self.gamma1 ** 2) ** 0.5
+        self.dist_middle = (self.alpha ** 2) ** 0.5
+        self.dist_back = (self.alpha ** 2 + self.gamma2 ** 2) ** 0.5
+        self.dist_top_front = (self.alpha ** 2 + self.beta2 ** 2 + self.gamma1 ** 2) ** 0.5
+        self.dist_top_middle = (self.alpha ** 2 + self.beta2 ** 2) ** 0.5
+        self.dist_top_back = (self.alpha ** 2 + self.beta2 ** 2 + self.gamma2 ** 2) ** 0.5
+        self.bubble = self.beta1 ** 2 * self.beta2 ** 2 * self.gamma1 ** 2 * self.gamma2 ** 2
 
     def __repr__(self) -> str:
         return "Exact solution  object for 3D problem"
@@ -132,18 +124,15 @@ class ExactSolution3D:
         cc = self.g3d.cell_centers
         x, y, z = sym.symbols("x y z")
 
-        p3_bottom_front = self._dist_bottom_front ** (1 + self._alpha)
-        p3_bottom_middle = self._dist_bottom_middle ** (1 + self._alpha)
-        p3_bottom_back = self._dist_bottom_back ** (1 + self._alpha)
-        p3_front = self._dist_front ** (1 + self._alpha)
-        p3_middle = (
-            self._dist_front ** (1 + self._alpha)
-            + self._bubble * self._dist_front
-        )
-        p3_back = self._dist_back ** (1 + self._alpha)
-        p3_top_front = self._dist_top_front ** (1 + self._alpha)
-        p3_top_middle = self._dist_top_middle ** (1 + self._alpha)
-        p3_top_back = self._dist_top_back ** (1 + self._alpha)
+        p3_bottom_front = self.dist_bottom_front ** (1 + self.n)
+        p3_bottom_middle = self.dist_bottom_middle ** (1 + self.n)
+        p3_bottom_back = self.dist_bottom_back ** (1 + self.n)
+        p3_front = self.dist_front ** (1 + self.n)
+        p3_middle = self.dist_middle ** (1 + self.n) + self.bubble * self.dist_middle
+        p3_back = self.dist_back ** (1 + self.n)
+        p3_top_front = self.dist_top_front ** (1 + self.n)
+        p3_top_middle = self.dist_top_middle ** (1 + self.n)
+        p3_top_back = self.dist_top_back ** (1 + self.n)
         p3_sym: list = [
             p3_bottom_front,
             p3_bottom_middle,
@@ -319,7 +308,7 @@ class ExactSolution3D:
         y, z = sym.symbols("y z")
         cc = self.mg.cell_centers
 
-        lmbda_sym = self._bubble
+        lmbda_sym = self.bubble
 
         lmbda_fun = sym.lambdify((y, z), lmbda_sym, "numpy")
 
@@ -351,7 +340,7 @@ class ExactSolution3D:
         cc = self.g2d.cell_centers
 
         # Symbolic expression
-        p2_sym = -1 * self._bubble
+        p2_sym = -1 * self.bubble
 
         # Function
         p2_fun = sym.lambdify((y, z), p2_sym, "numpy")
