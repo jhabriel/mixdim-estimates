@@ -54,9 +54,9 @@ class TrueErrors3D(ExactSolution3D):
 
         # Project reconstructed pressure onto the cell centers
         rp_cc_2d = (
-                p[0] * cc[0].reshape(self.g2d.num_cells, 1)
-                + p[1] * cc[1].reshape(self.g2d.num_cells, 1)
-                + p[2]
+            p[0] * cc[0].reshape(self.g2d.num_cells, 1)
+            + p[1] * cc[1].reshape(self.g2d.num_cells, 1)
+            + p[2]
         )
 
         return rp_cc_2d.flatten()
@@ -74,11 +74,13 @@ class TrueErrors3D(ExactSolution3D):
         gradpy_cc_2d = p[1]
         gradpz_cc_2d = p[2]
 
-        gradp_cc = np.array([
-            gradpx_cc_2d.flatten(),
-            gradpy_cc_2d.flatten(),
-            gradpz_cc_2d.flatten(),
-        ])
+        gradp_cc = np.array(
+            [
+                gradpx_cc_2d.flatten(),
+                gradpy_cc_2d.flatten(),
+                gradpz_cc_2d.flatten(),
+            ]
+        )
 
         return gradp_cc
 
@@ -93,10 +95,12 @@ class TrueErrors3D(ExactSolution3D):
         gradpy_cc_2d = p[0]
         gradpz_cc_2d = p[1]
 
-        gradp_cc = np.array([
-            gradpy_cc_2d.flatten(),
-            gradpz_cc_2d.flatten(),
-        ])
+        gradp_cc = np.array(
+            [
+                gradpy_cc_2d.flatten(),
+                gradpz_cc_2d.flatten(),
+            ]
+        )
 
         return gradp_cc
 
@@ -124,11 +128,13 @@ class TrueErrors3D(ExactSolution3D):
                 u[0] * cc[2].reshape(self.g3d.num_cells, 1) + u[3]
             ) * idx.reshape(self.g3d.num_cells, 1)
 
-        ru_cc_2d = np.array([
-            ru_cc_3d_x.flatten(),
-            ru_cc_3d_y.flatten(),
-            ru_cc_3d_z.flatten(),
-        ])
+        ru_cc_2d = np.array(
+            [
+                ru_cc_3d_x.flatten(),
+                ru_cc_3d_y.flatten(),
+                ru_cc_3d_z.flatten(),
+            ]
+        )
 
         return ru_cc_2d
 
@@ -153,13 +159,9 @@ class TrueErrors3D(ExactSolution3D):
     def residual_error_local_poincare(self) -> float:
         """Global matrix residual error using local Poincare constants"""
 
-        residual_error_3d = (
-            np.sum(self.residual_error_3d_local_poincare()) ** 0.5
-        )
+        residual_error_3d = np.sum(self.residual_error_3d_local_poincare()) ** 0.5
 
-        residual_error_2d = (
-            np.sum(self.residual_error_2d_local_poincare()) ** 0.5
-        )
+        residual_error_2d = np.sum(self.residual_error_2d_local_poincare()) ** 0.5
 
         residual_error = residual_error_3d + residual_error_2d
 
@@ -168,13 +170,9 @@ class TrueErrors3D(ExactSolution3D):
     def residual_error_global_poincare(self) -> float:
         """Global matrix residual error using global Poincare constants"""
 
-        residual_error_3d = (
-            np.sum(self.residual_error_3d_global_poincare()) ** 0.5
-        )
+        residual_error_3d = np.sum(self.residual_error_3d_global_poincare()) ** 0.5
 
-        residual_error_2d = (
-            np.sum(self.residual_error_2d_global_poincare()) ** 0.5
-        )
+        residual_error_2d = np.sum(self.residual_error_2d_global_poincare()) ** 0.5
 
         residual_error = residual_error_2d + residual_error_3d
 
@@ -575,15 +573,21 @@ class TrueErrors3D(ExactSolution3D):
     def combined_error_local_poincare(self) -> float:
         """Computes combined error using local Poincare constants"""
 
-        combined_error = (self.pressure_error() + self.velocity_error()
-                          + self.residual_error_local_poincare())
+        combined_error = (
+            self.pressure_error()
+            + self.velocity_error()
+            + self.residual_error_local_poincare()
+        )
 
         return combined_error
 
     def combined_error_global_poincare(self) -> float:
         """Computes combined error using the global Poincare constant"""
 
-        combined_error = (self.pressure_error() + self.velocity_error()
-                          + self.residual_error_global_poincare())
+        combined_error = (
+            self.pressure_error()
+            + self.velocity_error()
+            + self.residual_error_global_poincare()
+        )
 
         return combined_error

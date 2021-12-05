@@ -146,13 +146,9 @@ class TrueErrors2D(ExactSolution2D):
     def residual_error_local_poincare(self) -> float:
         """Global matrix residual error using local Poincare constants"""
 
-        residual_error_2d = (
-            np.sum(self.residual_error_2d_local_poincare()) ** 0.5
-        )
+        residual_error_2d = np.sum(self.residual_error_2d_local_poincare()) ** 0.5
 
-        residual_error_1d = (
-            np.sum(self.residual_error_1d_local_poincare()) ** 0.5
-        )
+        residual_error_1d = np.sum(self.residual_error_1d_local_poincare()) ** 0.5
 
         residual_error = residual_error_1d + residual_error_2d
 
@@ -161,13 +157,9 @@ class TrueErrors2D(ExactSolution2D):
     def residual_error_global_poincare(self) -> float:
         """Global matrix residual error using global Poincare constants"""
 
-        residual_error_2d = (
-            np.sum(self.residual_error_2d_global_poincare()) ** 0.5
-        )
+        residual_error_2d = np.sum(self.residual_error_2d_global_poincare()) ** 0.5
 
-        residual_error_1d = (
-            np.sum(self.residual_error_1d_global_poincare()) ** 0.5
-        )
+        residual_error_1d = np.sum(self.residual_error_1d_global_poincare()) ** 0.5
 
         residual_error = residual_error_1d + residual_error_2d
 
@@ -328,9 +320,7 @@ class TrueErrors2D(ExactSolution2D):
         # Compute the true error
         def integrand(x):
             # Exact pressure gradient
-            gradp_exact_rot = -self.gradp1d("fun")(
-                x
-            )  # due to rotation (hardcoded)
+            gradp_exact_rot = -self.gradp1d("fun")(x)  # due to rotation (hardcoded)
             # Reconstructed pressure gradient
             gradp_recon_x = pr[0] * np.ones_like(x[0])
             # integral
@@ -370,9 +360,7 @@ class TrueErrors2D(ExactSolution2D):
         for side in sides:
 
             # Get rotated grids and sorted elements
-            high_grid, frac_faces = _sorted_highdim_edge_grid(
-                g_h, g_l, mg, side
-            )
+            high_grid, frac_faces = _sorted_highdim_edge_grid(g_h, g_l, mg, side)
             mortar_grid, mortar_cells = _sorted_side_grid(mg, g_l, side)
             low_grid, low_cells = _sorted_low_grid(g_l)
 
@@ -385,15 +373,9 @@ class TrueErrors2D(ExactSolution2D):
             # global mortar cells, we should write
             # mortar_cells[merged_mortar_ele]
             # Retrieve element mapping from sorted grids to merged grid
-            merged_high_ele = _get_grid_uniongrid_elements(
-                merged_grid, high_grid
-            )
-            merged_mortar_ele = _get_grid_uniongrid_elements(
-                merged_grid, mortar_grid
-            )
-            merged_low_ele = _get_grid_uniongrid_elements(
-                merged_grid, low_grid
-            )
+            merged_high_ele = _get_grid_uniongrid_elements(merged_grid, high_grid)
+            merged_mortar_ele = _get_grid_uniongrid_elements(merged_grid, mortar_grid)
+            merged_low_ele = _get_grid_uniongrid_elements(merged_grid, low_grid)
 
             # Get projected pressure jump, normal permeabilities, and
             # normal velocities
@@ -424,13 +406,8 @@ class TrueErrors2D(ExactSolution2D):
             # Sum errors corresponding to a mortar cell
             diffusive_error_side = np.zeros(len(mortar_cells))
             for mortar_element in range(len(mortar_cells)):
-                idx = (
-                    mortar_cells[mortar_element]
-                    == mortar_cells[merged_mortar_ele]
-                )
-                diffusive_error_side[mortar_element] = diffusive_error_merged[
-                    idx
-                ].sum()
+                idx = mortar_cells[mortar_element] == mortar_cells[merged_mortar_ele]
+                diffusive_error_side[mortar_element] = diffusive_error_merged[idx].sum()
 
             # Append into the list
             true_error[mortar_cells] = diffusive_error_side
@@ -559,15 +536,21 @@ class TrueErrors2D(ExactSolution2D):
     def combined_error_local_poincare(self) -> float:
         """Computes combined error using local Poincare constants"""
 
-        combined_error = (self.pressure_error() + self.velocity_error()
-                          + self.residual_error_local_poincare())
+        combined_error = (
+            self.pressure_error()
+            + self.velocity_error()
+            + self.residual_error_local_poincare()
+        )
 
         return combined_error
 
     def combined_error_global_poincare(self) -> float:
         """Computes combined error using the global Poincare constant"""
 
-        combined_error = (self.pressure_error() + self.velocity_error()
-                          + self.residual_error_global_poincare())
+        combined_error = (
+            self.pressure_error()
+            + self.velocity_error()
+            + self.residual_error_global_poincare()
+        )
 
         return combined_error

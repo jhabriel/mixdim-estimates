@@ -32,6 +32,7 @@ def homo_mvem(g):
         "label": "homo_mvem",
     }
 
+
 def main(mesh_size, discr, flow_dir, is_coarse, refine_1d, folder):
 
     # set the geometrical tolerance
@@ -178,7 +179,9 @@ if __name__ == "__main__":
                     if mesh_size == 0.05:
                         paraview = pp.Exporter(gb, "mpfa_coarse", folder_name="out")
                     elif mesh_size == 0.025:
-                        paraview = pp.Exporter(gb, "mpfa_intermediate", folder_name="out")
+                        paraview = pp.Exporter(
+                            gb, "mpfa_intermediate", folder_name="out"
+                        )
                     elif mesh_size == 0.0125:
                         paraview = pp.Exporter(gb, "mpfa_fine", folder_name="out")
 
@@ -215,7 +218,7 @@ for i in itertools.product(numerical_methods, mesh_resolutions):
     col_0d_edge.append(out[i[0]][i[1]]["error_edge_0d"])
     col_majorant_pressure.append(out[i[0]][i[1]]["scaled_majorant"])
     col_majorant_flux.append(out[i[0]][i[1]]["scaled_majorant"])
-    col_majorant_combined.append(2*out[i[0]][i[1]]["scaled_majorant"])
+    col_majorant_combined.append(2 * out[i[0]][i[1]]["scaled_majorant"])
 
 
 # Prepare for exporting

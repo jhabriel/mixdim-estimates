@@ -4,50 +4,50 @@ import scipy.sparse as sps
 import mdestimates.estimates_utils as utils
 
 
-def reconstruct_velocity(self):    
+def reconstruct_velocity(self):
     """
-    Computes mixed-dimensional flux reconstruction using RT0 extension of 
+    Computes mixed-dimensional flux reconstruction using RT0 extension of
     normal full fluxes.
-    
+
     Returns
     ------
     None
-    
+
     NOTE:  The data dictionary of each node of the grid bucket will be updated
-    with the field d[self.estimates_kw]["recons_vel"], a NumPy nd-array 
-    of shape (g.num_cells x (g.dim+1)) containing the coefficients of the 
-    reconstructed velocity for each element. Each column corresponds to the 
+    with the field d[self.estimates_kw]["recons_vel"], a NumPy nd-array
+    of shape (g.num_cells x (g.dim+1)) containing the coefficients of the
+    reconstructed velocity for each element. Each column corresponds to the
     coefficient a, b, c, and so on (see Technical Note below).
-    
+
     ------------------------------ TECHNICAL NOTE ----------------------------
-    
-    The coefficients satisfy the following velocity fields depending on the 
+
+    The coefficients satisfy the following velocity fields depending on the
     dimensionality of the problem:
-        
+
     q = ax + b                          (for 1d),
     q = (ax + b, ay + c)^T              (for 2d),
     q = (ax + b, ay + c, az + d)^T      (for 3d).
-    
+
     The reconstructed velocity field inside an element K is given by:
-    
-        q = \sum_{j=1}^{g.dim+1} q_j psi_j, 
-        
-    where psi_j are the global basis functions defined on each face, 
+
+        q = \sum_{j=1}^{g.dim+1} q_j psi_j,
+
+    where psi_j are the global basis functions defined on each face,
     and q_j are the normal fluxes.
 
     The global basis takes the form
-        
+
     psi_j = (s(normal_j)/(g.dim|K|)) (x - x_i)^T                     (for 1d),
     psi_j = (s(normal_j)/(g.dim|K|)) (x - x_i, y - y_i)^T            (for 2d),
     psi_j = (s(normal_j)/(g.dim|K|)) (x - x_i, y - y_i, z - z_i)^T   (for 3d),
-    
-    where s(normal_j) is the sign of the normal vector,|K| is the Lebesgue 
-    measure of the element K, and (x_i, y_i, z_i) are the coordinates of the 
-    opposite side nodes to the face j. The function s(normal_j) = 1 if the 
+
+    where s(normal_j) is the sign of the normal vector,|K| is the Lebesgue
+    measure of the element K, and (x_i, y_i, z_i) are the coordinates of the
+    opposite side nodes to the face j. The function s(normal_j) = 1 if the
     signs of the local and global normals are the same, and -1 otherwise.
-    
+
     --------------------------------------------------------------------------
-    
+
     """
 
     # Loop through all the nodes of the grid bucket
@@ -94,7 +94,7 @@ def reconstruct_velocity(self):
             err_msg="Error estimates only valid for local mass-conservative methods.",
         )
         # END OF TEST
-        
+
         # Perform actual reconstruction and obtain coefficients
         coeffs = np.empty([g.num_cells, g.dim + 1])
         alpha = 1 / (g.dim * vol_cell)
@@ -126,10 +126,10 @@ def reconstruct_velocity(self):
 def compute_full_flux(self):
     """
     Computes full flux for all the subdomains of the grid bucket. The full flux
-    is composed by the subdomain Darcy flux plus the projection of the lower 
+    is composed by the subdomain Darcy flux plus the projection of the lower
     dimensional mortar fluxes.
 
-    Note 1: The data dictionary of each subdomain is updated with the field 
+    Note 1: The data dictionary of each subdomain is updated with the field
     d[self.estimates_kw]["full_flux"], a NumPy array of length g.num_faces.
     Note 2: Full fluxes are not defined for 0d-subdomains. In this case we
     assign a None variable to the field d[self.estimates_kw]["full_flux"].
@@ -137,12 +137,12 @@ def compute_full_flux(self):
 
     # Loop through all the nodes of the grid bucket
     for g, d in self.gb:
-        
+
         # Handle the case of zero-dimensional subdomains
         if g.dim == 0:
             d[self.estimates_kw]["full_flux"] = None
             continue
-        
+
         # Retrieve subdomain discretization
         discr = d[pp.DISCRETIZATION][self.p_name][self.sd_operator_name]
 
@@ -156,8 +156,7 @@ def compute_full_flux(self):
             matrix_dictionary = d[pp.DISCRETIZATION_MATRICES][self.kw]
             darcy_flux = (
                 matrix_dictionary["flux"] * d[pp.STATE][self.p_name].copy()
-                + matrix_dictionary["bound_flux"]
-                * parameter_dictionary["bc_values"]
+                + matrix_dictionary["bound_flux"] * parameter_dictionary["bc_values"]
             )
 
             # Add tcontribution of mortar fluxes from edges associated
@@ -220,7 +219,7 @@ def _reconstructed_face_fluxes(g, g_rot, coeff):
     g : PorePy object
         Grid
     g_rot: Rotated object
-        Rotated pseudo-grid 
+        Rotated pseudo-grid
     coeff : NumPy array of shape (g.num_cells x (g.dim+1))
         Coefficients of the reconstructed velocity field
 
@@ -228,7 +227,7 @@ def _reconstructed_face_fluxes(g, g_rot, coeff):
     -------
     recons_face_fluxes : NumPy array of shape g.num_faces
        Reconstructed face-centered fluxes
-       
+
     """
 
     # Mappings
@@ -267,7 +266,7 @@ def _internal_source_term_contribution(self, g):
     """
     Obtain flux contribution from higher-dimensional neighboring interfaces
     to lower-dimensional subdomains in the form of internal source terms
-    
+
     Parameters
     ----------
     g : PorePy object

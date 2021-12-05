@@ -196,24 +196,29 @@ def model_global(gb, method):
     diffusive_error_squared_3d = d_3d[pp.STATE]["diffusive_error"]
     diffusive_error_squared_2d = d_2d[pp.STATE]["diffusive_error"]
     diffusive_error_squared_mortar = d_e[pp.STATE]["diffusive_error"]
-    diffusive_error = (diffusive_error_squared_3d.sum()
-                       + diffusive_error_squared_2d.sum()
-                       + diffusive_error_squared_mortar.sum()) ** 0.5
+    diffusive_error = (
+        diffusive_error_squared_3d.sum()
+        + diffusive_error_squared_2d.sum()
+        + diffusive_error_squared_mortar.sum()
+    ) ** 0.5
 
     residual_error_squared_3d = te.residual_error_3d_global_poincare()
     residual_error_squared_2d = te.residual_error_2d_global_poincare()
-    residual_error = (residual_error_squared_3d.sum()
-                      + residual_error_squared_2d.sum()) ** 0.5
+    residual_error = (
+        residual_error_squared_3d.sum() + residual_error_squared_2d.sum()
+    ) ** 0.5
 
     majorant_pressure = diffusive_error + residual_error
     majorant_velocity = majorant_pressure
     majorant_combined = majorant_pressure + majorant_velocity + residual_error
 
     # Distinguishing between subdomain and mortar errors
-    bulk_error = (diffusive_error_squared_3d.sum()
-                  + residual_error_squared_3d.sum()) ** 0.5
-    fracture_error = (diffusive_error_squared_2d.sum()
-                      + residual_error_squared_2d.sum()) ** 0.5
+    bulk_error = (
+        diffusive_error_squared_3d.sum() + residual_error_squared_3d.sum()
+    ) ** 0.5
+    fracture_error = (
+        diffusive_error_squared_2d.sum() + residual_error_squared_2d.sum()
+    ) ** 0.5
     mortar_error = diffusive_error_squared_mortar.sum() ** 0.5
 
     # %% Obtain true errors
@@ -227,12 +232,12 @@ def model_global(gb, method):
     i_eff_pu = majorant_combined / true_combined_error
 
     print(50 * "-")
-    print(f'Majorant pressure: {majorant_pressure}')
-    print(f'Majorant velocity: {majorant_velocity}')
-    print(f'Majorant combined: {majorant_combined}')
-    print(f'Bulk error: {bulk_error}')
-    print(f'Fracture error: {fracture_error}')
-    print(f'Mortar error: {mortar_error}')
+    print(f"Majorant pressure: {majorant_pressure}")
+    print(f"Majorant velocity: {majorant_velocity}")
+    print(f"Majorant combined: {majorant_combined}")
+    print(f"Bulk error: {bulk_error}")
+    print(f"Fracture error: {fracture_error}")
+    print(f"Mortar error: {mortar_error}")
     print(f"True error (pressure): {true_pressure_error}")
     print(f"True error (velocity): {true_velocity_error}")
     print(f"True error (combined): {true_combined_error}")

@@ -171,9 +171,7 @@ for model in models:
     fmt += "%2.2e %2.2e %2.2e %2.2e %2.2f %2.2f %2.2f"
 
     # Headers
-    header = (
-        "num_method eta_3d eta_2d eta_mortar M_p M_u M_pu tpe tve tce"
-    )
+    header = "num_method eta_3d eta_2d eta_mortar M_p M_u M_pu tpe tve tce"
     header += "I_eff_p I_eff_u I_eff_pu"
 
     # Writing into txt

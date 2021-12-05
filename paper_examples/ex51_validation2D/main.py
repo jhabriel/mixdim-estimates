@@ -25,9 +25,7 @@ def make_constrained_mesh(h=0.1):
     """
 
     domain = {"xmin": 0, "xmax": 1, "ymin": 0, "ymax": 1}
-    network_2d = pp.fracture_importer.network_2d_from_csv(
-        "network.csv", domain=domain
-    )
+    network_2d = pp.fracture_importer.network_2d_from_csv("network.csv", domain=domain)
 
     # Target lengths
     target_h_bound = h
@@ -115,9 +113,7 @@ tic = time()
 print("Assembling non-matching grid buckets...", end="")
 for counter in range(levels):
     grid_buckets.append(
-        create_non_matching_gridbucket(
-            h_2d[counter], h_1d[counter], h_mortar[counter]
-        )
+        create_non_matching_gridbucket(h_2d[counter], h_1d[counter], h_mortar[counter])
     )
 grid_buckets = grid_buckets[::-1]
 print(f"\u2713 Time {time() - tic}\n")
@@ -240,9 +236,7 @@ for model in models:
     fmt += " %2.2e %2.2e %2.2e %2.2f %2.2f %2.2f"
 
     # Headers
-    header = (
-        "num_method eta_DF_2d eta_R_2d eta_DF_1d eta_R_1d eta_mortar "
-    )
+    header = "num_method eta_DF_2d eta_R_2d eta_DF_1d eta_R_1d eta_mortar "
     header += "majorant_p majorant_u majorant_pu I_eff_p I_eff_u I_eff_pu"
 
     # Writing into txt

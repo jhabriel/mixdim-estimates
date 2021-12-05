@@ -34,10 +34,7 @@ class ExactSolution3D:
         bottom_back_cc = (cc[1] < 0.25) & (cc[2] > 0.75)
         front_cc = (cc[1] > 0.25) & (cc[1] < 0.75) & (cc[2] < 0.25)
         middle_cc = (
-            (cc[1] >= 0.25)
-            & (cc[1] <= 0.75)
-            & (cc[2] >= 0.25)
-            & (cc[2] <= 0.75)
+            (cc[1] >= 0.25) & (cc[1] <= 0.75) & (cc[2] >= 0.25) & (cc[2] <= 0.75)
         )
         back_cc = (cc[1] > 0.25) & (cc[1] < 0.75) & (cc[2] > 0.75)
         top_front_cc = (cc[1] > 0.75) & (cc[2] < 0.25)
@@ -62,10 +59,7 @@ class ExactSolution3D:
         bottom_back_bc = (fc[1] < 0.25) & (fc[2] > 0.75)
         front_bc = (fc[1] > 0.25) & (fc[1] < 0.75) & (fc[2] < 0.25)
         middle_bc = (
-            (fc[1] >= 0.25)
-            & (fc[1] <= 0.75)
-            & (fc[2] >= 0.25)
-            & (fc[2] <= 0.75)
+            (fc[1] >= 0.25) & (fc[1] <= 0.75) & (fc[2] >= 0.25) & (fc[2] <= 0.75)
         )
         back_bc = (fc[1] > 0.25) & (fc[1] < 0.75) & (fc[2] > 0.75)
         top_front_bc = (fc[1] > 0.75) & (fc[2] < 0.25)
@@ -91,16 +85,26 @@ class ExactSolution3D:
         self.gamma1 = z - 0.25
         self.gamma2 = z - 0.75
         self.n = 1.5
-        self.dist_bottom_front = (self.alpha ** 2 + self.beta1 ** 2 + self.gamma1 ** 2) ** 0.5
+        self.dist_bottom_front = (
+            self.alpha ** 2 + self.beta1 ** 2 + self.gamma1 ** 2
+        ) ** 0.5
         self.dist_bottom_middle = (self.alpha ** 2 + self.beta1 ** 2) ** 0.5
-        self.dist_bottom_back = (self.alpha ** 2 + self.beta1 ** 2 + self.gamma2 ** 2) ** 0.5
+        self.dist_bottom_back = (
+            self.alpha ** 2 + self.beta1 ** 2 + self.gamma2 ** 2
+        ) ** 0.5
         self.dist_front = (self.alpha ** 2 + self.gamma1 ** 2) ** 0.5
         self.dist_middle = (self.alpha ** 2) ** 0.5
         self.dist_back = (self.alpha ** 2 + self.gamma2 ** 2) ** 0.5
-        self.dist_top_front = (self.alpha ** 2 + self.beta2 ** 2 + self.gamma1 ** 2) ** 0.5
+        self.dist_top_front = (
+            self.alpha ** 2 + self.beta2 ** 2 + self.gamma1 ** 2
+        ) ** 0.5
         self.dist_top_middle = (self.alpha ** 2 + self.beta2 ** 2) ** 0.5
-        self.dist_top_back = (self.alpha ** 2 + self.beta2 ** 2 + self.gamma2 ** 2) ** 0.5
-        self.bubble = self.beta1 ** 2 * self.beta2 ** 2 * self.gamma1 ** 2 * self.gamma2 ** 2
+        self.dist_top_back = (
+            self.alpha ** 2 + self.beta2 ** 2 + self.gamma2 ** 2
+        ) ** 0.5
+        self.bubble = (
+            self.beta1 ** 2 * self.beta2 ** 2 * self.gamma1 ** 2 * self.gamma2 ** 2
+        )
 
     def __repr__(self) -> str:
         return "Exact solution  object for 3D problem"
@@ -383,9 +387,7 @@ class ExactSolution3D:
             sym.lambdify((y, z), gradp2_sym[1], "numpy"),
         ]
 
-        gradp2_cc = np.array(
-            [gradp2_fun[0](cc[1], cc[2]), gradp2_fun[1](cc[1], cc[2])]
-        )
+        gradp2_cc = np.array([gradp2_fun[0](cc[1], cc[2]), gradp2_fun[1](cc[1], cc[2])])
 
         if which == "sym":
             return gradp2_sym
@@ -450,9 +452,7 @@ class ExactSolution3D:
         cc = self.g2d.cell_centers
 
         jump_lmbda_sym = 2 * self.lmbda("sym")
-        div_u2_sym = (sym.diff(self.u2d("sym")[0], y)
-                      + sym.diff(self.u2d("sym")[1], z)
-        )
+        div_u2_sym = sym.diff(self.u2d("sym")[0], y) + sym.diff(self.u2d("sym")[1], z)
         f2_sym = div_u2_sym - jump_lmbda_sym
 
         f2_fun = sym.lambdify((y, z), f2_sym, "numpy")

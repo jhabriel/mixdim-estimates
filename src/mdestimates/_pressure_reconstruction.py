@@ -3,49 +3,50 @@ import numpy as np
 import scipy.sparse as sps
 import mdestimates.estimates_utils as utils
 
+
 def reconstruct_pressure(self):
     """
-    Reconstructs the pressure in all subdomains of the grid bucket 
+    Reconstructs the pressure in all subdomains of the grid bucket
 
     Returns
     -------
     None.
-    
+
     NOTE: The data dicitionary of each node of the grid bucket is updated
     with the field d[self.estimates_kw]["recon_p"], a NumPy nd-array
     containing the coefficients of the reconstructed pressure.
 
     """
-    
+
     # Loop through all subdomains
     for g, d in self.gb:
-        
+
         # Handle the case of zero-dimensional subdomains
         if g.dim == 0:
             pcc = d[pp.STATE][self.p_name].copy()
             d[self.estimates_kw]["node_pressure"] = pcc
             d[self.estimates_kw]["recon_p"] = pcc
             continue
-        
+
         # Rotate grid
         g_rot = utils.rotate_embedded_grid(g)
-        
+
         # Obtain Lagrangian coordinates
         point_val, point_coo = inverse_local_gradp(self, g, g_rot, d)
 
         # Obtain pressure coefficients
         recons_p = utils.interpolate_P1(point_val, point_coo)
-            
+
         # TEST: Pressure reconstruction
         _test_pressure_reconstruction(self, g, recons_p, point_val, point_coo)
         # END TEST
-        
-        # Save in the data dictionary. Note that for conforming reconstructions, 
+
+        # Save in the data dictionary. Note that for conforming reconstructions,
         # the postprocessed pressure is equal to the reconstructed pressure
         d[self.estimates_kw]["recon_p"] = recons_p
-        
+
     return None
-    
+
 
 def inverse_local_gradp(self, g, g_rot, d):
     """
@@ -58,9 +59,9 @@ def inverse_local_gradp(self, g, g_rot, d):
         Grid
     g_rot: Rotated grid object
         Rotated pseudo-grid
-    d : Dictionary 
+    d : Dictionary
         Dicitionary containing the parameters
-        
+
     Raises
     ------
     Value Error:
@@ -78,18 +79,18 @@ def inverse_local_gradp(self, g, g_rot, d):
     # CHECK: Pressure solution in dictionary?
     if self.p_name not in d[pp.STATE]:
         raise ValueError("Pressure solution not found.")
-    
+
     # CHECK: Pressure solution shape?
     if d[pp.STATE][self.p_name].size != g.num_cells:
         raise ValueError("Inconsistent size of pressure solution.")
-        
+
     # CHECK: Full flux in dictionary?
     if "full_flux" not in d[self.estimates_kw]:
         raise ValueError("Full flux must be computed first")
 
     # Retrieve P0 cell-center pressure
     p_cc = d[pp.STATE][self.p_name].copy()
-    
+
     # Retrieve full fluxes
     flux = d[self.estimates_kw]["full_flux"].copy()
 
@@ -107,28 +108,33 @@ def inverse_local_gradp(self, g, g_rot, d):
     )
 
     # Project fluxes using RT0
-    #d_RT0 = d.copy()
-    #pp.RT0(self.kw).discretize(g, d_RT0)
-    #proj_flux = pp.RT0(self.kw).project_flux(g, flux, d_RT0)[: g.dim]
+    # d_RT0 = d.copy()
+    # pp.RT0(self.kw).discretize(g, d_RT0)
+    # proj_flux = pp.RT0(self.kw).project_flux(g, flux, d_RT0)[: g.dim]
 
     # Retrieve reconstructed velocities
     coeff = d[self.estimates_kw]["recon_u"]
     if g.dim == 3:
-        proj_flux = np.array([
-            coeff[:, 0] * g_rot.cell_centers[0] + coeff[:, 1],
-            coeff[:, 0] * g_rot.cell_centers[1] + coeff[:, 2],
-            coeff[:, 0] * g_rot.cell_centers[2] + coeff[:, 3],
-        ])
+        proj_flux = np.array(
+            [
+                coeff[:, 0] * g_rot.cell_centers[0] + coeff[:, 1],
+                coeff[:, 0] * g_rot.cell_centers[1] + coeff[:, 2],
+                coeff[:, 0] * g_rot.cell_centers[2] + coeff[:, 3],
+            ]
+        )
     elif g.dim == 2:
-        proj_flux = np.array([
-            coeff[:, 0] * g_rot.cell_centers[0] + coeff[:, 1],
-            coeff[:, 0] * g_rot.cell_centers[1] + coeff[:, 2],
-        ])
+        proj_flux = np.array(
+            [
+                coeff[:, 0] * g_rot.cell_centers[0] + coeff[:, 1],
+                coeff[:, 0] * g_rot.cell_centers[1] + coeff[:, 2],
+            ]
+        )
     else:
-        proj_flux = np.array([
-            coeff[:, 0] * g_rot.cell_centers[0] + coeff[:, 1],
-        ])
-
+        proj_flux = np.array(
+            [
+                coeff[:, 0] * g_rot.cell_centers[0] + coeff[:, 1],
+            ]
+        )
 
     # Obtain local gradients
     loc_grad = np.zeros((g.dim, nc))
@@ -183,8 +189,8 @@ def inverse_local_gradp(self, g, g_rot, d):
 
 def _test_pressure_reconstruction(self, g, recon_p, point_val, point_coo):
     """
-    Testing pressure reconstruction. This function uses the reconstructed 
-    pressure local polynomial and perform an evaluation at the Lagrangian 
+    Testing pressure reconstruction. This function uses the reconstructed
+    pressure local polynomial and perform an evaluation at the Lagrangian
     points, and checks if the those values are equal to the point_val array.
 
     Parameters
@@ -203,17 +209,17 @@ def _test_pressure_reconstruction(self, g, recon_p, point_val, point_coo):
     None.
 
     """
-        
+
     def assert_reconp(eval_poly, point_val):
         np.testing.assert_allclose(
             eval_poly,
             point_val,
             rtol=1e-6,
             atol=1e-3,
-            err_msg="Pressure reconstruction has failed"
-            )
+            err_msg="Pressure reconstruction has failed",
+        )
 
     eval_poly = utils.eval_P1(recon_p, point_coo)
     assert_reconp(eval_poly, point_val)
-        
+
     return None
