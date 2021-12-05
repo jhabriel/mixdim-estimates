@@ -1,5 +1,4 @@
-[![DOI](https://zenodo.org/badge/253091118.svg)](https://zenodo.org/badge/latestdoi/253091118)
-
+[![DOI](https://zenodo.org/badge/253091118.svg)](https://zenodo.org/badge/latestdoi/253091118) [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 # mdestimates: *A posteriori* error estimates for mixed-dimensional elliptic equations
 
