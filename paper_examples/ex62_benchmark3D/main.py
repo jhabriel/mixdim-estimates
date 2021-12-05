@@ -149,7 +149,7 @@ def set_parameters_conductive(gb):
 
 
 #%% Input data
-numerical_methods = ["TPFA", "MPFA", "RT0", "MVEM"]
+numerical_methods = ["RT0", "MVEM", "MPFA", "TPFA"]
 mesh_resolutions = ["coarse", "intermediate", "fine"]
 subdomain_variable = "pressure"
 subdomain_operator_keyword = "diffusive"
@@ -166,7 +166,9 @@ for i in itertools.product(numerical_methods, mesh_resolutions):
         "error_edge_2d": [],
         "error_edge_1d": [],
         "error_edge_0d": [],
-        "error_global": [],
+        "majorant_pressure": [],
+        "majorant_velocity": [],
+        "majorant_combined": [],
     }
 
 #%% Import grid buckets
@@ -199,17 +201,17 @@ for i in itertools.product(numerical_methods, mesh_resolutions):
     #%% Solve the problem
     set_parameters_conductive(gb)
 
-    if i[0] == "TPFA":
-        assembler, block_info = helpers.setup_flow_assembler(gb, pp.Tpfa("flow"))
-    elif i[0] == "MPFA":
-        assembler, block_info = helpers.setup_flow_assembler(gb, pp.Mpfa("flow"))
-    elif i[0] == "RT0":
+    if i[0] == "RT0":
         assembler, block_info = helpers.setup_flow_assembler(gb, pp.RT0("flow"))
     elif i[0] == "MVEM":
         assembler, block_info = helpers.setup_flow_assembler(gb, pp.MVEM("flow"))
+    elif i[0] == "MPFA":
+        assembler, block_info = helpers.setup_flow_assembler(gb, pp.Mpfa("flow"))
+    elif i[0] == "TPFA":
+        assembler, block_info = helpers.setup_flow_assembler(gb, pp.Tpfa("flow"))
     else:
         raise ValueError(
-            'Numerical method should be either "TPFA", "MPFA", "RT0", or "MVEM".'
+            'Numerical method should be either "RT0", "MVEM", "MPFA", or "TPFA".'
         )
 
     tic = time()
@@ -278,7 +280,9 @@ for i in itertools.product(numerical_methods, mesh_resolutions):
     out[i[0]][i[1]]["error_edge_2d"] = error_edge_2d
     out[i[0]][i[1]]["error_edge_1d"] = error_edge_1d
     out[i[0]][i[1]]["error_edge_0d"] = error_edge_0d
-    out[i[0]][i[1]]["scaled_majorant"] = scaled_majorant
+    out[i[0]][i[1]]["majorant_pressure"] = scaled_majorant
+    out[i[0]][i[1]]["majorant_velocity"] = scaled_majorant
+    out[i[0]][i[1]]["majorant_combined"] = 2 * scaled_majorant
 
 #%% Export
 # Permutations
@@ -293,7 +297,9 @@ col_1d_node = []
 col_2d_edge = []
 col_1d_edge = []
 col_0d_edge = []
-col_scaled_majorant = []
+col_majorant_pressure = []
+col_majorant_velocity = []
+col_majorant_combined = []
 
 # Populate lists
 for i in itertools.product(numerical_methods, mesh_resolutions):
@@ -305,7 +311,10 @@ for i in itertools.product(numerical_methods, mesh_resolutions):
     col_2d_edge.append(out[i[0]][i[1]]["error_edge_2d"])
     col_1d_edge.append(out[i[0]][i[1]]["error_edge_1d"])
     col_0d_edge.append(out[i[0]][i[1]]["error_edge_0d"])
-    col_scaled_majorant.append(out[i[0]][i[1]]["scaled_majorant"])
+    col_majorant_pressure.append(out[i[0]][i[1]]["majorant_pressure"])
+    col_majorant_velocity.append(out[i[0]][i[1]]["majorant_velocity"])
+    col_majorant_combined.append(out[i[0]][i[1]]["majorant_combined"])
+
 
 # Prepare for exporting
 export = np.zeros(
@@ -320,6 +329,8 @@ export = np.zeros(
         ("var7", float),
         ("var8", float),
         ("var9", float),
+        ("var10", float),
+        ("var11", float),
     ],
 )
 
@@ -331,17 +342,19 @@ export["var5"] = col_1d_node
 export["var6"] = col_2d_edge
 export["var7"] = col_1d_edge
 export["var8"] = col_0d_edge
-export["var9"] = col_scaled_majorant
+export["var9"] = col_majorant_pressure
+export["var10"] = col_majorant_velocity
+export["var11"] = col_majorant_combined
 
 # Header
 header = "num_method mesh_size eta_omega_3d eta_omega_2d eta_omega_1d"
-header += " eta_gamma_2d eta_gamma_1d eta_gamma_0d scaled_majorant"
+header += " eta_gamma_2d eta_gamma_1d eta_gamma_0d M_p M_u M_pu"
 
 # Write into txt
 np.savetxt(
     "convergence_bench3d.txt",
     export,
     delimiter=",",
-    fmt="%4s %8s %2.2e %2.2e %2.2e %2.2e %2.2e %2.2e %2.2e",
+    fmt="%4s %8s %2.2e %2.2e %2.2e %2.2e %2.2e %2.2e %2.2e %2.2e %2.2e",
     header=header,
 )

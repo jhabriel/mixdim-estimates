@@ -17,7 +17,7 @@ def setup_flow_assembler(gb, method, data_key=None, coupler=None):
         method (EllipticDiscretization).
         data_key (str, optional): Keyword used to identify data dictionary for
             node and edge discretization.
-        Coupler (EllipticInterfaceLaw): Defaults to RobinCoulping.
+        coupler (EllipticInterfaceLaw): Defaults to RobinCoulping.
 
     Returns:
         Assembler, ready to discretize and assemble problem.
