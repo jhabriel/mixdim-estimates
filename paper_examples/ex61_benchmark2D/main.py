@@ -32,39 +32,6 @@ def homo_mvem(g):
         "label": "homo_mvem",
     }
 
-
-def hete1(g):
-    if g.dim == 2:
-        scheme = {
-            "scheme": pp.RT0("flow"),
-            "dof": {"cells": 1, "faces": 1},
-            "label": "hete1",
-        }
-    else:
-        scheme = {"scheme": pp.Tpfa("flow"), "dof": {"cells": 1}, "label": "hete1"}
-    return scheme
-
-
-def hete2(g):
-    if g.dim == 2:
-        scheme = {
-            "scheme": pp.MVEM("flow"),
-            "dof": {"cells": 1, "faces": 1},
-            "label": "hete2",
-        }
-    else:
-        scheme = {"scheme": pp.Tpfa("flow"), "dof": {"cells": 1}, "label": "hete2"}
-    return scheme
-
-
-def homo_mortar(g):
-    return {
-        "scheme": pp.RT0("flow"),
-        "dof": {"cells": 1, "faces": 1},
-        "label": "homo_mortar",
-    }
-
-
 def main(mesh_size, discr, flow_dir, is_coarse, refine_1d, folder):
 
     # set the geometrical tolerance
@@ -89,10 +56,10 @@ if __name__ == "__main__":
     # when MVEM is applied to the 2d. The third parameter is related to
     # the mortar
     solver_list = {
-        "tpfa": (homo_tpfa, False, False),
-        "mpfa": (homo_mpfa, False, False),
         "rt0": (homo_rt0, False, False),
         "mvem": (homo_mvem, False, False),
+        "mpfa": (homo_mpfa, False, False),
+        "tpfa": (homo_tpfa, False, False),
     }
     numerical_methods = list(solver_list.keys())
 
@@ -231,7 +198,10 @@ col_1d_node_bloc = []
 col_1d_edge_cond = []
 col_1d_edge_bloc = []
 col_0d_edge = []
-col_scaled_majorant = []
+col_majorant_pressure = []
+col_majorant_flux = []
+col_majorant_combined = []
+
 
 # Populate lists
 for i in itertools.product(numerical_methods, mesh_resolutions):
@@ -243,7 +213,10 @@ for i in itertools.product(numerical_methods, mesh_resolutions):
     col_1d_edge_cond.append(out[i[0]][i[1]]["error_edge_1d_cond"])
     col_1d_edge_bloc.append(out[i[0]][i[1]]["error_edge_1d_bloc"])
     col_0d_edge.append(out[i[0]][i[1]]["error_edge_0d"])
-    col_scaled_majorant.append(out[i[0]][i[1]]["scaled_majorant"])
+    col_majorant_pressure.append(out[i[0]][i[1]]["scaled_majorant"])
+    col_majorant_flux.append(out[i[0]][i[1]]["scaled_majorant"])
+    col_majorant_combined.append(2*out[i[0]][i[1]]["scaled_majorant"])
+
 
 # Prepare for exporting
 export = np.zeros(
@@ -258,6 +231,8 @@ export = np.zeros(
         ("var7", float),
         ("var8", float),
         ("var9", float),
+        ("var10", float),
+        ("var11", float),
     ],
 )
 
@@ -269,15 +244,18 @@ export["var5"] = col_1d_node_bloc
 export["var6"] = col_1d_edge_cond
 export["var7"] = col_1d_edge_bloc
 export["var8"] = col_0d_edge
-export["var9"] = col_scaled_majorant
+export["var9"] = col_majorant_pressure
+export["var10"] = col_majorant_flux
+export["var11"] = col_majorant_combined
+
 
 header = "num_method mesh_size eta_omega_2d eta_omega_1d_c eta_omega_1d_b "
-header += "eta_gamma_1d_c eta_gamma_1d_b eta_gamma_0d scaled_majorant "
+header += "eta_gamma_1d_c eta_gamma_1d_b eta_gamma_0d M_p M_u M_pu "
 
 np.savetxt(
     "convergence_bench2d.txt",
     export,
     delimiter=",",
-    fmt="%4s %8s %2.2e %2.2e %2.2e %2.2e %2.2e %2.2e %2.2e",
+    fmt="%4s %8s %2.2e %2.2e %2.2e %2.2e %2.2e %2.2e %2.2e %2.2e %2.2e",
     header=header,
 )
