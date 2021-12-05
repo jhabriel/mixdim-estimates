@@ -43,4 +43,4 @@ gmsh_frac_file.msh
 !requirements.txt
 
 # Ignore everything inside the experimental folder
-experimental/
+experimental/**
