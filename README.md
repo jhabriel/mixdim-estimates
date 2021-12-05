@@ -5,8 +5,7 @@
 
 **mdestimates** is a Python package created for computing *a posteriori* error estimates for mixed-dimensional elliptic equations. That is, the set of equations that models the flow in fractured porous media. The package is build as an extension of [PorePy](https://github.com/pmgbergen/porepy). Note that **mdestimates** also relies on the numerical integration package [quadpy](https://github.com/nschloe/quadpy).
 
-<img src="estimates.png" width="1100" height="300">
-
+![image](estimates.png)
 **Figure:** Diffusive-flux error estimates obtained with Multipoint Flux Approximation (MPFA) for three different refinement levels.
 
 ## Installation from source
