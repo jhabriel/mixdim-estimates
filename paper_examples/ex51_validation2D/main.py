@@ -6,6 +6,7 @@ from time import time
 from model_local import model_local
 from model_global import model_global
 
+
 # %% Functions
 def make_constrained_mesh(h=0.1):
     """
@@ -119,7 +120,7 @@ grid_buckets = grid_buckets[::-1]
 print(f"\u2713 Time {time() - tic}\n")
 
 # %% Loop over the models
-models = [model_global, model_local]
+models = [model_local, model_global]
 for model in models:
     # Create dictionary and initialize fields
     d = {k: {} for k in num_methods}
