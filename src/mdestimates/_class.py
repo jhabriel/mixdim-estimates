@@ -17,10 +17,7 @@ import mdestimates as mde
 
 
 class ErrorEstimate:
-    """
-    Parent class for computation of a posteriori error estimates for solutions
-    of the incompressible flow in mixed-dimensional geometries.
-    """
+    """ Parent class for computation of a posteriori error estimates. """
 
     def __init__(
         self,
@@ -34,7 +31,10 @@ class ErrorEstimate:
         p_recon_method: str = "inv_local_gradp"
     ):
         """
-        Class instatiation
+        Computes a posteriori error estimates for the single phase flow in fractured porous
+        media. The errors are calculated for each node and edge of the grid bucket. Two main
+        errors are estimated: diffusive flux errors on subdomains and interfaces and
+        diffusive flux errors on interfaces.
 
         Parameters:
         ----------
@@ -90,7 +90,66 @@ class ErrorEstimate:
             + "\n"
         )
 
-    def _init_estimates_data_keyword(self):
+    def estimate_error(self):
+        """
+        Main method to estimate the errors in all nodes and edges of the grid bucket.
+
+        Returns
+        -------
+        None.
+
+        Technical Note
+        ---------------
+
+        GENERAL ALGORITHM OVERVIEW:
+
+        [1] Flux-related calculations
+
+            # 1.1 Compute full flux for each node of the grid bucket, and store them in
+                d["estimates"]["full_flux"]
+
+            # 1.2 Perform reconstruction of the subdomain velocities using RT0
+                extension of the normal fluxes and store them in d["estimates"]["rec_u"]
+
+        [2] Pressure-related calculations
+
+            # 2.1 Reconstruct the pressure. Perform a P1 reconstruction of the subdomain
+                pressures using the inverse of the local pressure gradient. The
+                reconstructed pressure is stored in d['estimates']["rec_p"].
+
+        [3] Computation of the upper bounds and norms
+
+            # 3.1 Compute errors for the entire grid bucket. The errors (squared) are stored
+                element-wise under d[self.estimates_kw]["diffusive_error"] and
+                d[self.estimates_kw]["residual_error"], respectivley.
+        """
+
+        # Error evaluation methods
+        from mdestimates._error_evaluation import compute_error_estimates
+
+        # Populating data dicitionaries with self.estimates_kw
+        self.init_estimates_data_keyword()
+
+        print("Performing velocity reconstruction...", end="")
+        vel_rec: mde.VelocityReconstruction = mde.VelocityReconstruction(self.gb)
+        # 1.1: Compute full flux
+        vel_rec.compute_full_flux()
+        # 1.2: Reconstruct velocity
+        vel_rec.reconstruct_velocity()
+        print("\u2713")
+
+        print("Performing pressure reconstruction...", end="")
+        p_rec: mde.PressureReconstruction = mde.PressureReconstruction(self.gb)
+        # 2.1: Reconstruct pressure
+        p_rec.reconstruct_pressure()
+        print("\u2713")
+
+        print("Computing upper bounds...", end="")
+        # 3.1 Evaluate norms and compute upper bounds
+        compute_error_estimates(self)
+        print("\u2713")
+
+    def init_estimates_data_keyword(self):
         """
         Initializes the keyword self.estimates_kw in all data dictionaries of the grid bucket.
 
@@ -109,98 +168,30 @@ class ErrorEstimate:
 
         return None
 
-    def estimate_error(self):
-        """
-        Main method to estimate the errors in all nodes and edges of the grid bucket.
-
-        Technical Note:
-        ---------------
-                            - GENERAL ALGORITHM OVERVIEW -
-
-        [1] Flux-related calculations
-
-            # 1.1 Compute full flux for each node of the grid bucket, and store
-                them in d["estimates"]["full_flux"]
-
-            # 1.2 Perform reconstruction of the subdomain velocities using RT0
-                extension of the normal fluxes and store them in
-                d["estimates"]["rec_u"]
-
-        [2] Pressure-related calculations
-
-            # 2.1 Reconstruct the pressure. Perform a P1 reconstruction of the
-                subdomain pressures using the inverse of the local pressure
-                gradient. The reconstructed pressure is stored
-                in d['estimates']["rec_p"].
-
-        [3] Computation of the upper bounds and norms
-
-            # 3.1 Compute errors for the entire grid bucket. The errors
-            (squared) are stored element-wise under
-            d[self.estimates_kw]["diffusive_error"] and
-            d[self.estimates_kw]["residual_error"], respectivley.
-
-        Returns
-        -------
-        None.
-
-        """
-
-        # Velocity reconstruction methods
-        from mdestimates._velocity_reconstruction import (
-            compute_full_flux,
-            reconstruct_velocity,
-        )
-
-        # Error evaluation methods
-        from mdestimates._error_evaluation import compute_error_estimates
-
-        # Populating data dicitionaries with self.estimates_kw
-        self._init_estimates_data_keyword()
-
-        print("Performing velocity reconstruction...", end="")
-        # 1.1: Compute full flux
-        compute_full_flux(self)
-
-        # 1.2: Reconstruct velocity
-        reconstruct_velocity(self)
-        print("\u2713")
-
-        print("Performing pressure reconstruction...", end="")
-        # 2.1: Reconstruct pressure
-        p_rec: mde.PressureReconstruction = mde.PressureReconstruction(self.gb)
-        p_rec.reconstruct_pressure()
-        print("\u2713")
-
-        print("Computing upper bounds...", end="")
-        # 3.1 Evaluate norms and compute upper bounds
-        compute_error_estimates(self)
-        print("\u2713")
-
     def transfer_error_to_state(self):
         """
-        Transfers the results from d[self.estimates_kw] to d[pp.STATE] for each
-        node and edge of the grid bucket. This method is especially useful
-        for exporting the results to Paraview via pp.Exporter.
+        Transfers the results from d[self.estimates_kw] to d[pp.STATE].
+
+        Note
+        -----
+        This method is especially useful for exporting the results via pp.Exporter.
 
         Raises
         ------
-        ValueError
-            If the errors have not been not been computed.
+        ValueError: If the errors have not been not been computed.
 
         Returns
         -------
         None.
 
         """
-
         errors = ["diffusive_error", "residual_error"]
 
-        def transfer(d, error_type):
-            if error_type in d[self.estimates_kw]:
-                d[pp.STATE][error_type] = d[self.estimates_kw][error_type].copy()
+        def transfer(data, error_type):
+            if error_type in data[self.estimates_kw]:
+                data[pp.STATE][error_type] = data[self.estimates_kw][error_type].copy()
             else:
-                raise ValueError("Estimates must be computed first")
+                raise ValueError("Estimates must be computed first.")
 
         # Transfer errors from subdomains
         for g, d in self.gb:
