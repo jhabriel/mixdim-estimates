@@ -1,4 +1,3 @@
-# from porepy.estimates import (utility, reconstructions, numerical_integration)
 from typing import (
     Any,
     Tuple,
@@ -14,6 +13,7 @@ from typing import (
 
 import numpy as np
 import porepy as pp
+import mdestimates as mde
 
 
 class ErrorEstimate:
@@ -24,25 +24,47 @@ class ErrorEstimate:
 
     def __init__(
         self,
-        gb,
-        kw="flow",
-        sd_operator_name="diffusion",
-        p_name="pressure",
-        flux_name="flux",
-        lam_name="mortar_flux",
-        estimates_kw="estimates",
+        gb: pp.GridBucket,
+        kw: str = "flow",
+        sd_operator_name: str = "diffusion",
+        p_name: str = "pressure",
+        flux_name: str = "flux",
+        lam_name: str = "mortar_flux",
+        estimates_kw: str = "estimates",
+        p_recon_method: str = "inv_local_gradp"
     ):
+        """
+        Class instatiation
 
-        self.gb = gb
-        self.kw = kw
-        self.sd_operator_name = sd_operator_name
-        self.p_name = p_name
-        self.flux_name = flux_name
-        self.lam_name = lam_name
-        self.estimates_kw = estimates_kw
+        Parameters:
+        ----------
+            gb (GridBucket): Mixed-dimensional grid bucket
+            kw (str): Keyword parameter. Default is "flow".
+            sd_operator_name (str): Subdomain operator name. Default is "diffusion".
+            p_name (str): Pressure name. Default is "pressure".
+            flux_name (str): Flux name. Default is "flux".
+            lam_name (str): Mortar flux name. Default is "mortar flux".
+            estimates_kw (str): Error estimates name. Default is "estimates".
+            p_recon_method (str): Pressure reconstruction method. Default is
+                                  "inv_local_gradp". The other valid method is
+                                  "direct_reconstruction".
+
+        Returns:
+        --------
+            None.
+        """
+
+        self.gb: pp.GridBucket = gb
+        self.kw: str = kw
+        self.sd_operator_name: str = sd_operator_name
+        self.p_name: str = p_name
+        self.flux_name: str = flux_name
+        self.lam_name: str = lam_name
+        self.estimates_kw: str = estimates_kw
+        self.p_recon_method: str = p_recon_method
 
     def __str__(self):
-        return "Error estimate object"
+        return "Error estimate object."
 
     def __repr__(self):
         return (
@@ -63,12 +85,14 @@ class ErrorEstimate:
             + " Interface variable: "
             + self.lam_name
             + "\n"
+            + " Pressure reconstruction method: "
+            + self.p_recon_method
+            + "\n"
         )
 
     def _init_estimates_data_keyword(self):
         """
-        Private method that initializes the keyword [self.estimates_kw] inside
-        the data dictionary for all nodes and edges of the entire grid bucket.
+        Initializes the keyword self.estimates_kw in all data dictionaries of the grid bucket.
 
         Returns
         -------
@@ -79,7 +103,7 @@ class ErrorEstimate:
         for g, d in self.gb:
             d[self.estimates_kw] = {}
 
-        # And, loop through all the edges
+        # Loop through all the edges
         for e, d_e in self.gb.edges():
             d_e[self.estimates_kw] = {}
 
@@ -87,9 +111,10 @@ class ErrorEstimate:
 
     def estimate_error(self):
         """
-        Main method to estimate the a posteriori errors. This method relies
-        on other private methods (see below).
+        Main method to estimate the errors in all nodes and edges of the grid bucket.
 
+        Technical Note:
+        ---------------
                             - GENERAL ALGORITHM OVERVIEW -
 
         [1] Flux-related calculations
@@ -127,11 +152,6 @@ class ErrorEstimate:
             reconstruct_velocity,
         )
 
-        # Pressure reconstruction methods
-        from mdestimates._pressure_reconstruction import (
-            reconstruct_pressure,
-        )
-
         # Error evaluation methods
         from mdestimates._error_evaluation import compute_error_estimates
 
@@ -148,7 +168,8 @@ class ErrorEstimate:
 
         print("Performing pressure reconstruction...", end="")
         # 2.1: Reconstruct pressure
-        reconstruct_pressure(self)
+        p_rec: mde.PressureReconstruction = mde.PressureReconstruction(self.gb)
+        p_rec.reconstruct_pressure()
         print("\u2713")
 
         print("Computing upper bounds...", end="")
