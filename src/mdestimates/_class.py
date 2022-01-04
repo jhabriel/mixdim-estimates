@@ -17,7 +17,7 @@ import mdestimates as mde
 
 
 class ErrorEstimate:
-    """ Parent class for computation of a posteriori error estimates. """
+    """ Parent class for the computation of a posteriori error estimates. """
 
     def __init__(
         self,
@@ -38,7 +38,9 @@ class ErrorEstimate:
 
         Parameters:
         ----------
-            gb (GridBucket): Mixed-dimensional grid bucket
+            gb (GridBucket): Mixed-dimensional grid bucket. It is assumed that a valid
+                pressure solution is stored in d[pp.STATE][self.p_name]. In addition, for
+                mixed methods, a valid flux solution is stored in d[pp.STATE][self.flux_name].
             kw (str): Keyword parameter. Default is "flow".
             sd_operator_name (str): Subdomain operator name. Default is "diffusion".
             p_name (str): Pressure name. Default is "pressure".
@@ -46,8 +48,7 @@ class ErrorEstimate:
             lam_name (str): Mortar flux name. Default is "mortar flux".
             estimates_kw (str): Error estimates name. Default is "estimates".
             p_recon_method (str): Pressure reconstruction method. Default is
-                                  "inv_local_gradp". The other valid method is
-                                  "direct_reconstruction".
+                "inv_local_gradp". The other valid method is "direct_reconstruction".
 
         Returns:
         --------
