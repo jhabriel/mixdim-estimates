@@ -1,12 +1,15 @@
+from __future__ import annotations
+import mdestimates as mde
 import porepy as pp
 import numpy as np
 import scipy.sparse as sps
 import mdestimates.estimates_utils as utils
 import quadpy as qp
 
-from mdestimates._velocity_reconstruction import (
-    _internal_source_term_contribution as mortar_jump,
-)
+from typing import Tuple
+
+Edge = Tuple[pp.Grid, pp.Grid]
+
 
 #%% Compute errors
 def compute_error_estimates(self):
@@ -29,7 +32,7 @@ def compute_error_estimates(self):
             continue
 
         # Rotate grid. If g == gb.dim_max() this has no effect.
-        g_rot = utils.rotate_embedded_grid(g)
+        g_rot = mde.RotatedGrid(g)
 
         # Obtain the subdomain diffusive flux error
         diffusive_error = subdomain_diffusive_error(self, g, g_rot, d)
@@ -50,7 +53,7 @@ def compute_error_estimates(self):
 
 
 #%% Subdomain errors
-def subdomain_diffusive_error(self, g, g_rot, d):
+def subdomain_diffusive_error(self, g: pp.Grid, g_rot: mde.RotatedGrid, d: dict):
     """
     Computes the (square) of the subdomain diffusive errors, given (locally) for
     an element E by:
@@ -124,7 +127,7 @@ def subdomain_diffusive_error(self, g, g_rot, d):
 
             gradp_x = p[0] * np.ones_like(x)
 
-            int_x = (k ** (-0.5) * veloc_x + k ** (0.5) * gradp_x) ** 2
+            int_x = (k ** (-0.5) * veloc_x + k ** 0.5 * gradp_x) ** 2
 
             return int_x
 
@@ -136,8 +139,8 @@ def subdomain_diffusive_error(self, g, g_rot, d):
             gradp_x = p[0] * np.ones_like(x[0])
             gradp_y = p[1] * np.ones_like(x[1])
 
-            int_x = (k ** (-0.5) * veloc_x + k ** (0.5) * gradp_x) ** 2
-            int_y = (k ** (-0.5) * veloc_y + k ** (0.5) * gradp_y) ** 2
+            int_x = (k ** (-0.5) * veloc_x + k ** 0.5 * gradp_x) ** 2
+            int_y = (k ** (-0.5) * veloc_y + k ** 0.5 * gradp_y) ** 2
 
             return int_x + int_y
 
@@ -151,9 +154,9 @@ def subdomain_diffusive_error(self, g, g_rot, d):
             gradp_y = p[1] * np.ones_like(x[1])
             gradp_z = p[2] * np.ones_like(x[2])
 
-            int_x = (k ** (-0.5) * veloc_x + k ** (0.5) * gradp_x) ** 2
-            int_y = (k ** (-0.5) * veloc_y + k ** (0.5) * gradp_y) ** 2
-            int_z = (k ** (-0.5) * veloc_z + k ** (0.5) * gradp_z) ** 2
+            int_x = (k ** (-0.5) * veloc_x + k ** 0.5 * gradp_x) ** 2
+            int_y = (k ** (-0.5) * veloc_y + k ** 0.5 * gradp_y) ** 2
+            int_z = (k ** (-0.5) * veloc_z + k ** 0.5 * gradp_z) ** 2
 
             return int_x + int_y + int_z
 
@@ -163,7 +166,7 @@ def subdomain_diffusive_error(self, g, g_rot, d):
     return diffusive_error
 
 
-def subdomain_residual_error(self, g, g_rot, d):
+def subdomain_residual_error(self, g: pp.Grid, g_rot: mde.RotatedGrid, d: dict):
     """
     Computes the (square) of the residual errors, given (locally) for
     an element E by:
@@ -228,7 +231,9 @@ def subdomain_residual_error(self, g, g_rot, d):
     u = utils.poly2col(recon_u)
 
     # Obtain contribution from mortar jump to local mass conservation
-    jump_in_mortars = (mortar_jump(self, g) / g.cell_volumes).reshape(g.num_cells, 1)
+    rec_vel = mde.VelocityReconstruction(self.gb)
+    mortar_jump = rec_vel.internal_source_term_contribution(g)
+    jump_in_mortars = (mortar_jump / g.cell_volumes).reshape(g.num_cells, 1)
 
     # Declare integrands and prepare for integration
     def integrand(x):
@@ -252,7 +257,7 @@ def subdomain_residual_error(self, g, g_rot, d):
 
 
 #%% Interface error
-def interface_diffusive_error(self, e, d_e):
+def interface_diffusive_error(self, e: Edge, d_e: dict):
     """
     Wrapper for obtaining the diffusive error on the interfaces given (locally)
     for a mortar element E by:
@@ -311,7 +316,12 @@ def interface_diffusive_error(self, e, d_e):
     return diffusive_error
 
 
-def _get_high_pressure_trace(self, g_l, g_h, d_h, frac_faces):
+def _get_high_pressure_trace(self,
+                             g_l: pp.Grid,
+                             g_h: pp.Grid,
+                             d_h: dict,
+                             frac_faces:np.array
+                             ) -> np.ndarray:
     """
     Obtains the coefficients of the P1 (projected) traces of the pressure
 
@@ -338,7 +348,7 @@ def _get_high_pressure_trace(self, g_l, g_h, d_h, frac_faces):
 
     """
 
-    def get_edge_lag_coo(self, grid):
+    def get_edge_lag_coo(self, grid: mde.RotatedGrid):
         """
         Utility function to get hold of the coordinates of the Lagrangian nodes
         corresponding to the internal higher-dimensional boundary
@@ -365,8 +375,8 @@ def _get_high_pressure_trace(self, g_l, g_h, d_h, frac_faces):
         return lagran_coo
 
     # Rotate both grids, and obtain rotation matrix and effective dimension
-    gh_rot = utils.rotate_embedded_grid(g_h)
-    gl_rot = utils.rotate_embedded_grid(g_l)
+    gh_rot = mde.RotatedGrid(g_h)
+    gl_rot = mde.RotatedGrid(g_l)
     R = gl_rot.rotation_matrix
     dim_bool = gl_rot.dim_bool
 
@@ -405,7 +415,7 @@ def _get_high_pressure_trace(self, g_l, g_h, d_h, frac_faces):
     return trace_pressure
 
 
-def _get_low_pressure(self, g_l, d_l, frac_cells):
+def _get_low_pressure(self, g_l: pp.Grid, d_l: dict, frac_cells: np.ndarray):
     """
     Obtains the coefficients of the (projected) lower-dimensional pressures
 
@@ -440,7 +450,7 @@ def _get_low_pressure(self, g_l, d_l, frac_cells):
     return p_low
 
 
-def _get_normal_velocity(self, d_e):
+def _get_normal_velocity(self, d_e: dict):
     """
     Obtain the normal velocities. That is, the mortar fluxes scaled by the
     mortar cell measure (area in 2D, length in 1D, one in 0D)
@@ -463,12 +473,12 @@ def _get_normal_velocity(self, d_e):
 
     # Retrieve mortar fluxes from edge dictionary
     if self.lam_name in d_e[pp.STATE]:
-        mortar_flux = d_e[pp.STATE][self.lam_name].copy()
+        mortar_flux: np.ndarray = d_e[pp.STATE][self.lam_name].copy()
     else:
         raise ValueError("Mortar fluxes not found in the data dicitionary")
 
     # Get hold of mortar grid and obtain the volumes of the mortar cells
-    mg = d_e["mortar_grid"]
+    mg: pp.MortarGrid = d_e["mortar_grid"]
     cell_volumes = mg.cell_volumes
 
     # Obtain the normal velocities and reshape into a column array
@@ -479,7 +489,7 @@ def _get_normal_velocity(self, d_e):
 
 
 #%% Interface error [matching grids]
-def _interface_diffusive_error_0d(self, e, d_e):
+def _interface_diffusive_error_0d(self, e: Edge, d_e: dict):
     """
     Computes interface diffusive flux error for 0D mortar grids
 
@@ -531,7 +541,7 @@ def _interface_diffusive_error_0d(self, e, d_e):
     frac_cells, frac_faces, _ = sps.find(d_e["face_cells"])
 
     # Rotate 1d-grid
-    gh_rot = utils.rotate_embedded_grid(g_h)
+    gh_rot = mde.RotatedGrid(g_h)
 
     # Obtain the trace of the pressure of the 1D grid
     cells_of_frac_faces, _, _ = sps.find(g_h.cell_faces[frac_faces].T)
@@ -560,7 +570,7 @@ def _interface_diffusive_error_0d(self, e, d_e):
     return diffusive_error
 
 
-def _interface_diffusive_error_1d(self, e, d_e):
+def _interface_diffusive_error_1d(self, e: Edge, d_e: dict):
     """
     Computes diffusive flux error (squared) for one-dimensional mortar grids
 
@@ -583,7 +593,7 @@ def _interface_diffusive_error_1d(self, e, d_e):
 
     """
 
-    def compute_sidegrid_error(self, side_tuple):
+    def compute_sidegrid_error(self, side_tuple: Tuple):
         """
         This functions projects a mortar quantity to the side grids, and then
         performs the integration on the given side grid.
@@ -605,7 +615,7 @@ def _interface_diffusive_error_1d(self, e, d_e):
         sidegrid = side_tuple[1]
 
         # Rotate side-grid
-        sidegrid_rot = utils.rotate_embedded_grid(sidegrid)
+        sidegrid_rot = mde.RotatedGrid(sidegrid)
 
         # Obtain QuadPy elements
         elements = utils.get_quadpy_elements(sidegrid, sidegrid_rot)
@@ -619,7 +629,7 @@ def _interface_diffusive_error_1d(self, e, d_e):
         def integrand(x):
             coors = x[np.newaxis, :, :]  # this is needed for 1D grids
             p_jump = utils.eval_P1(deltap_side, coors)
-            return (k_side ** (-0.5) * normalvel_side + k_side ** (0.5) * p_jump) ** 2
+            return (k_side ** (-0.5) * normalvel_side + k_side ** 0.5 * p_jump) ** 2
 
         # Compute integral
         diffusive_error_side = method.integrate(integrand, elements)
@@ -676,7 +686,7 @@ def _interface_diffusive_error_1d(self, e, d_e):
     return diffusive_error
 
 
-def _interface_diffusive_error_2d(self, e, d_e):
+def _interface_diffusive_error_2d(self, e: Edge, d_e: dict):
 
     """
     Computes diffusive flux error (squared) for two-dimensional mortar grids
@@ -700,7 +710,7 @@ def _interface_diffusive_error_2d(self, e, d_e):
 
     """
 
-    def compute_sidegrid_error(self, side_tuple):
+    def compute_sidegrid_error(self, side_tuple: Tuple):
         """
         This functions projects a mortar quantity to the side grids, and then
         performs the integration on the given side grid.
@@ -722,7 +732,7 @@ def _interface_diffusive_error_2d(self, e, d_e):
         sidegrid = side_tuple[1]
 
         # Rotate side-grid
-        sidegrid_rot = utils.rotate_embedded_grid(sidegrid)
+        sidegrid_rot = mde.RotatedGrid(sidegrid)
 
         # Obtain QuadPy elements
         elements = utils.get_quadpy_elements(sidegrid, sidegrid_rot)
@@ -735,7 +745,7 @@ def _interface_diffusive_error_2d(self, e, d_e):
         # Declare integrand
         def integrand(x):
             p_jump = utils.eval_P1(deltap_side, x)
-            return (k_side ** (-0.5) * normalvel_side + k_side ** (0.5) * p_jump) ** 2
+            return (k_side ** (-0.5) * normalvel_side + k_side ** 0.5 * p_jump) ** 2
 
         # Compute integral
         diffusive_error_side = method.integrate(integrand, elements)
@@ -793,7 +803,7 @@ def _interface_diffusive_error_2d(self, e, d_e):
 
 
 #%% Interface error [non-matching grids]
-def _mortar_highdim_faces_mapping(mg, side):
+def _mortar_highdim_faces_mapping(mg: pp.MortarGrid, side: int):
     """
     Get mortar cells - high-dim fracture faces mapping for a given interface side
 
@@ -826,7 +836,7 @@ def _mortar_highdim_faces_mapping(mg, side):
     return mortar_highfaces_side_map
 
 
-def _mortar_lowdim_cells_mapping(mg, side):
+def _mortar_lowdim_cells_mapping(mg: pp.MortarGrid, side: int):
     """
     Get mortar cells - low-dim fracture cells mapping for a given interface side
 
@@ -859,7 +869,7 @@ def _mortar_lowdim_cells_mapping(mg, side):
     return mortar_lowcells_side_map
 
 
-def _sorted_highdim_edge_grid(g_h, g_l, mg, side):
+def _sorted_highdim_edge_grid(g_h: pp.Grid, g_l: pp.Grid, mg: pp.MortarGrid, side: int):
     """
     Creates a sorted, rotated pseudo-grid from the high-dimensional fracture
     faces nodes that are adjacent to the given side of the mortar grid
@@ -903,7 +913,7 @@ def _sorted_highdim_edge_grid(g_h, g_l, mg, side):
     frac_faces_cc = g_h.face_centers[:, frac_faces]
     # Now, we need to rotate to the face centers. For the purpose, we
     # use the rotation matrix of the lower-dimensional grid
-    gl_rot = utils.rotate_embedded_grid(g_l)  # rotate low-dim grid
+    gl_rot = mde.RotatedGrid(g_l)  # rotate low-dim grid
     R = gl_rot.rotation_matrix  # rotation matrix
     rot_frac_faces_minus_cc = np.dot(R, frac_faces_cc)
     # We're only interested in the active dimension
@@ -938,7 +948,7 @@ def _sorted_highdim_edge_grid(g_h, g_l, mg, side):
     return rot_frac_faces_nodes_coo, sorted_frac_faces
 
 
-def _sorted_side_grid(mg, g_l, side):
+def _sorted_side_grid(mg: pp.MortarGrid, g_l: pp.Grid, side: int):
     """
     Creates a sorted, rotated pseudo-grid from the nodes composing the mortar
     cells of the given side of the mortar grid
@@ -983,7 +993,7 @@ def _sorted_side_grid(mg, g_l, side):
     # We will sort the mortar cells using the cell centers as reference
     # NOTE: I'm not sure if this is necessary, but it does not harm to do it
     sg_cc = side_grid.cell_centers  # retrieve cell-centers
-    gl_rot = utils.rotate_embedded_grid(g_l)  # rotate low-dim grid
+    gl_rot = mde.RotatedGrid(g_l)  # rotate low-dim grid
     R = gl_rot.rotation_matrix  # extract rotation matrix
     rot_sg_cc = np.dot(R, sg_cc)  # rotate cell-centers
     rot_sg_cc = rot_sg_cc[gl_rot.dim_bool]  # we need only the active dim
@@ -1015,7 +1025,7 @@ def _sorted_side_grid(mg, g_l, side):
     return rot_mortar_cells_nodes_coo, sorted_mortar_cells
 
 
-def _sorted_low_grid(g_l):
+def _sorted_low_grid(g_l: pp.Grid):
     """
     Creates a sorted, rotated pseudo-grid from the nodes composing the lower-
     dimensional cells. Note that no notion of sides should be prescribed, since
@@ -1047,7 +1057,7 @@ def _sorted_low_grid(g_l):
     # The cells of the lower-dimensional grid do not have sides
     low_cells = np.arange(g_l.num_cells)
     # We will sort the cells using the cell centers as a reference
-    gl_rot = utils.rotate_embedded_grid(g_l)
+    gl_rot = mde.RotatedGrid(g_l)
     R = gl_rot.rotation_matrix
     sorted_idx = np.argsort(gl_rot.cell_centers).flatten()
     sorted_low_cells = low_cells[sorted_idx]
@@ -1072,7 +1082,7 @@ def _sorted_low_grid(g_l):
     return rot_low_cells_nodes_coo, sorted_low_cells
 
 
-def _merge_grids(low_grid, mortar_grid, high_grid):
+def _merge_grids(low_grid: np.ndarray, mortar_grid: np.ndarray, high_grid: np.ndarray):
     """
     Unifies lower-dimensional, mortar, and higher-dimensional grids into one
 
@@ -1111,7 +1121,7 @@ def _merge_grids(low_grid, mortar_grid, high_grid):
     return merged_grid
 
 
-def _get_grid_uniongrid_elements(merged_grid, grid):
+def _get_grid_uniongrid_elements(merged_grid: np.ndarray, grid: np.ndarray):
     """
     Get the mapping between a grid and the merged grid
 
@@ -1173,7 +1183,12 @@ def _get_grid_uniongrid_elements(merged_grid, grid):
     return elements
 
 
-def _project_poly_to_merged_grid(self, e, d_e, sorted_elements, merged_grid_map):
+def _project_poly_to_merged_grid(self,
+                                 e: Edge,
+                                 d_e: dict,
+                                 sorted_elements: list,
+                                 merged_grid_map: list
+                                 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Projects grid quantities (pressures, normal permeabilities, and
     normal_velocities) to the merged grid
@@ -1186,11 +1201,11 @@ def _project_poly_to_merged_grid(self, e, d_e, sorted_elements, merged_grid_map)
         Edge dictionary.
     sorted_elements : List of length 3
         Containing the sorted (global) indices of the grid elements. The list
-        must be passed using the following ordering:
+        must be passed using the following order:
             [sorted_low_cells, sorted_mortar_cells, sorted_high_faces]
     merged_grid_map : List of length 3
-        Containing the (local) mapping between the grid and the merged grid. he list
-        must be passed using the following ordering:
+        Containing the (local) mapping between the grid and the merged grid. Thhe list
+        must be passed using the following order:
             [low_mapping, mortar_mapping, high_mapping]
 
     Returns
@@ -1245,7 +1260,7 @@ def _project_poly_to_merged_grid(self, e, d_e, sorted_elements, merged_grid_map)
     return p_jump_merged, k_perp, normal_vel_merged
 
 
-def _interface_diffusive_error_nonmatching_1d(self, e, d_e):
+def _interface_diffusive_error_nonmatching_1d(self, e: Edge, d_e: dict) -> np.ndarray:
     """
     Computes the diffusive error (squared) for the entire mortar grid. This
     function should be used when there exists a non-matching coupling between
