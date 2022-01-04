@@ -1,11 +1,12 @@
-import mdestimates
+from __future__ import annotations
+import mdestimates as mde
 import porepy as pp
 import numpy as np
 import scipy.sparse as sps
 import mdestimates.estimates_utils as utils
 
 
-class VelocityReconstruction(mdestimates.ErrorEstimate):
+class VelocityReconstruction(mde.ErrorEstimate):
     """ Main class for RT0 velocity reconstruction."""
 
     def __init__(self, gb: pp.GridBucket):
@@ -146,7 +147,7 @@ class VelocityReconstruction(mdestimates.ErrorEstimate):
                 continue
 
             # First, rotate the grid. Note that if g == gb.dim_max(), this has no effect.
-            g_rot = utils.rotate_embedded_grid(g)
+            g_rot = mde.RotatedGrid(g)
 
             # Useful mappings
             cell_faces_map, _, _ = sps.find(g.cell_faces)
@@ -168,7 +169,7 @@ class VelocityReconstruction(mdestimates.ErrorEstimate):
             # the sum of internal and external source terms
             full_flux_local_div = (sign_normals_cell * full_flux[faces_cell]).sum(axis=1)
             external_src = d[pp.PARAMETERS][self.kw]["source"]
-            internal_src = self._internal_source_term_contribution(g)
+            internal_src = self.internal_source_term_contribution(g)
             np.testing.assert_allclose(
                 full_flux_local_div,
                 external_src + internal_src,
@@ -205,7 +206,7 @@ class VelocityReconstruction(mdestimates.ErrorEstimate):
 
         return None
 
-    def _internal_source_term_contribution(self, g):
+    def internal_source_term_contribution(self, g: pp.Grid):
         """
         Obtain flux contribution from higher-dimensional neighboring interfaces
         to lower-dimensional subdomains in the form of internal source terms
@@ -249,7 +250,7 @@ class VelocityReconstruction(mdestimates.ErrorEstimate):
         return internal_source
 
     @staticmethod
-    def _reconstructed_face_fluxes(g: pp.Grid, g_rot, coeff):
+    def _reconstructed_face_fluxes(g: pp.Grid, g_rot: mde.RotatedGrid, coeff: np.ndarray):
         """
         Obtain reconstructed fluxes at the cell centers for a given mesh
 
