@@ -1,89 +1,12 @@
+from __future__ import annotations
 import porepy as pp
 import numpy as np
 import numpy.matlib as matlib
+import mdestimates as mde
 import scipy.sparse as sps
 
-#%% Geometry related function
-def rotate_embedded_grid(g):
-    """
-    Rotates grid to account for embedded fractures.
 
-    Note that the pressure and flux reconstruction use the rotated grids,
-    where only the relevant dimensions are taken into account, e.g., a
-    one-dimensional tilded fracture will be represented by a three-dimensional
-    grid, where only the first dimension is used.
-
-    Parameters
-    ----------
-    g : PorePy object
-        Original (unrotated) PorePy grid.
-
-    Returns
-    -------
-    g_rot : Rotated object
-        Rotated PorePy grid.
-
-    """
-
-    class RotatedGrid:
-        """
-        This class creates a rotated grid object.
-        """
-
-        def __init__(
-            self,
-            cell_centers,
-            face_normals,
-            face_centers,
-            rotation_matrix,
-            dim,
-            dim_bool,
-            nodes,
-        ):
-
-            self.cell_centers = cell_centers
-            self.face_normals = face_normals
-            self.face_centers = face_centers
-            self.rotation_matrix = rotation_matrix
-            self.dim_bool = dim_bool
-            self.dim = dim
-            self.nodes = nodes
-
-        def __str__(self):
-            return "Rotated pseudo-grid object"
-
-        def __repr__(self):
-            return (
-                "Rotated pseudo-grid object with atributes:\n"
-                + "cell_centers\n"
-                + "face_normals\n"
-                + "face_centers\n"
-                + "rotation_matrix\n"
-                + "dim\n"
-                + "dim_bool\n"
-                + "nodes"
-            )
-
-    # Rotate grid
-    (
-        cell_centers,
-        face_normals,
-        face_centers,
-        rotation_matrix,
-        dim_bool,
-        nodes,
-    ) = pp.map_geometry.map_grid(g)
-
-    # Create rotated grid object
-    dim = dim_bool.sum()
-    rotated_object = RotatedGrid(
-        cell_centers, face_normals, face_centers, rotation_matrix, dim, dim_bool, nodes
-    )
-
-    return rotated_object
-
-
-def get_opposite_side_nodes(g):
+def get_opposite_side_nodes(g: pp.Grid):
     """
     Computes opposite side nodes for each face of each cell in the grid
 
@@ -119,7 +42,7 @@ def get_opposite_side_nodes(g):
     return opposite_nodes
 
 
-def get_sign_normals(g, g_rot):
+def get_sign_normals(g: pp.Grid, g_rot: mde.RotatedGrid):
     """
     Computes sign of the face normals for each element in the grid
 
@@ -188,7 +111,7 @@ def get_sign_normals(g, g_rot):
     return sign_normals
 
 
-def get_quadpy_elements(g, g_rot):
+def get_quadpy_elements(g: pp.Grid, g_rot: mde.RotatedGrid):
     """
     Assembles the elements of a given grid in quadpy format
     For a 2D example see: https://pypi.org/project/quadpy/
