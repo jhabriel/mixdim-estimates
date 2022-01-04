@@ -1,3 +1,4 @@
+from __future__ import annotations
 import porepy as pp
 import numpy as np
 import scipy.sparse as sps
@@ -13,13 +14,15 @@ class PressureReconstruction(mde.ErrorEstimate):
 
     def reconstruct_pressure(self):
         """
-        Reconstructs the pressure in all subdomains of the grid bucket
+        Reconstructs the pressure in all subdomains of the grid bucket.
 
         Returns
         -------
         None.
 
-        NOTE: The data dictionary of each node of the grid bucket is updated
+        Notes
+        -----
+        (*) The data dictionary of each node of the grid bucket is updated
         with the field d[self.estimates_kw]["recon_p"], a NumPy nd-array
         containing the coefficients of the reconstructed pressure.
         """
@@ -35,12 +38,12 @@ class PressureReconstruction(mde.ErrorEstimate):
                 continue
 
             # Rotate grid
-            g_rot = utils.rotate_embedded_grid(g)
+            g_rot: mde.RotatedGrid = mde.RotatedGrid(g)
 
             # Obtain Lagrangian coordinates
             if self.p_recon_method == "inv_local_gradp":
                 point_val, point_coo = self.inverse_local_gradp(g, g_rot, d)
-            elif self.p_recon_method == "direct_reconsteruction":
+            elif self.p_recon_method == "direct_reconstruction":
                 raise NotImplementedError
             else:
                 raise ValueError("Pressure reconstruction method not implemented.")
@@ -57,7 +60,7 @@ class PressureReconstruction(mde.ErrorEstimate):
 
         return None
 
-    def inverse_local_gradp(self, g, g_rot, d):
+    def inverse_local_gradp(self, g: pp.Grid, g_rot: mde.RotatedGrid, d: dict):
         """
         Pressure reconstruction using the inverse of the numerical fluxes.
         Author: Eirik Keilegavlen
