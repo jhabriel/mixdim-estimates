@@ -1,19 +1,8 @@
-from typing import (
-    Any,
-    Tuple,
-    Dict,
-    Generator,
-    List,
-    Iterable,
-    Callable,
-    Union,
-    TypeVar,
-    Generic,
-)
-
 import numpy as np
 import porepy as pp
 import mdestimates as mde
+
+from typing import Union
 
 
 class ErrorEstimate:
@@ -37,22 +26,26 @@ class ErrorEstimate:
         diffusive flux errors on interfaces.
 
         Parameters:
-        ----------
+        -----------
             gb (GridBucket): Mixed-dimensional grid bucket. It is assumed that a valid
                 pressure solution is stored in d[pp.STATE][self.p_name]. In addition, for
                 mixed methods, a valid flux solution is stored in d[pp.STATE][self.flux_name].
+
             kw (str): Keyword parameter. Default is "flow".
+
             sd_operator_name (str): Subdomain operator name. Default is "diffusion".
+
             p_name (str): Pressure name. Default is "pressure".
+
             flux_name (str): Flux name. Default is "flux".
+
             lam_name (str): Mortar flux name. Default is "mortar flux".
+
             estimates_kw (str): Error estimates name. Default is "estimates".
+
             p_recon_method (str): Pressure reconstruction method. Default is
                 "inv_local_gradp". The other valid method is "direct_reconstruction".
 
-        Returns:
-        --------
-            None.
         """
 
         self.gb: pp.GridBucket = gb
@@ -95,34 +88,31 @@ class ErrorEstimate:
         """
         Main method to estimate the errors in all nodes and edges of the grid bucket.
 
-        Returns
-        -------
-        None.
+        Technical note
+        --------------
 
-        Technical Note
-        ---------------
-
-        GENERAL ALGORITHM OVERVIEW:
+        General algortihm overview:
 
         [1] Flux-related calculations
 
-            # 1.1 Compute full flux for each node of the grid bucket, and store them in
+            [1.1] Compute full flux for each node of the grid bucket, and store them in
                 d["estimates"]["full_flux"]
-
-            # 1.2 Perform reconstruction of the subdomain velocities using RT0
+            [1.2] Perform reconstruction of the subdomain velocities using RT0
                 extension of the normal fluxes and store them in d["estimates"]["rec_u"]
 
         [2] Pressure-related calculations
 
-            # 2.1 Reconstruct the pressure. Perform a P1 reconstruction of the subdomain
+            [2.1] Reconstruct the pressure. Perform a P1 reconstruction of the subdomain
                 pressures using the inverse of the local pressure gradient. The
                 reconstructed pressure is stored in d['estimates']["rec_p"].
 
-        [3] Computation of the upper bounds and norms
+        [3] Computation of the error estimates
 
-            # 3.1 Compute errors for the entire grid bucket. The errors (squared) are stored
-                element-wise under d[self.estimates_kw]["diffusive_error"] and
-                d[self.estimates_kw]["residual_error"], respectivley.
+            [3.1] Compute diffusive errors for the entire grid bucket. The errors (squared)
+                are stored element-wise under d[self.estimates_kw]["diffusive_error"]
+            [3.2] Compute residual errors for the entire grid bucket. The errors (squared)
+                are stored element-wise under d[self.estimates_kw]["residual_error"]
+
         """
 
         # Error evaluation methods
@@ -154,11 +144,8 @@ class ErrorEstimate:
         """
         Initializes the keyword self.estimates_kw in all data dictionaries of the grid bucket.
 
-        Returns
-        -------
-        None.
-
         """
+
         # Loop through all the nodes
         for g, d in self.gb:
             d[self.estimates_kw] = {}
@@ -173,22 +160,19 @@ class ErrorEstimate:
         """
         Transfers the results from d[self.estimates_kw] to d[pp.STATE].
 
-        Note
-        -----
-        This method is especially useful for exporting the results via pp.Exporter.
-
         Raises
         ------
-        ValueError: If the errors have not been not been computed.
+            ValueError: If the errors have not been not been computed.
 
-        Returns
-        -------
-        None.
+        Note
+        -----
+            This method is especially useful for exporting the results via pp.Exporter.
 
         """
+
         errors = ["diffusive_error", "residual_error"]
 
-        def transfer(data, error_type):
+        def transfer(data: dict, error_type: str):
             if error_type in data[self.estimates_kw]:
                 data[pp.STATE][error_type] = data[self.estimates_kw][error_type].copy()
             else:
@@ -209,14 +193,13 @@ class ErrorEstimate:
 
         return None
 
-    def get_majorant(self):
+    def get_majorant(self) -> float:
         """
-            Computes the majorant for the whole fracture network.
+        Computes the majorant for the whole fracture network.
 
         Returns
         -------
-        majorant : Scalar
-            Global error estimate.
+            majorant (float): Global error estimate.
 
         """
 
@@ -239,18 +222,17 @@ class ErrorEstimate:
 
         return majorant
 
-    def get_scaled_majorant(self):
+    def get_scaled_majorant(self) -> float:
         """
         Get the permeability-scaled majorant for the whole fracture network.
 
         Returns
         -------
-        scaled_majorant : Scalar
-            Scaled value of the majorant.
+            scaled_majorant (float): Scaled value of the majorant.
 
         """
 
-        # Determine the highest permeability in the fracture network
+        # Determine the largest permeability in the fracture network
         scaling_factors = []
         for g, d in self.gb:
             if g.dim != 0:
@@ -267,27 +249,25 @@ class ErrorEstimate:
 
         return scaled_majorant
 
-    def get_local_errors(self, g, d):
+    def get_local_errors(self, g: Union[pp.Grid, pp.MortarGrid], d: dict) -> float:
         """
         Computes the sum of the scaled local errors of a subdomain or interface
 
         Parameters
         ----------
-        g : PorePy object
-            Grid (for subdomains) or mortar grid (for interfaces)
-        d : dictionary
-            Data dictionary containing the estimates
+            g (pp.Grid or pp.MortarGrid): Grid for subdomains or mortar grid for interfaces.
+            d (dict): Data dictionary containing the estimates.
 
         Raises
         ------
-        ValueError
-            If the errors have not been computed.
-            If there are any inconsistency in the grids dimensions
+            ValueError
+                (*) If the errors have not been computed.
+                (*) If there is any inconsistency in the grids dimensions.
 
         Returns
         -------
-        local_error : Scalar
-            Local error, i.e, sum of individual (element) squared errors.
+            local_error (float): Local error, i.e., square root of the sum of individual
+                squared errors.
 
         """
 
@@ -309,27 +289,26 @@ class ErrorEstimate:
 
         return np.sqrt(diffusive_error)
 
-    def get_scaled_local_errors(self, g, d):
+    def get_scaled_local_errors(self, g: Union[pp.Grid, pp.MortarGrid], d: dict) -> float:
         """
-        Computes the sum of the scaled local errors of a subdomain or interface
+        Computes the sum of the scaled local errors of a subdomain or interface.
 
         Parameters
         ----------
-        g : PorePy object
-            Grid (for subdomains) or mortar grid (for interfaces)
-        d : dictionary
-            Data dictionary containing the estimates
+            g (pp.Grid or pp.MortarGrid): Grid for subdomains or mortar grid for interfaces.
+            d (dict): Data dictionary containing the estimates.
 
         Raises
         ------
-        ValueError
-            If the errors have not been computed.
-            If there are any inconsistency in the grids dimensions
+            ValueError
+                (*) If the errors have not been computed.
+                (*) If there are any inconsistency in the grids dimensions
 
         Returns
         -------
-        local_error : Scalar
-            Local error, i.e, sum of individual (element) squared errors.
+            local_error (float): Local error, i.e., square root of the sum of individual
+                squared scaled errors.
+
         """
 
         # Boolean variable to check if it is a Mortar grid or not
@@ -360,21 +339,14 @@ class ErrorEstimate:
 
         return np.sqrt(diffusive_error)
 
-    def print_summary(self, scaled=True):
+    def print_summary(self, scaled: bool = True):
         """
-        Wrapper for printing a summary of the global and local errors for the
-        whole fracture network classified by topological dimension. By default,
-        the scaled version of the errors are printed.
+        Print summary of errors. If scaled is True, the scaled version of the errors is used.
 
         Parameters
         ----------
-        scaled: Bool
-            Wheter the scaled version of the errors will be printed or not. The
-            default is True.
-
-        Returns
-        -------
-        None.
+            scaled (bool): Wheter the scaled version of the errors will be printed or not. The
+                default is True.
 
         """
 
@@ -385,11 +357,7 @@ class ErrorEstimate:
 
     def _print_summary_original(self):
         """
-        Prints summary of the global and local errors
-
-        Returns
-        -------
-        None.
+        Prints summary of the errors.
 
         """
 
@@ -431,11 +399,7 @@ class ErrorEstimate:
 
     def _print_summary_scaled(self):
         """
-        Prints summary of scaled global and local errors
-
-        Returns
-        -------
-        None.
+        Prints summary of scaled errors.
 
         """
 
