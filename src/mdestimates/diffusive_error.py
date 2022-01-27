@@ -12,7 +12,7 @@ Edge = Tuple[pp.Grid, pp.Grid]
 
 
 class DiffusiveError(mde.ErrorEstimate):
-    """ Parent class for estimating diffuisve flux errors."""
+    """ Parent class for the estimation of diffusive errors. """
 
     def __init__(self, gb: pp.GridBucket):
         super().__init__(gb)
@@ -21,10 +21,11 @@ class DiffusiveError(mde.ErrorEstimate):
         """
         Computes square of the diffusive flux error for all nodes and edges of the grid bucket.
 
-        Technical note:
-        ---------------
+        Note:
+        -----
             In each data dictionary, the square of the diffusive flux error will be stored in
             data[self.estimates_kw]["diffusive_error"].
+
         """
 
         # Loop through all the nodes of the grid bucket
@@ -32,7 +33,6 @@ class DiffusiveError(mde.ErrorEstimate):
             # Handle the case of zero-dimensional subdomains
             if g.dim == 0:
                 d[self.estimates_kw]["diffusive_error"] = None
-                d[self.estimates_kw]["residual_error"] = None
                 continue
 
             # Rotate grid. If g == gb.dim_max() this has no effect.
