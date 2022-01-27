@@ -163,16 +163,19 @@ class VelocityReconstruction(mde.ErrorEstimate):
             # Retrieve full flux from the data dictionary
             full_flux = d[self.estimates_kw]["full_flux"]
 
+            # Retrieve and save jump in mortar fluxes
+            mortar_jump = self.internal_source_term_contribution(g)
+            d[self.estimates_kw]["mortar_jump"] = mortar_jump
+
             # TEST -> Local mass conservation
             # Check if mass conservation is satisfied on a cell basis, in order to do
             # this, we check on a local basis, if the divergence of the flux equals
             # the sum of internal and external source terms
             full_flux_local_div = (sign_normals_cell * full_flux[faces_cell]).sum(axis=1)
             external_src = d[pp.PARAMETERS][self.kw]["source"]
-            internal_src = self.internal_source_term_contribution(g)
             np.testing.assert_allclose(
                 full_flux_local_div,
-                external_src + internal_src,
+                external_src + mortar_jump,
                 rtol=1e-6,
                 atol=1e-3,
                 err_msg="Error estimates only valid for local mass-conservative methods.",
