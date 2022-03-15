@@ -41,90 +41,25 @@ def make_constrained_mesh(h=0.1):
 
     return gb
 
-
-def create_non_matching_gridbucket(h_2d, h_1d, h_mortar):
-    """
-    Generates a gridbucket containing non-matching grids
-
-    Parameters
-    ----------
-    h_2d : Float
-        Mesh size of the higher-dimensional grid
-    h_1d : Float
-        Mesh size of the lower-dimensional grid
-    h_mortar : Float
-        Mesh size of the mortar grid
-
-    Raises
-    ------
-    Warning
-        If the subdomain cells are smaller than the mortar cell
-
-    Returns
-    -------
-    gb : PorePy object
-        Grid bucket
-
-    """
-
-    # Sanity check
-    if (h_2d > h_mortar) or (h_1d > h_mortar):
-        warning_msg = "Subdomain cell are smaller than mortar cells "
-        warning_msg += "and this may lead to inconsistent results."
-        raise Warning(warning_msg)
-
-    # NOTE: The easiest way to construct the non-matching gridbucket is to
-    # replace the lower-dimensional grid and the mortar grids into the
-    # higher-dimensional grid
-
-    # Create a grid bucket using h_2d as target mesh size
-    gb_h = make_constrained_mesh(h_2d)
-    gl_old = gb_h.grids_of_dimension(1)[0]  # extract 1d-grid
-    mg_old = gb_h.get_mortar_grids()[0]  # extract mortar-grid
-
-    # Obtain fracture and mortar grids to be replaced into
-    gl_new = make_constrained_mesh(h_1d).grids_of_dimension(1)[0]
-    mg_new = make_constrained_mesh(h_mortar).get_mortar_grids()[0]
-
-    # Create the mapping dictionaries
-    g_map = {gl_old: gl_new}
-    mg_map = {mg_old: mg_new.side_grids}
-
-    # Replace grids
-    gb = gb_h.copy()
-    gb.replace_grids(g_map=g_map)
-    gb.replace_grids(mg_map=mg_map)
-
-    return gb
-
-
 # %% Defining numerical methods, and obtaining grid buckets
+mesh_targets = np.array([0.05, 0.025, 0.0125, 0.00625])
 num_methods = ["RT0", "MVEM", "MPFA", "TPFA"]
 
-levels = 5  # coarsening levels
-coarsening_factor = 2
-h_2d_ref = 0.003125  # reference 2D mesh size
-h_1d_ref = h_2d_ref * 1.5  # reference 1D mesh size
-h_mortar_ref = h_2d_ref * 2.0  # reference mortar mesh size
-h_2d = coarsening_factor ** np.arange(levels) * h_2d_ref
-h_1d = coarsening_factor ** np.arange(levels) * h_1d_ref
-h_mortar = coarsening_factor ** np.arange(levels) * h_mortar_ref
-grid_buckets = []
-
+print("Assembling grid buckets...", end="")
 tic = time()
-print("Assembling non-matching grid buckets...", end="")
-for counter in range(levels):
-    grid_buckets.append(
-        create_non_matching_gridbucket(
-            h_2d[counter], h_1d[counter], h_mortar[counter]
-        )
-    )
-grid_buckets = grid_buckets[::-1]
-print(f"\u2713 Time {time() - tic}\n")
+grid_buckets = []
+for h in mesh_targets:
+    grid_buckets.append(make_constrained_mesh(h))
+print(f"\u2713 Time {time() - tic}.\n")
 
 # %% Loop over the models
 models = [model_global, model_local]
 for model in models:
+    if model.__name__ == "model_global":
+        print("\n Using the mixed-dimensional Poincare constant \n")
+    else:
+        print("\n Using the local Poincare constant \n")
+
     # Create dictionary and initialize fields
     d = {k: {} for k in num_methods}
     for method in num_methods:
@@ -188,7 +123,7 @@ for model in models:
 
     # Populate lists
     for method in num_methods:
-        for idx in range(levels):
+        for idx in range(mesh_targets.size):
             num_method_name.append(method)
             bulk_diffusive.append(d[method]["bulk_diffusive"][idx])
             bulk_residual.append(d[method]["bulk_residual"][idx])
