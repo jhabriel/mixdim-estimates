@@ -6,6 +6,7 @@ from time import time
 from model_local import model_local
 from model_global import model_global
 
+
 # %% Functions
 def make_constrained_mesh(h=0.1):
     """
@@ -40,6 +41,7 @@ def make_constrained_mesh(h=0.1):
     gb = network_2d.mesh(mesh_args, constraints=[1, 2])
 
     return gb
+
 
 # %% Defining numerical methods, and obtaining grid buckets
 mesh_targets = np.array([0.05, 0.025, 0.0125, 0.00625])
