@@ -54,8 +54,14 @@ for h in mesh_targets:
 print(f"\u2713 Time {time() - tic}.\n")
 
 # %% Loop over the models
-models = [model_local, model_global]
+models = [model_global, model_local]
 for model in models:
+
+    if model.__name__ == "model_global":
+        print("\n Using the mixed-dimensional Poincare constant \n")
+    else:
+        print("\n Using the local Poincare constant \n")
+
     # Create dictionary and initialize fields
     d = {k: {} for k in num_methods}
     for method in num_methods:
