@@ -395,7 +395,7 @@ class ErrorEstimate:
         interface_dims = interface_dims[1::]  # ignore first element
 
         # Get scaled majorant and print it
-        majorant = self.get_majorant
+        majorant = self.get_majorant()
         print("Majorant:", majorant)
 
         # Print summary of subdomain errors
