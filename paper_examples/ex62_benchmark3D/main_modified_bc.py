@@ -119,11 +119,13 @@ def set_parameters_conductive(gb):
 
             labels = np.array(["neu"] * b_faces.size)
             labels[b_outflow] = "dir"
+            labels[b_inflow] = "dir"
             bc = pp.BoundaryCondition(g, b_faces, labels)
 
-            f_faces = b_faces[b_inflow]
-            bc_val[f_faces] = -aperture * g.face_areas[f_faces]
-            bc_val[b_faces[b_outflow]] = 1
+            outflow_faces = b_faces[b_outflow]
+            inflow_faces = b_faces[b_inflow]
+            bc_val[outflow_faces] = 0
+            bc_val[inflow_faces] = 1
 
         else:
             bc = pp.BoundaryCondition(g, empty, empty)
@@ -198,6 +200,7 @@ for i in itertools.product(numerical_methods, mesh_resolutions):
     print(f"3D cells: {gb.grids_of_dimension(3)[0].num_cells}")
     print(f"Grid construction done. Time {time() - tic}")
 
+
     #%% Solve the problem
     set_parameters_conductive(gb)
 
@@ -243,6 +246,10 @@ for i in itertools.product(numerical_methods, mesh_resolutions):
     print(f"Errors succesfully estimated. Time {time() - tic}")
     estimates.print_summary(scaled=True)
     print("\n")
+
+    if i[0] == "RT0" and i[1] == "fine":
+        paraview = pp.Exporter(gb, "rt0_fine", folder_name="out")
+        paraview.write_vtu(["pressure", "diffusive_error"])
 
     #%% Compute errors
     error_node_3d = 0

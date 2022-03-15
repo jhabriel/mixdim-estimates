@@ -74,9 +74,7 @@ class ExactSolution2D:
         x, y = sym.symbols("x y")
 
         p2_top = self._dist_top ** (1 + self._alpha)
-        p2_mid = (
-            self._dist_mid ** (1 + self._alpha) + self._bubble * self._dist_mid
-        )
+        p2_mid = self._dist_mid ** (1 + self._alpha) + self._bubble * self._dist_mid
         p2_bot = self._dist_bot ** (1 + self._alpha)
 
         p2_sym = [p2_bot, p2_mid, p2_top]
@@ -110,9 +108,7 @@ class ExactSolution2D:
         x, y = sym.symbols("x y")
         cc = self.g2d.cell_centers
 
-        gradp2_sym = [
-            [sym.diff(p, x), sym.diff(p, y)] for p in self.p2d(which="sym")
-        ]
+        gradp2_sym = [[sym.diff(p, x), sym.diff(p, y)] for p in self.p2d(which="sym")]
 
         gradp2_fun = [
             [
@@ -156,9 +152,7 @@ class ExactSolution2D:
         x, y = sym.symbols("x y")
         cc = self.g2d.cell_centers
 
-        u2_sym = [
-            [-sym.diff(p, x), -sym.diff(p, y)] for p in self.p2d(which="sym")
-        ]
+        u2_sym = [[-sym.diff(p, x), -sym.diff(p, y)] for p in self.p2d(which="sym")]
 
         u2_fun = [
             [
@@ -201,10 +195,7 @@ class ExactSolution2D:
         x, y = sym.symbols("x y")
         cc = self.g2d.cell_centers
 
-        f2_sym = [
-            sym.diff(u[0], x) + sym.diff(u[1], y)
-            for u in self.u2d(which="sym")
-        ]
+        f2_sym = [sym.diff(u[0], x) + sym.diff(u[1], y) for u in self.u2d(which="sym")]
 
         f2_fun = [sym.lambdify((x, y), f, "numpy") for f in f2_sym]
 

@@ -127,9 +127,7 @@ def model_global(gb, method):
         specified_parameters["source"] = source_term
 
         # Initialize default data
-        pp.initialize_default_data(
-            g, d, parameter_keyword, specified_parameters
-        )
+        pp.initialize_default_data(g, d, parameter_keyword, specified_parameters)
 
     # Next loop over the edges
     for e, d in gb.edges():
@@ -171,9 +169,7 @@ def model_global(gb, method):
     # Loop over all subdomains in the GridBucket
     if fv(method):  # FV methods
         for g, d in gb:
-            d[pp.PRIMARY_VARIABLES] = {
-                subdomain_variable: {"cells": 1, "faces": 0}
-            }
+            d[pp.PRIMARY_VARIABLES] = {subdomain_variable: {"cells": 1, "faces": 0}}
             d[pp.DISCRETIZATION] = {
                 subdomain_variable: {
                     subdomain_operator_keyword: subdomain_discretization,
@@ -182,9 +178,7 @@ def model_global(gb, method):
             }
     else:  # FEM methods
         for g, d in gb:
-            d[pp.PRIMARY_VARIABLES] = {
-                subdomain_variable: {"cells": 1, "faces": 1}
-            }
+            d[pp.PRIMARY_VARIABLES] = {subdomain_variable: {"cells": 1, "faces": 1}}
             d[pp.DISCRETIZATION] = {
                 subdomain_variable: {
                     subdomain_operator_keyword: subdomain_discretization,
@@ -220,12 +214,8 @@ def model_global(gb, method):
     # Overwrite d[pp.STATE][subdomain_variable] to be consistent with FEM
     # methods
     for g, d in gb:
-        discr = d[pp.DISCRETIZATION][subdomain_variable][
-            subdomain_operator_keyword
-        ]
-        pressure = discr.extract_pressure(
-            g, d[pp.STATE][subdomain_variable], d
-        ).copy()
+        discr = d[pp.DISCRETIZATION][subdomain_variable][subdomain_operator_keyword]
+        pressure = discr.extract_pressure(g, d[pp.STATE][subdomain_variable], d).copy()
         flux = discr.extract_flux(g, d[pp.STATE][subdomain_variable], d).copy()
         d[pp.STATE][subdomain_variable] = pressure
         d[pp.STATE][flux_variable] = flux
@@ -281,9 +271,7 @@ def model_global(gb, method):
     true_velocity_error = te.velocity_error()
 
     # True combined error
-    true_combined_error = (
-        true_pressure_error + true_velocity_error + residual_error
-    )
+    true_combined_error = true_pressure_error + true_velocity_error + residual_error
 
     # %% Compute efficiency indices
     i_eff_p = majorant_pressure / true_pressure_error

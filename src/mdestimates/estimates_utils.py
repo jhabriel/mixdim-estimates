@@ -6,13 +6,13 @@ import scipy.sparse as sps
 #%% Geometry related function
 def rotate_embedded_grid(g):
     """
-    Rotates grid to account for embedded fractures. 
-    
-    Note that the pressure and flux reconstruction use the rotated grids, 
-    where only the relevant dimensions are taken into account, e.g., a 
-    one-dimensional tilded fracture will be represented by a three-dimensional 
+    Rotates grid to account for embedded fractures.
+
+    Note that the pressure and flux reconstruction use the rotated grids,
+    where only the relevant dimensions are taken into account, e.g., a
+    one-dimensional tilded fracture will be represented by a three-dimensional
     grid, where only the first dimension is used.
-    
+
     Parameters
     ----------
     g : PorePy object
@@ -22,12 +22,12 @@ def rotate_embedded_grid(g):
     -------
     g_rot : Rotated object
         Rotated PorePy grid.
-        
+
     """
 
     class RotatedGrid:
         """
-        This class creates a rotated grid object. 
+        This class creates a rotated grid object.
         """
 
         def __init__(
@@ -40,7 +40,7 @@ def rotate_embedded_grid(g):
             dim_bool,
             nodes,
         ):
-    
+
             self.cell_centers = cell_centers
             self.face_normals = face_normals
             self.face_centers = face_centers
@@ -48,10 +48,10 @@ def rotate_embedded_grid(g):
             self.dim_bool = dim_bool
             self.dim = dim
             self.nodes = nodes
-    
+
         def __str__(self):
             return "Rotated pseudo-grid object"
-    
+
         def __repr__(self):
             return (
                 "Rotated pseudo-grid object with atributes:\n"
@@ -95,9 +95,9 @@ def get_opposite_side_nodes(g):
     Returns
     -------
     opposite_nodes : NumPy nd-array (g.num_cells x (g.dim + 1))
-        Rows represent the cell number and the columns represent the opposite 
+        Rows represent the cell number and the columns represent the opposite
         side node index of the face.
-    
+
     """
 
     # Retrieving toplogical data
@@ -128,12 +128,12 @@ def get_sign_normals(g, g_rot):
     g : PorePy object
         Grid
     g_rot : Rotated grid object
-        Rotated pseudo-grid 
+        Rotated pseudo-grid
 
     Returns
     -------
     sign_normals : NumPy nd-array of length g.num_faces
-        Sign of the face normal. 1 if the signs of the local and global 
+        Sign of the face normal. 1 if the signs of the local and global
         normals are the same, -1 otherwise.
     """
 
@@ -199,7 +199,7 @@ def get_quadpy_elements(g, g_rot):
         Grid
     g_rot: Rotated grid
         Rotated pseudo-grid
-        
+
     Returns
     -------
     quadpy_elements : NumPy nd-array
@@ -215,7 +215,7 @@ def get_quadpy_elements(g, g_rot):
             [[0.1, 0.3], [0.4, 0.4], [0.7, 0.1]],
             [[8.6, 6.0], [9.4, 5.6], [7.5, 7.4]]
             ], axis=-2)
-    
+
     """
 
     # Renaming variables
@@ -239,17 +239,17 @@ def get_quadpy_elements(g, g_rot):
     elements = np.stack(element_coord, axis=-2)
 
     # For some reason, quadpy needs a different formatting for line segments
-    if g.dim == 1: 
+    if g.dim == 1:
         elements = elements.reshape(g.dim + 1, g.num_cells)
 
     return elements
 
 
 def get_qp_elements_from_union_grid_1d(union_grid):
-    
+
     nc = union_grid.shape[0]
     dim = 1
-    
+
     # Stacking node coordinates
     cnc_stckd = np.empty([nc, (dim + 1) * dim])
     col = 0
@@ -257,21 +257,21 @@ def get_qp_elements_from_union_grid_1d(union_grid):
         cnc_stckd[:, col] = union_grid[:, vertex]
         col += 1
     element_coord = np.reshape(cnc_stckd, np.array([nc, dim + 1, dim]))
-    
+
     # Reshaping to please quadpy format i.e, (corners, num_elements, coords)
     elements = np.stack(element_coord, axis=-2)
-    
+
     # For some reason, quadpy needs a different formatting for line segments
-    if dim == 1: 
+    if dim == 1:
         elements = elements.reshape(dim + 1, nc)
-        
+
     return elements
 
 
 #%% Interpolation and polynomial-related functions
 def interpolate_P1(point_val, point_coo):
     """
-    Performs a linear local interpolation of a P1 FEM element given the 
+    Performs a linear local interpolation of a P1 FEM element given the
     the pressure values and the coordinates at the Lagrangian nodes.
 
     Parameters
@@ -281,7 +281,7 @@ def interpolate_P1(point_val, point_coo):
     point_coo : NumPy nd-array of shape (g.dim x g.num_cells x num_Lagr_nodes)
         Coordinates of the Lagrangian nodes. In the case of embedded entities,
         the points should correspond to the rotated coordinates.
-    
+
     Raises
     ------
     Value Error
@@ -295,9 +295,9 @@ def interpolate_P1(point_val, point_coo):
         c0x + c1                 (1D),
         c0x + c1y + c2           (2D),
         c0x + c1y + c3z + c4     (3D).
-            
+
     """
-    
+
     # Get rows, cols, and dimensionality
     rows = point_val.shape[0]  # number of cells
     cols = point_val.shape[1]  # number of Lagrangian nodes per cell
@@ -309,7 +309,7 @@ def interpolate_P1(point_val, point_coo):
         dim = 1
     else:
         raise ValueError("P1 reconstruction only valid for 1d, 2d, and 3d.")
-            
+
     if dim == 3:
         x = point_coo[0].flatten()
         y = point_coo[1].flatten()
@@ -324,7 +324,7 @@ def interpolate_P1(point_val, point_coo):
         coeff = np.empty([rows, dim + 1])
         for cell in range(rows):
             coeff[cell] = (np.dot(np.linalg.inv(lcl[cell]), p_vals[cell])).T
- 
+
     elif dim == 2:
         x = point_coo[0].flatten()
         y = point_coo[1].flatten()
@@ -353,7 +353,7 @@ def interpolate_P1(point_val, point_coo):
             coeff[cell] = (np.dot(np.linalg.inv(lcl[cell]), p_vals[cell])).T
 
     return coeff
-    
+
 
 def eval_P1(P1_coeff, coor):
     """
@@ -383,24 +383,24 @@ def eval_P1(P1_coeff, coor):
     # Check if P1_coeff has the correct shape
     if P1_coeff.shape[1] not in [2, 3, 4]:
         raise ValueError("Number of coefficients does not match a P1 polynomial")
-    
+
     # Check if coor has the correct number of dimensions
     if len(coor.shape) != 3:
         raise ValueError("Coordinates array must be three-dimensional")
 
     # Retrieve coefficients
     c = poly2col(P1_coeff)
-    
+
     if len(c) == 4:
         val = c[0] * coor[0] + c[1] * coor[1] + c[2] * coor[2] + c[3]
     elif len(c) == 3:
         val = c[0] * coor[0] + c[1] * coor[1] + c[2]
     else:
         val = c[0] * coor[0] + c[1]
-        
+
     return val
-    
- 
+
+
 def poly2col(pol):
     """
     Returns the coefficients (columns) of a polynomial in the form of a list.
@@ -413,15 +413,14 @@ def poly2col(pol):
     Returns
     -------
     List
-        Coefficients stored in column-wise format. 
+        Coefficients stored in column-wise format.
 
     """
     rows = pol.shape[0]
     cols = pol.shape[1]
     coeff_list = []
-    
+
     for col in range(cols):
         coeff_list.append(pol[:, col].reshape(rows, 1))
 
     return coeff_list
-

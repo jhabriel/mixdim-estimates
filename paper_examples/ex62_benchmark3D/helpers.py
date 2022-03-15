@@ -7,7 +7,7 @@ import scipy.sparse.linalg as spla
 
 
 def setup_flow_assembler(gb, method, data_key=None, coupler=None):
-    """ Setup a standard assembler for the flow problem for a given grid bucket.
+    """Setup a standard assembler for the flow problem for a given grid bucket.
 
     The assembler will be set up with primary variable name 'pressure' on the
     GridBucket nodes, and mortar_flux for the mortar variables.
