@@ -45,6 +45,7 @@ def make_constrained_mesh(mesh_size=0.2):
 mesh_targets = np.array([0.3, 0.15, 0.075, 0.0375])
 num_methods = ["RT0", "MVEM", "MPFA", "TPFA"]
 
+
 # %% Obtain grid buckets for each mesh size
 print("Assembling grid buckets...", end="")
 tic = time()
@@ -66,9 +67,11 @@ for model in models:
     d = {k: {} for k in num_methods}
     for method in num_methods:
         d[method] = {
-            "bulk_error": [],
-            "frac_error": [],
-            "mortar_error": [],
+            "bulk_diffusive": [],
+            "bulk_residual": [],
+            "frac_diffusive": [],
+            "frac_residual": [],
+            "mortar_diffusive": [],
             "majorant_pressure": [],
             "majorant_velocity": [],
             "majorant_combined": [],
@@ -88,9 +91,11 @@ for model in models:
             out = model(gb, method)
             print(f"Done. Time {time() - tic}\n")
             # Store errors in the dictionary
-            d[method]["bulk_error"].append(out["bulk"]["error"])
-            d[method]["frac_error"].append(out["frac"]["error"])
-            d[method]["mortar_error"].append(out["mortar"]["error"])
+            d[method]["bulk_diffusive"].append(out["bulk"]["diffusive_error"])
+            d[method]["bulk_residual"].append(out["bulk"]["residual_error"])
+            d[method]["frac_diffusive"].append(out["frac"]["diffusive_error"])
+            d[method]["frac_residual"].append(out["frac"]["residual_error"])
+            d[method]["mortar_diffusive"].append(out["mortar"]["error"])
             d[method]["majorant_pressure"].append(out["majorant_pressure"])
             d[method]["majorant_velocity"].append(out["majorant_velocity"])
             d[method]["majorant_combined"].append(out["majorant_combined"])
@@ -107,32 +112,30 @@ for model in models:
 
     # Initialize lists
     num_method_name = []
-    bulk_error = []
-    frac_error = []
-    mortar_error = []
+    bulk_diffusive = []
+    bulk_residual = []
+    frac_diffusive = []
+    frac_residual = []
+    mortar_diffusive = []
     majorant_pressure = []
     majorant_velocity = []
     majorant_combined = []
-    true_pressure_error = []
-    true_velocity_error = []
-    true_combined_error = []
     I_eff_pressure = []
     I_eff_velocity = []
     I_eff_combined = []
 
     # Populate lists
     for method in num_methods:
-        for idx in range(len(mesh_targets)):
+        for idx in range(mesh_targets.size):
             num_method_name.append(method)
-            bulk_error.append(d[method]["bulk_error"][idx])
-            frac_error.append(d[method]["frac_error"][idx])
-            mortar_error.append(d[method]["mortar_error"][idx])
+            bulk_diffusive.append(d[method]["bulk_diffusive"][idx])
+            bulk_residual.append(d[method]["bulk_residual"][idx])
+            frac_diffusive.append(d[method]["frac_diffusive"][idx])
+            frac_residual.append(d[method]["frac_residual"][idx])
+            mortar_diffusive.append(d[method]["mortar_diffusive"][idx])
             majorant_pressure.append(d[method]["majorant_pressure"][idx])
             majorant_velocity.append(d[method]["majorant_velocity"][idx])
             majorant_combined.append(d[method]["majorant_combined"][idx])
-            true_pressure_error.append(d[method]["true_pressure_error"][idx])
-            true_velocity_error.append(d[method]["true_velocity_error"][idx])
-            true_combined_error.append(d[method]["true_combined_error"][idx])
             I_eff_pressure.append(d[method]["efficiency_pressure"][idx])
             I_eff_velocity.append(d[method]["efficiency_velocity"][idx])
             I_eff_combined.append(d[method]["efficiency_combined"][idx])
@@ -153,32 +156,32 @@ for model in models:
             ("var10", float),
             ("var11", float),
             ("var12", float),
-            ("var13", float),
         ],
     )
 
     # Declaring column variables
     export["var1"] = num_method_name
-    export["var2"] = bulk_error
-    export["var3"] = frac_error
-    export["var4"] = mortar_error
-    export["var5"] = majorant_pressure
-    export["var6"] = majorant_velocity
-    export["var7"] = majorant_combined
-    export["var8"] = true_pressure_error
-    export["var9"] = true_velocity_error
-    export["var10"] = true_combined_error
-    export["var11"] = I_eff_pressure
-    export["var12"] = I_eff_velocity
-    export["var13"] = I_eff_combined
+    export["var2"] = bulk_diffusive
+    export["var3"] = bulk_residual
+    export["var4"] = frac_diffusive
+    export["var5"] = frac_residual
+    export["var6"] = mortar_diffusive
+    export["var7"] = majorant_pressure
+    export["var8"] = majorant_velocity
+    export["var9"] = majorant_combined
+    export["var10"] = I_eff_pressure
+    export["var11"] = I_eff_velocity
+    export["var12"] = I_eff_combined
 
     # Formatting string
-    fmt = "%6s %2.2e %2.2e %2.2e %2.2e %2.2e "
-    fmt += "%2.2e %2.2e %2.2e %2.2e %2.2f %2.2f %2.2f"
+    fmt = "%6s %2.2e %2.2e %2.2e %2.2e %2.2e"
+    fmt += " %2.2e %2.2e %2.2e %2.2f %2.2f %2.2f"
 
     # Headers
-    header = "num_method eta_3d eta_2d eta_mortar M_p M_u M_pu tpe tve tce"
-    header += "I_eff_p I_eff_u I_eff_pu"
+    header = (
+        "num_method eta_DF_3d eta_R_3d eta_DF_2d eta_R_2d eta_mortar "
+    )
+    header += "majorant_p majorant_u majorant_pu I_eff_p I_eff_u I_eff_pu"
 
     # Writing into txt
     if model.__name__ == "model_local":
@@ -231,25 +234,22 @@ for model in models:
             ("var11", float),
             ("amp11", "U6"),
             ("var12", float),
-            ("amp12", "U6"),
-            ("var13", float),
         ],
     )
 
     # Prepare for exporting
     export["var1"] = num_method_name
-    export["var2"] = bulk_error
-    export["var3"] = frac_error
-    export["var4"] = mortar_error
-    export["var5"] = majorant_pressure
-    export["var6"] = majorant_velocity
-    export["var7"] = majorant_combined
-    export["var8"] = true_pressure_error
-    export["var9"] = true_velocity_error
-    export["var10"] = true_combined_error
-    export["var11"] = I_eff_pressure
-    export["var12"] = I_eff_velocity
-    export["var13"] = I_eff_combined
+    export["var2"] = bulk_diffusive
+    export["var3"] = bulk_residual
+    export["var4"] = frac_diffusive
+    export["var5"] = frac_residual
+    export["var6"] = mortar_diffusive
+    export["var7"] = majorant_pressure
+    export["var8"] = majorant_velocity
+    export["var9"] = majorant_combined
+    export["var10"] = I_eff_pressure
+    export["var11"] = I_eff_velocity
+    export["var12"] = I_eff_combined
     export["amp1"] = ampersend
     export["amp2"] = ampersend
     export["amp3"] = ampersend
@@ -261,28 +261,25 @@ for model in models:
     export["amp9"] = ampersend
     export["amp10"] = ampersend
     export["amp11"] = ampersend
-    export["amp12"] = ampersend
 
     # Formatting string
     fmt = "%6s "  # method
     fmt += "%1s "  # amp
-    fmt += "%2.2e "  # bulk error
+    fmt += "%2.2e "  # bulk diffusive
     fmt += "%1s "  # amp
-    fmt += "%2.2e "  # frac error
+    fmt += "%2.2e "  # bulk residual
     fmt += "%1s "  # amp
-    fmt += "%2.2e "  # mortar error
+    fmt += "%2.2e "  # frac diffusive
+    fmt += "%1s "  # amp
+    fmt += "%2.2e "  # frac residual
+    fmt += "%1s "  # amp
+    fmt += "%2.2e "  # mortar diffusive
     fmt += "%1s "  # amp
     fmt += "%2.2e "  # majorant pressure
     fmt += "%1s "  # amp
     fmt += "%2.2e "  # majorant velocity
     fmt += "%1s "  # amp
     fmt += "%2.2e "  # majorant combined
-    fmt += "%1s "  # amp
-    fmt += "%2.2e "  # true pressure error
-    fmt += "%1s "  # amp
-    fmt += "%2.2e "  # true velocity error
-    fmt += "%1s "  # amp
-    fmt += "%2.2e "  # true combined error
     fmt += "%1s "  # amp
     fmt += "%2.2f "  # efficiency pressure
     fmt += "%1s "  # amp
@@ -291,8 +288,9 @@ for model in models:
     fmt += "%2.2f "  # efficiency combined
 
     # Headers
-    header = "num_method & eta_3d & eta_2d & eta_mortar & M_p & M_u & M_pu "
-    header += "tpe & tve & & tce & I_eff_p & I_eff_u & I_eff_pu"
+    header = "num_method & eta_DF_3d & eta_R_3d & eta_DF_3d & eta_R_3d & "
+    header += "eta_DF_mortar & majorant_p & majorant_u & majorant_pu & "
+    header += "I_eff_p & I_eff_u & I_eff_pu"
 
     if model.__name__ == "model_local":
         np.savetxt(
