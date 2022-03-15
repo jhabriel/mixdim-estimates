@@ -195,7 +195,8 @@ export["var9"] = mortar_right
 fmt = "%6s %2.2e %2.2e %2.2e %2.2e %2.2e %2.2e %2.2e %2.2e"
 
 # Headers
-header = "num_method eta_DF_2d eta_R_2d eta_DF_1d eta_R_1d eta_mortar_l eta_mortar_r"
+header = "num_method eta_DF_2d eta_R_NC_2d eta_R_LC_2d eta_DF_1d eta_R_1d_NC eta_R_1d_LC " \
+         "eta_mortar_l eta_mortar_r"
 
 # Writing into txt
 np.savetxt("val_2d_a.txt", export, delimiter=",", fmt=fmt, header=header)
