@@ -73,27 +73,7 @@ def model_local(gb, method):
 
     # Retrieve true error object and exact expressions
     ex = ExactSolution2D(gb)
-    # cell_idx_list = ex.cell_idx
-    # bound_idx_list = ex.bc_idx
-
-    # p2d_sym_list = ex.p2d("sym")
-    # p2d_numpy_list = ex.p2d("fun")
-    # p2d_cc = ex.p2d("cc")
-
-    # gradp2d_sym_list = ex.gradp2d("sym")
-    # gradp2d_numpy_list = ex.gradp2d("fun")
-    # gradp2d_cc = ex.gradp2d("cc")
-
-    # u2d_sym_list = ex.u2d("sym")
-    # u2d_numpy_list = ex.u2d("fun")
-    # u2d_cc = ex.u2d("cc")
-
-    # f2d_sym_list = ex.f2d("sym")
-    # f2d_numpy_list = ex.f2d("fun")
-    # f2d_cc = ex.f2d("cc")
-
     bc_vals_2d = ex.dir_bc_values()
-
     integrated_f2d = ex.integrate_f2d()
     integrated_f1d = ex.integrate_f1d()
 
@@ -228,11 +208,16 @@ def model_local(gb, method):
 
     diffusive_error_squared_2d = d_2d[pp.STATE]["diffusive_error"]
     diffusive_error_squared_1d = d_1d[pp.STATE]["diffusive_error"]
-    diffusive_error_squared_mortar = d_e[pp.STATE]["diffusive_error"]
+    diffusive_error_squared_mortar_left = d_e[pp.STATE]["diffusive_error"][
+                                          int(mg.num_cells / 2):]
+    diffusive_error_squared_mortar_right = d_e[pp.STATE]["diffusive_error"][
+                                           :int(mg.num_cells / 2)]
+
     diffusive_error = (
         diffusive_error_squared_2d.sum()
         + diffusive_error_squared_1d.sum()
-        + diffusive_error_squared_mortar.sum()
+        + diffusive_error_squared_mortar_left.sum()
+        + diffusive_error_squared_mortar_right.sum()
     ) ** 0.5
 
     residual_error_squared_2d = te.residual_error_2d_local_poincare()
@@ -252,23 +237,12 @@ def model_local(gb, method):
     fracture_error = (
         diffusive_error_squared_1d.sum() + residual_error_squared_1d.sum()
     ) ** 0.5
-    mortar_error = diffusive_error_squared_mortar.sum() ** 0.5
+    mortar_left_error = diffusive_error_squared_mortar_left.sum() ** 0.5
+    mortar_right_error = diffusive_error_squared_mortar_right.sum() ** 0.5
 
     # %% Obtain true errors
-
-    # Pressure error
-    # pressure_error_squared_2d = te.pressure_error_squared_2d()
-    # pressure_error_squared_1d = te.pressure_error_squared_1d()
-    # pressure_error_squared_mortar = te.pressure_error_squared_mortar()
     true_pressure_error = te.pressure_error()
-
-    # Velocity error
-    # velocity_error_squared_2d = te.velocity_error_squared_2d()
-    # velocity_error_squared_1d = te.velocity_error_squared_1d()
-    # velocity_error_squared_mortar = te.velocity_error_squared_mortar()
     true_velocity_error = te.velocity_error()
-
-    # True combined error
     true_combined_error = true_pressure_error + true_velocity_error + residual_error
 
     # %% Compute efficiency indices
@@ -282,7 +256,8 @@ def model_local(gb, method):
     print(f"Majorant combined: {majorant_combined}")
     print(f"Bulk error: {bulk_error}")
     print(f"Fracture error: {fracture_error}")
-    print(f"Mortar error: {mortar_error}")
+    print(f"Left mortar error: {mortar_left_error}")
+    print(f"Right mortar error: {mortar_right_error}")
     print(f"True error (pressure): {true_pressure_error}")
     print(f"True error (velocity): {true_velocity_error}")
     print(f"True error (combined): {true_combined_error}")
@@ -316,8 +291,12 @@ def model_local(gb, method):
     out["frac"]["diffusive_error"] = diffusive_error_squared_1d.sum() ** 0.5
     out["frac"]["residual_error"] = residual_error_squared_1d.sum() ** 0.5
 
-    out["mortar"] = {}
-    out["mortar"]["mesh_size"] = h_gamma
-    out["mortar"]["error"] = mortar_error
+    out["mortar_left"] = {}
+    out["mortar_left"]["mesh_size"] = h_gamma
+    out["mortar_left"]["error"] = mortar_left_error
+
+    out["mortar_right"] = {}
+    out["mortar_right"]["mesh_size"] = h_gamma
+    out["mortar_right"]["error"] = mortar_right_error
 
     return out
