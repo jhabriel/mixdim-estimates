@@ -53,7 +53,6 @@ def model_global(gb, method):
     # Get hold of grids and dictionaries
     g_3d = gb.grids_of_dimension(3)[0]
     g_2d = gb.grids_of_dimension(2)[0]
-    h_max = gb.diameter()
     d_3d = gb.node_props(g_3d)
     d_2d = gb.node_props(g_2d)
     d_e = gb.edge_props([g_2d, g_3d])
@@ -195,11 +194,15 @@ def model_global(gb, method):
 
     diffusive_error_squared_3d = d_3d[pp.STATE]["diffusive_error"]
     diffusive_error_squared_2d = d_2d[pp.STATE]["diffusive_error"]
-    diffusive_error_squared_mortar = d_e[pp.STATE]["diffusive_error"]
+    diffusive_error_squared_mortar_left = d_e[pp.STATE]["diffusive_error"][
+                                          int(mg.num_cells / 2):]
+    diffusive_error_squared_mortar_right = d_e[pp.STATE]["diffusive_error"][
+                                           :int(mg.num_cells / 2)]
     diffusive_error = (
         diffusive_error_squared_3d.sum()
         + diffusive_error_squared_2d.sum()
-        + diffusive_error_squared_mortar.sum()
+        + diffusive_error_squared_mortar_left.sum()
+        + diffusive_error_squared_mortar_right.sum()
     ) ** 0.5
 
     residual_error_squared_3d = te.residual_error_3d_global_poincare()
@@ -219,7 +222,8 @@ def model_global(gb, method):
     fracture_error = (
         diffusive_error_squared_2d.sum() + residual_error_squared_2d.sum()
     ) ** 0.5
-    mortar_error = diffusive_error_squared_mortar.sum() ** 0.5
+    mortar_left_error = diffusive_error_squared_mortar_left.sum() ** 0.5
+    mortar_right_error = diffusive_error_squared_mortar_right.sum() ** 0.5
 
     # %% Obtain true errors
     true_pressure_error = te.pressure_error()
@@ -237,7 +241,8 @@ def model_global(gb, method):
     print(f"Majorant combined: {majorant_combined}")
     print(f"Bulk error: {bulk_error}")
     print(f"Fracture error: {fracture_error}")
-    print(f"Mortar error: {mortar_error}")
+    print(f"Left mortar error: {mortar_left_error}")
+    print(f"Right mortar error: {mortar_right_error}")
     print(f"True error (pressure): {true_pressure_error}")
     print(f"True error (velocity): {true_velocity_error}")
     print(f"True error (combined): {true_combined_error}")
@@ -271,8 +276,12 @@ def model_global(gb, method):
     out["frac"]["diffusive_error"] = diffusive_error_squared_2d.sum() ** 0.5
     out["frac"]["residual_error"] = residual_error_squared_2d.sum() ** 0.5
 
-    out["mortar"] = {}
-    out["mortar"]["mesh_size"] = np.max(mg.cell_diameters())
-    out["mortar"]["error"] = mortar_error
+    out["mortar_left"] = {}
+    out["mortar_left"]["mesh_size"] = np.max(g_2d.cell_diameters())
+    out["mortar_left"]["error"] = mortar_left_error
+
+    out["mortar_right"] = {}
+    out["mortar_right"]["mesh_size"] = np.max(g_2d.cell_diameters())
+    out["mortar_right"]["error"] = mortar_right_error
 
     return out
