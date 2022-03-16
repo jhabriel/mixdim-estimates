@@ -45,7 +45,6 @@ def make_constrained_mesh(mesh_size=0.2):
 mesh_targets = np.array([0.3, 0.15, 0.075, 0.0375])
 num_methods = ["RT0", "MVEM", "MPFA", "TPFA"]
 
-
 # %% Obtain grid buckets for each mesh size
 print("Assembling grid buckets...", end="")
 tic = time()
@@ -54,257 +53,190 @@ for h in mesh_targets:
     grid_buckets.append(make_constrained_mesh(h))
 print(f"\u2713 Time {time() - tic}.\n")
 
+#%% Create a dictionary to store all the data
+d = {k: {} for k in num_methods}
+for method in num_methods:
+    d[method] = {
+        "bulk_diffusive": [],
+        "bulk_residual_NC": [],
+        "bulk_residual_LC": [],
+        "frac_diffusive": [],
+        "frac_residual_NC": [],
+        "frac_residual_LC": [],
+        "mortar_left": [],
+        "mortar_right": [],
+        "majorant_NC": [],
+        "majorant_LC": [],
+        "majorant_combined_NC": [],
+        "majorant_combined_LC": [],
+        "efficiency_pressure_NC": [],
+        "efficiency_pressure_LC": [],
+        "efficiency_velocity_NC": [],
+        "efficiency_velocity_LC": [],
+        "efficiency_combined_NC": [],
+        "efficiency_combined_LC": [],
+    }
+
 # %% Loop over the models
 models = [model_global, model_local]
 for model in models:
-
     if model.__name__ == "model_global":
-        print("\n Using the mixed-dimensional Poincare constant \n")
+        print("***Using the mixed-dimensional Poincare constant***")
     else:
-        print("\n Using the local Poincare constant \n")
+        print("***Using the local Poincare constant***")
 
-    # Create dictionary and initialize fields
-    d = {k: {} for k in num_methods}
-    for method in num_methods:
-        d[method] = {
-            "bulk_diffusive": [],
-            "bulk_residual": [],
-            "frac_diffusive": [],
-            "frac_residual": [],
-            "mortar_diffusive": [],
-            "majorant_pressure": [],
-            "majorant_velocity": [],
-            "majorant_combined": [],
-            "true_pressure_error": [],
-            "true_velocity_error": [],
-            "true_combined_error": [],
-            "efficiency_pressure": [],
-            "efficiency_velocity": [],
-            "efficiency_combined": [],
-        }
     # Populate fields (NOTE: This loop may take considerable time)
     for method in num_methods:
         for idx, gb in enumerate(grid_buckets):
-            print(f"Solving with {method} for refinement level {idx + 1}.")
+            print(f"Solving with {method} for refinement level {idx+1}.")
             # Get hold of errors
             tic = time()
-            out = model(gb, method)
+            out = model(gb, method)  # dictionary containing all the errors
             print(f"Done. Time {time() - tic}\n")
-            # Store errors in the dictionary
-            d[method]["bulk_diffusive"].append(out["bulk"]["diffusive_error"])
-            d[method]["bulk_residual"].append(out["bulk"]["residual_error"])
-            d[method]["frac_diffusive"].append(out["frac"]["diffusive_error"])
-            d[method]["frac_residual"].append(out["frac"]["residual_error"])
-            d[method]["mortar_diffusive"].append(out["mortar"]["error"])
-            d[method]["majorant_pressure"].append(out["majorant_pressure"])
-            d[method]["majorant_velocity"].append(out["majorant_velocity"])
-            d[method]["majorant_combined"].append(out["majorant_combined"])
-            d[method]["true_pressure_error"].append(out["true_pressure_error"])
-            d[method]["true_velocity_error"].append(out["true_velocity_error"])
-            d[method]["true_combined_error"].append(out["true_combined_error"])
-            d[method]["efficiency_pressure"].append(out["efficiency_pressure"])
-            d[method]["efficiency_velocity"].append(out["efficiency_velocity"])
-            d[method]["efficiency_combined"].append(out["efficiency_combined"])
+            # Store the relevant fields in our data dictionary d
+            if model.__name__ == "model_global":
+                d[method]["bulk_diffusive"].append(out["bulk"]["diffusive_error"])
+                d[method]["bulk_residual_NC"].append(out["bulk"]["residual_error"])
+                d[method]["frac_diffusive"].append(out["frac"]["diffusive_error"])
+                d[method]["frac_residual_NC"].append(out["frac"]["residual_error"])
+                d[method]["mortar_left"].append(out["mortar_left"]["error"])
+                d[method]["mortar_right"].append(out["mortar_right"]["error"])
+                d[method]["majorant_NC"].append(out["majorant_pressure"])
+                d[method]["majorant_combined_NC"].append(out["majorant_combined"])
+                d[method]["efficiency_pressure_NC"].append(out["efficiency_pressure"])
+                d[method]["efficiency_velocity_NC"].append(out["efficiency_velocity"])
+                d[method]["efficiency_combined_NC"].append(out["efficiency_combined"])
+            else:
+                d[method]["bulk_residual_LC"].append(out["bulk"]["residual_error"])
+                d[method]["frac_residual_LC"].append(out["frac"]["residual_error"])
+                d[method]["majorant_LC"].append(out["majorant_pressure"])
+                d[method]["majorant_combined_LC"].append(out["majorant_combined"])
+                d[method]["efficiency_pressure_LC"].append(out["efficiency_pressure"])
+                d[method]["efficiency_velocity_LC"].append(out["efficiency_velocity"])
+                d[method]["efficiency_combined_LC"].append(out["efficiency_combined"])
 
-    # %% Exporting
-    # Permutations
-    rows = len(num_methods) * len(grid_buckets)
+# %% Exporting
+# Permutations
+rows = len(num_methods) * len(grid_buckets)
 
-    # Initialize lists
-    num_method_name = []
-    bulk_diffusive = []
-    bulk_residual = []
-    frac_diffusive = []
-    frac_residual = []
-    mortar_diffusive = []
-    majorant_pressure = []
-    majorant_velocity = []
-    majorant_combined = []
-    I_eff_pressure = []
-    I_eff_velocity = []
-    I_eff_combined = []
+# Initialize lists
+num_method_name = []
+bulk_diffusive = []
+bulk_residual_NC = []
+bulk_residual_LC = []
+frac_diffusive = []
+frac_residual_NC = []
+frac_residual_LC = []
+mortar_left = []
+mortar_right = []
+majorant_NC = []
+majorant_LC = []
+majorant_combined_NC = []
+majorant_combined_LC = []
+I_eff_pressure_NC = []
+I_eff_pressure_LC = []
+I_eff_velocity_NC = []
+I_eff_velocity_LC = []
+I_eff_combined_NC = []
+I_eff_combined_LC = []
 
-    # Populate lists
-    for method in num_methods:
-        for idx in range(mesh_targets.size):
-            num_method_name.append(method)
-            bulk_diffusive.append(d[method]["bulk_diffusive"][idx])
-            bulk_residual.append(d[method]["bulk_residual"][idx])
-            frac_diffusive.append(d[method]["frac_diffusive"][idx])
-            frac_residual.append(d[method]["frac_residual"][idx])
-            mortar_diffusive.append(d[method]["mortar_diffusive"][idx])
-            majorant_pressure.append(d[method]["majorant_pressure"][idx])
-            majorant_velocity.append(d[method]["majorant_velocity"][idx])
-            majorant_combined.append(d[method]["majorant_combined"][idx])
-            I_eff_pressure.append(d[method]["efficiency_pressure"][idx])
-            I_eff_velocity.append(d[method]["efficiency_velocity"][idx])
-            I_eff_combined.append(d[method]["efficiency_combined"][idx])
+# Populate lists
+for method in num_methods:
+    for idx in range(mesh_targets.size):
+        num_method_name.append(method)
+        bulk_diffusive.append(d[method]["bulk_diffusive"][idx])
+        bulk_residual_NC.append(d[method]["bulk_residual_NC"][idx])
+        bulk_residual_LC.append(d[method]["bulk_residual_LC"][idx])
+        frac_diffusive.append(d[method]["frac_diffusive"][idx])
+        frac_residual_NC.append(d[method]["frac_residual_NC"][idx])
+        frac_residual_LC.append(d[method]["frac_residual_LC"][idx])
+        mortar_left.append(d[method]["mortar_left"][idx])
+        mortar_right.append(d[method]["mortar_right"][idx])
+        majorant_NC.append(d[method]["majorant_NC"][idx])
+        majorant_LC.append(d[method]["majorant_LC"][idx])
+        majorant_combined_NC.append(d[method]["majorant_combined_NC"][idx])
+        majorant_combined_LC.append(d[method]["majorant_combined_LC"][idx])
+        I_eff_pressure_NC.append(d[method]["efficiency_pressure_NC"][idx])
+        I_eff_pressure_LC.append(d[method]["efficiency_pressure_LC"][idx])
+        I_eff_velocity_NC.append(d[method]["efficiency_velocity_NC"][idx])
+        I_eff_velocity_LC.append(d[method]["efficiency_velocity_LC"][idx])
+        I_eff_combined_NC.append(d[method]["efficiency_combined_NC"][idx])
+        I_eff_combined_LC.append(d[method]["efficiency_combined_LC"][idx])
 
-    # Prepare for exporting
-    export = np.zeros(
-        rows,
-        dtype=[
-            ("var1", "U6"),
-            ("var2", float),
-            ("var3", float),
-            ("var4", float),
-            ("var5", float),
-            ("var6", float),
-            ("var7", float),
-            ("var8", float),
-            ("var9", float),
-            ("var10", float),
-            ("var11", float),
-            ("var12", float),
-        ],
-    )
+# %% Export first table
+export = np.zeros(
+    rows,
+    dtype=[
+        ("var1", "U6"),
+        ("var2", float),
+        ("var3", float),
+        ("var4", float),
+        ("var5", float),
+        ("var6", float),
+        ("var7", float),
+        ("var8", float),
+        ("var9", float),
+    ],
+)
 
-    # Declaring column variables
-    export["var1"] = num_method_name
-    export["var2"] = bulk_diffusive
-    export["var3"] = bulk_residual
-    export["var4"] = frac_diffusive
-    export["var5"] = frac_residual
-    export["var6"] = mortar_diffusive
-    export["var7"] = majorant_pressure
-    export["var8"] = majorant_velocity
-    export["var9"] = majorant_combined
-    export["var10"] = I_eff_pressure
-    export["var11"] = I_eff_velocity
-    export["var12"] = I_eff_combined
+# Declaring column variables
+export["var1"] = num_method_name
+export["var2"] = bulk_diffusive
+export["var3"] = bulk_residual_NC
+export["var4"] = bulk_residual_LC
+export["var5"] = frac_diffusive
+export["var6"] = frac_residual_NC
+export["var7"] = frac_residual_LC
+export["var8"] = mortar_left
+export["var9"] = mortar_right
 
-    # Formatting string
-    fmt = "%6s %2.2e %2.2e %2.2e %2.2e %2.2e"
-    fmt += " %2.2e %2.2e %2.2e %2.2f %2.2f %2.2f"
+# Formatting string
+fmt = "%6s %2.2e %2.2e %2.2e %2.2e %2.2e %2.2e %2.2e %2.2e"
 
-    # Headers
-    header = (
-        "num_method eta_DF_3d eta_R_3d eta_DF_2d eta_R_2d eta_mortar "
-    )
-    header += "majorant_p majorant_u majorant_pu I_eff_p I_eff_u I_eff_pu"
+# Headers
+header = "num_method eta_DF_3d eta_R_NC_3d eta_R_LC_3d eta_DF_2d eta_R_2d_NC eta_R_2d_LC " \
+         "eta_mortar_l eta_mortar_r"
 
-    # Writing into txt
-    if model.__name__ == "model_local":
-        np.savetxt(
-            "validation3d_LC.txt",
-            export,
-            delimiter=",",
-            fmt=fmt,
-            header=header,
-        )
-    else:
-        np.savetxt(
-            "validation3d_NC.txt",
-            export,
-            delimiter=",",
-            fmt=fmt,
-            header=header,
-        )
+# Writing into txt
+np.savetxt("val_3d_a.txt", export, delimiter=",", fmt=fmt, header=header)
 
-    # %% Exporting to LaTeX
-    # Initialize lists
-    ampersend = []
-    for i in range(rows):
-        ampersend.append("&")
+# %% Export second table
+export = np.zeros(
+    rows,
+    dtype=[
+        ("var1", "U6"),
+        ("var2", float),
+        ("var3", float),
+        ("var4", float),
+        ("var5", float),
+        ("var6", float),
+        ("var7", float),
+        ("var8", float),
+        ("var9", float),
+        ("var10", float),
+        ("var11", float),
+    ],
+)
 
-    # Prepare for exporting
-    export = np.zeros(
-        rows,
-        dtype=[
-            ("var1", "U6"),
-            ("amp1", "U6"),
-            ("var2", float),
-            ("amp2", "U6"),
-            ("var3", float),
-            ("amp3", "U6"),
-            ("var4", float),
-            ("amp4", "U6"),
-            ("var5", float),
-            ("amp5", "U6"),
-            ("var6", float),
-            ("amp6", "U6"),
-            ("var7", float),
-            ("amp7", "U6"),
-            ("var8", float),
-            ("amp8", "U6"),
-            ("var9", float),
-            ("amp9", "U6"),
-            ("var10", float),
-            ("amp10", "U6"),
-            ("var11", float),
-            ("amp11", "U6"),
-            ("var12", float),
-        ],
-    )
+# Declaring column variables
+export["var1"] = num_method_name
+export["var2"] = majorant_NC
+export["var3"] = majorant_LC
+export["var4"] = majorant_combined_NC
+export["var5"] = majorant_combined_LC
+export["var6"] = I_eff_pressure_NC
+export["var7"] = I_eff_pressure_LC
+export["var8"] = I_eff_velocity_NC
+export["var9"] = I_eff_velocity_LC
+export["var10"] = I_eff_combined_NC
+export["var11"] = I_eff_combined_LC
 
-    # Prepare for exporting
-    export["var1"] = num_method_name
-    export["var2"] = bulk_diffusive
-    export["var3"] = bulk_residual
-    export["var4"] = frac_diffusive
-    export["var5"] = frac_residual
-    export["var6"] = mortar_diffusive
-    export["var7"] = majorant_pressure
-    export["var8"] = majorant_velocity
-    export["var9"] = majorant_combined
-    export["var10"] = I_eff_pressure
-    export["var11"] = I_eff_velocity
-    export["var12"] = I_eff_combined
-    export["amp1"] = ampersend
-    export["amp2"] = ampersend
-    export["amp3"] = ampersend
-    export["amp4"] = ampersend
-    export["amp5"] = ampersend
-    export["amp6"] = ampersend
-    export["amp7"] = ampersend
-    export["amp8"] = ampersend
-    export["amp9"] = ampersend
-    export["amp10"] = ampersend
-    export["amp11"] = ampersend
+# Formatting string
+fmt = "%6s %2.2e %2.2e %2.2e %2.2e %2.2f %2.2f %2.2f %2.2f %2.2f %2.2f"
 
-    # Formatting string
-    fmt = "%6s "  # method
-    fmt += "%1s "  # amp
-    fmt += "%2.2e "  # bulk diffusive
-    fmt += "%1s "  # amp
-    fmt += "%2.2e "  # bulk residual
-    fmt += "%1s "  # amp
-    fmt += "%2.2e "  # frac diffusive
-    fmt += "%1s "  # amp
-    fmt += "%2.2e "  # frac residual
-    fmt += "%1s "  # amp
-    fmt += "%2.2e "  # mortar diffusive
-    fmt += "%1s "  # amp
-    fmt += "%2.2e "  # majorant pressure
-    fmt += "%1s "  # amp
-    fmt += "%2.2e "  # majorant velocity
-    fmt += "%1s "  # amp
-    fmt += "%2.2e "  # majorant combined
-    fmt += "%1s "  # amp
-    fmt += "%2.2f "  # efficiency pressure
-    fmt += "%1s "  # amp
-    fmt += "%2.2f "  # efficiency velocity
-    fmt += "%1s "  # amp
-    fmt += "%2.2f "  # efficiency combined
+# Headers
+header = "method M_NC M_LC M_pu_NC M_pu_LC I_eff_p_NC I_eff_p_LC I_eff_u_NC I_eff_u_LC " \
+         "I_eff_pu_NC I_eff_pu_LC"
 
-    # Headers
-    header = "num_method & eta_DF_3d & eta_R_3d & eta_DF_3d & eta_R_3d & "
-    header += "eta_DF_mortar & majorant_p & majorant_u & majorant_pu & "
-    header += "I_eff_p & I_eff_u & I_eff_pu"
-
-    if model.__name__ == "model_local":
-        np.savetxt(
-            "validation3dtex_LC.txt",
-            export,
-            delimiter=",",
-            fmt=fmt,
-            header=header,
-        )
-    else:
-        np.savetxt(
-            "validation3dtex_NC.txt",
-            export,
-            delimiter=",",
-            fmt=fmt,
-            header=header,
-        )
+# Writing into text
+np.savetxt("val_3d_b.txt", export, delimiter=",", fmt=fmt, header=header)
