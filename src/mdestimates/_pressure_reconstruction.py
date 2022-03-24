@@ -130,11 +130,7 @@ def inverse_local_gradp(self, g, g_rot, d):
             ]
         )
     else:
-        proj_flux = np.array(
-            [
-                coeff[:, 0] * g_rot.cell_centers[0] + coeff[:, 1],
-            ]
-        )
+        proj_flux = np.array([coeff[:, 0] * g_rot.cell_centers[0] + coeff[:, 1],])
 
     # Obtain local gradients
     loc_grad = np.zeros((g.dim, nc))

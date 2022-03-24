@@ -128,9 +128,7 @@ class ErrorEstimate:
         )
 
         # Pressure reconstruction methods
-        from mdestimates._pressure_reconstruction import (
-            reconstruct_pressure,
-        )
+        from mdestimates._pressure_reconstruction import reconstruct_pressure
 
         # Error evaluation methods
         from mdestimates._error_evaluation import compute_error_estimates

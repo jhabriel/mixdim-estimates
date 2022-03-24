@@ -197,9 +197,11 @@ def model_local(gb, method):
     diffusive_error_squared_2d = d_2d[pp.STATE]["diffusive_error"]
     diffusive_error_squared_mortar = d_e[pp.STATE]["diffusive_error"]
     diffusive_error_squared_mortar_left = d_e[pp.STATE]["diffusive_error"][
-                                          int(mg.num_cells / 2):]
+        int(mg.num_cells / 2) :
+    ]
     diffusive_error_squared_mortar_right = d_e[pp.STATE]["diffusive_error"][
-                                           :int(mg.num_cells / 2)]
+        : int(mg.num_cells / 2)
+    ]
     diffusive_error = (
         diffusive_error_squared_3d.sum()
         + diffusive_error_squared_2d.sum()
@@ -209,9 +211,7 @@ def model_local(gb, method):
 
     residual_error_squared_3d = te.residual_error_3d_local_poincare()
     residual_error_squared_2d = te.residual_error_2d_local_poincare()
-    residual_error = (
-        residual_error_squared_3d.sum() + residual_error_squared_2d.sum()
-    )
+    residual_error = residual_error_squared_3d.sum() + residual_error_squared_2d.sum()
 
     majorant_pressure = diffusive_error + residual_error
     majorant_velocity = majorant_pressure

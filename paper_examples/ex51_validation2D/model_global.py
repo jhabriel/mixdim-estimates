@@ -212,8 +212,12 @@ def model_global(gb, method):
 
     diffusive_error_squared_2d = d_2d[pp.STATE]["diffusive_error"]
     diffusive_error_squared_1d = d_1d[pp.STATE]["diffusive_error"]
-    diffusive_error_squared_mortar_left = d_e[pp.STATE]["diffusive_error"][int(mg.num_cells/2):]
-    diffusive_error_squared_mortar_right = d_e[pp.STATE]["diffusive_error"][:int(mg.num_cells/2)]
+    diffusive_error_squared_mortar_left = d_e[pp.STATE]["diffusive_error"][
+        int(mg.num_cells / 2) :
+    ]
+    diffusive_error_squared_mortar_right = d_e[pp.STATE]["diffusive_error"][
+        : int(mg.num_cells / 2)
+    ]
 
     diffusive_error = (
         diffusive_error_squared_2d.sum()

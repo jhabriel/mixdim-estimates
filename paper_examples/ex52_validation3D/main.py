@@ -194,8 +194,10 @@ export["var9"] = mortar_right
 fmt = "%6s %2.2e %2.2e %2.2e %2.2e %2.2e %2.2e %2.2e %2.2e"
 
 # Headers
-header = "num_method eta_DF_3d eta_R_NC_3d eta_R_LC_3d eta_DF_2d eta_R_2d_NC eta_R_2d_LC " \
-         "eta_mortar_l eta_mortar_r"
+header = (
+    "num_method eta_DF_3d eta_R_NC_3d eta_R_LC_3d eta_DF_2d eta_R_2d_NC eta_R_2d_LC "
+    "eta_mortar_l eta_mortar_r"
+)
 
 # Writing into txt
 np.savetxt("val3d_errors.txt", export, delimiter=",", fmt=fmt, header=header)
@@ -235,8 +237,10 @@ export["var11"] = I_eff_combined_LC
 fmt = "%6s %2.2e %2.2e %2.2e %2.2e %2.2f %2.2f %2.2f %2.2f %2.2f %2.2f"
 
 # Headers
-header = "method M_NC M_LC M_pu_NC M_pu_LC I_eff_p_NC I_eff_p_LC I_eff_u_NC I_eff_u_LC " \
-         "I_eff_pu_NC I_eff_pu_LC"
+header = (
+    "method M_NC M_LC M_pu_NC M_pu_LC I_eff_p_NC I_eff_p_LC I_eff_u_NC I_eff_u_LC "
+    "I_eff_pu_NC I_eff_pu_LC"
+)
 
 # Writing into text
 np.savetxt("val3d_majorants.txt", export, delimiter=",", fmt=fmt, header=header)
