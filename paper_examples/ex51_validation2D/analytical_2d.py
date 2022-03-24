@@ -155,10 +155,7 @@ class ExactSolution2D:
         u2_sym = [[-sym.diff(p, x), -sym.diff(p, y)] for p in self.p2d(which="sym")]
 
         u2_fun = [
-            [
-                sym.lambdify((x, y), u[0], "numpy"),
-                sym.lambdify((x, y), u[1], "numpy"),
-            ]
+            [sym.lambdify((x, y), u[0], "numpy"), sym.lambdify((x, y), u[1], "numpy"),]
             for u in u2_sym
         ]
 

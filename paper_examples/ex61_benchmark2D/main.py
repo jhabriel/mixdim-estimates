@@ -129,13 +129,9 @@ if __name__ == "__main__":
                         error_node_2d += estimates.get_local_errors(g, d)
                     elif g.dim == 1:
                         if d["is_low"]:
-                            error_node_1d_bloc += estimates.get_local_errors(
-                                g, d
-                            )
+                            error_node_1d_bloc += estimates.get_local_errors(g, d)
                         else:
-                            error_node_1d_cond += estimates.get_local_errors(
-                                g, d
-                            )
+                            error_node_1d_cond += estimates.get_local_errors(g, d)
                     else:
                         continue
 
@@ -144,13 +140,9 @@ if __name__ == "__main__":
                     mg = d["mortar_grid"]
                     if mg.dim == 1:
                         if d["is_low"]:
-                            error_edge_1d_bloc += estimates.get_local_errors(
-                                mg, d
-                            )
+                            error_edge_1d_bloc += estimates.get_local_errors(mg, d)
                         else:
-                            error_edge_1d_cond += estimates.get_local_errors(
-                                mg, d
-                            )
+                            error_edge_1d_cond += estimates.get_local_errors(mg, d)
                     elif mg.dim == 0:
                         error_edge_0d += estimates.get_local_errors(mg, d)
 

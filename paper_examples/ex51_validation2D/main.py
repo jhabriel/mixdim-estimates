@@ -26,9 +26,7 @@ def make_constrained_mesh(h=0.1):
     """
 
     domain = {"xmin": 0, "xmax": 1, "ymin": 0, "ymax": 1}
-    network_2d = pp.fracture_importer.network_2d_from_csv(
-        "network.csv", domain=domain
-    )
+    network_2d = pp.fracture_importer.network_2d_from_csv("network.csv", domain=domain)
 
     # Target lengths
     target_h_bound = h
@@ -195,8 +193,10 @@ export["var9"] = mortar_right
 fmt = "%6s %2.2e %2.2e %2.2e %2.2e %2.2e %2.2e %2.2e %2.2e"
 
 # Headers
-header = "num_method eta_DF_2d eta_R_NC_2d eta_R_LC_2d eta_DF_1d eta_R_1d_NC eta_R_1d_LC " \
-         "eta_mortar_l eta_mortar_r"
+header = (
+    "num_method eta_DF_2d eta_R_NC_2d eta_R_LC_2d eta_DF_1d eta_R_1d_NC eta_R_1d_LC "
+    "eta_mortar_l eta_mortar_r"
+)
 
 # Writing into txt
 np.savetxt("val2d_errors.txt", export, delimiter=",", fmt=fmt, header=header)
@@ -236,10 +236,10 @@ export["var11"] = I_eff_combined_LC
 fmt = "%6s %2.2e %2.2e %2.2e %2.2e %2.2f %2.2f %2.2f %2.2f %2.2f %2.2f"
 
 # Headers
-header = "method M_NC M_LC M_pu_NC M_pu_LC I_eff_p_NC I_eff_p_LC I_eff_u_NC I_eff_u_LC " \
-         "I_eff_pu_NC I_eff_pu_LC"
+header = (
+    "method M_NC M_LC M_pu_NC M_pu_LC I_eff_p_NC I_eff_p_LC I_eff_u_NC I_eff_u_LC "
+    "I_eff_pu_NC I_eff_pu_LC"
+)
 
 # Writing into text
 np.savetxt("val2d_majorants.txt", export, delimiter=",", fmt=fmt, header=header)
-
-

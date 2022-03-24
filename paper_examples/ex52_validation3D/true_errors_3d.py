@@ -75,11 +75,7 @@ class TrueErrors3D(ExactSolution3D):
         gradpz_cc_2d = p[2]
 
         gradp_cc = np.array(
-            [
-                gradpx_cc_2d.flatten(),
-                gradpy_cc_2d.flatten(),
-                gradpz_cc_2d.flatten(),
-            ]
+            [gradpx_cc_2d.flatten(), gradpy_cc_2d.flatten(), gradpz_cc_2d.flatten(),]
         )
 
         return gradp_cc
@@ -95,12 +91,7 @@ class TrueErrors3D(ExactSolution3D):
         gradpy_cc_2d = p[0]
         gradpz_cc_2d = p[1]
 
-        gradp_cc = np.array(
-            [
-                gradpy_cc_2d.flatten(),
-                gradpz_cc_2d.flatten(),
-            ]
-        )
+        gradp_cc = np.array([gradpy_cc_2d.flatten(), gradpz_cc_2d.flatten(),])
 
         return gradp_cc
 
@@ -129,11 +120,7 @@ class TrueErrors3D(ExactSolution3D):
             ) * idx.reshape(self.g3d.num_cells, 1)
 
         ru_cc_2d = np.array(
-            [
-                ru_cc_3d_x.flatten(),
-                ru_cc_3d_y.flatten(),
-                ru_cc_3d_z.flatten(),
-            ]
+            [ru_cc_3d_x.flatten(), ru_cc_3d_y.flatten(), ru_cc_3d_z.flatten(),]
         )
 
         return ru_cc_2d
