@@ -171,7 +171,7 @@ if __name__ == "__main__":
                 print("Error edge 1D [Conductive]:", error_edge_1d_cond)
                 print("Error edge 1D [Blocking]:", error_edge_1d_bloc)
                 print("Error edge 0D:", error_edge_0d)
-                print("Scaled majorant:", majorant)
+                print("Majorant:", majorant)
                 print("\n")
 
                 # Uncomment to export to ParaView. Change discretization method if desired.
