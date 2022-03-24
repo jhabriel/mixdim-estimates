@@ -199,7 +199,7 @@ header = "num_method eta_DF_2d eta_R_NC_2d eta_R_LC_2d eta_DF_1d eta_R_1d_NC eta
          "eta_mortar_l eta_mortar_r"
 
 # Writing into txt
-np.savetxt("val_2d_a.txt", export, delimiter=",", fmt=fmt, header=header)
+np.savetxt("val2d_errors.txt", export, delimiter=",", fmt=fmt, header=header)
 
 #%% Export second table
 export = np.zeros(
@@ -240,6 +240,6 @@ header = "method M_NC M_LC M_pu_NC M_pu_LC I_eff_p_NC I_eff_p_LC I_eff_u_NC I_ef
          "I_eff_pu_NC I_eff_pu_LC"
 
 # Writing into text
-np.savetxt("val_2d_b.txt", export, delimiter=",", fmt=fmt, header=header)
+np.savetxt("val2d_majorants.txt", export, delimiter=",", fmt=fmt, header=header)
 
 
