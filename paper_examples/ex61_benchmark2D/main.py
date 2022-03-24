@@ -174,18 +174,18 @@ if __name__ == "__main__":
                 print("Scaled majorant:", majorant)
                 print("\n")
 
-                # Export to PARAVIEW. Change discretization method if desired
-                if solver_name == "mpfa":
-                    if mesh_size == 0.05:
-                        paraview = pp.Exporter(gb, "mpfa_coarse", folder_name="out")
-                    elif mesh_size == 0.025:
-                        paraview = pp.Exporter(
-                            gb, "mpfa_intermediate", folder_name="out"
-                        )
-                    elif mesh_size == 0.0125:
-                        paraview = pp.Exporter(gb, "mpfa_fine", folder_name="out")
-
-                    paraview.write_vtu(["pressure", "diffusive_error"])
+                # Uncomment to export to ParaView. Change discretization method if desired.
+                # if solver_name == "mpfa":
+                #     if mesh_size == 0.05:
+                #         paraview = pp.Exporter(gb, "mpfa_coarse", folder_name="out")
+                #     elif mesh_size == 0.025:
+                #         paraview = pp.Exporter(
+                #             gb, "mpfa_intermediate", folder_name="out"
+                #         )
+                #     elif mesh_size == 0.0125:
+                #         paraview = pp.Exporter(gb, "mpfa_fine", folder_name="out")
+                #
+                #     paraview.write_vtu(["pressure", "diffusive_error"])
 
 
 #%% Export
@@ -256,7 +256,7 @@ header = "num_method mesh_size eta_omega_2d eta_omega_1d_c eta_omega_1d_b "
 header += "eta_gamma_1d_c eta_gamma_1d_b eta_gamma_0d M_p M_u M_pu "
 
 np.savetxt(
-    "convergence_bench2d.txt",
+    "benchmark2d.txt",
     export,
     delimiter=",",
     fmt="%4s %8s %2.2e %2.2e %2.2e %2.2e %2.2e %2.2e %2.2e %2.2e %2.2e",

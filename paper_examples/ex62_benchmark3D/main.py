@@ -246,6 +246,7 @@ for i in itertools.product(numerical_methods, mesh_resolutions):
     estimates.print_summary(scaled=False)
     print()
 
+    # Uncomment to export to ParaView
     # if i[0] == "RT0" and i[1] == "fine":
     #     paraview = pp.Exporter(gb, "rt0_fine", folder_name="out")
     #     paraview.write_vtu(["pressure", "diffusive_error"])
@@ -358,7 +359,7 @@ header += " eta_gamma_2d eta_gamma_1d eta_gamma_0d M_p M_u M_pu"
 
 # Write into txt
 np.savetxt(
-    "convergence_bench3d.txt",
+    "benchmark3d.txt",
     export,
     delimiter=",",
     fmt="%4s %8s %2.2e %2.2e %2.2e %2.2e %2.2e %2.2e %2.2e %2.2e %2.2e",
