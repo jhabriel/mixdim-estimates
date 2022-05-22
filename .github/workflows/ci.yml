@@ -72,5 +72,5 @@ jobs:
     - name: pytest
       if: ${{always()}}
       run: |
-      cd tests/
-      pytest
+        cd tests/
+        pytest
