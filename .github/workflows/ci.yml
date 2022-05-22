@@ -42,11 +42,7 @@ jobs:
         git clone https://github.com/pmgbergen/porepy
         cd porepy
         pip install -r requirements-dev.txt
-        pip install jupyter
         pip install .
-        pip install shapely
-        pip install shapely[vectorized]
-        pip freeze
         wget https://raw.githubusercontent.com/keileg/polyhedron/master/polyhedron.py
         mv polyhedron.py robust_point_in_polyhedron.py
 
