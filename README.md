@@ -1,4 +1,6 @@
-[![DOI](https://zenodo.org/badge/253091118.svg)](https://zenodo.org/badge/latestdoi/253091118) [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+![build](https://github.com/jhabriel/mixdim-estimates/workflows/Build%20test/badge.svg) 
+[![DOI](https://zenodo.org/badge/253091118.svg)](https://zenodo.org/badge/latestdoi/253091118) 
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 # mdestimates: *A posteriori* error estimates for mixed-dimensional elliptic equations
 
@@ -42,7 +44,7 @@ If you use **mdestimates** in your research, we ask you to cite the following re
 
 Varela, J., E. Ahmed, E. Keilegavlen, J. Nordbotten and F. A. Radu. “A posteriori error estimates for hierarchical mixed-dimensional elliptic equations.” (2021). arXiv preprint 2101.08331. 
 
-## Problems, suggestions, enhancements...
+## Problems, suggestions, improvements?
 Create an [issue](https://github.com/jhabriel/mixdim-estimates).
 
 ## License
