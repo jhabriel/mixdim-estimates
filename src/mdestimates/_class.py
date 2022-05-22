@@ -131,7 +131,7 @@ class ErrorEstimate:
         self.init_estimates_data_keyword()
 
         print("Performing velocity reconstruction...", end="")
-        vel_rec = mde.VelocityReconstruction(self.gb)
+        vel_rec = mde.VelocityReconstruction(self)
         # 1.1: Compute full flux
         vel_rec.compute_full_flux()
         # 1.2: Reconstruct velocity
