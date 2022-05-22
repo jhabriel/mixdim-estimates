@@ -1,5 +1,5 @@
 __all__ = []
-from ._class import ErrorEstimate
+from .error_estimates import ErrorEstimate
 from .pressure_reconstruction import PressureReconstruction
 from .velocity_reconstruction import VelocityReconstruction
 from .diffusive_error import DiffusiveError
