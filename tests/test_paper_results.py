@@ -1,8 +1,7 @@
 import numpy as np
 import porepy as pp
-import pytest
 
-from paper_examples.ex51_validation2D.model_local import model_local
+from model_local import model_local
 
 
 def test_2d_validation_rt0_p0():
