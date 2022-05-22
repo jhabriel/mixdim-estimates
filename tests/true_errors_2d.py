@@ -4,9 +4,9 @@ import numpy as np
 import quadpy as qp
 
 import mdestimates.estimates_utils as utils
-from mdestimates._velocity_reconstruction import (
-    _internal_source_term_contribution as mortar_jump,
-)
+# from mdestimates._velocity_reconstruction import (
+#     _internal_source_term_contribution as mortar_jump,
+# )
 from analytical_2d import ExactSolution2D
 from typing import List
 
@@ -48,7 +48,7 @@ class TrueErrors2D(ExactSolution2D):
         p = utils.poly2col(recon_p)
 
         # Rotate grid and get cell centers
-        g_rot = utils.rotate_embedded_grid(self.g1d)
+        g_rot = mde.RotatedGrid(self.g1d)
         cc = g_rot.cell_centers
 
         # Project reconstructed pressure onto the cell centers
@@ -130,7 +130,7 @@ class TrueErrors2D(ExactSolution2D):
         """Compute reconstructed velocity for the fracture"""
 
         # Rotate embedded grid and
-        g_rot = utils.rotate_embedded_grid(self.g1d)
+        g_rot = mde.RotatedGrid(self.g1d)
         cc = g_rot.cell_centers
 
         recon_u = self.d1d[self.estimates.estimates_kw]["recon_u"].copy()
@@ -245,13 +245,14 @@ class TrueErrors2D(ExactSolution2D):
         div_u = u[0]
 
         # Jump in mortar fluxes
-        jump_in_mortars = (
-            mortar_jump(self.estimates, self.g1d) / self.g1d.cell_volumes
-        ).reshape(self.g1d.num_cells, 1)
+        jump_in_mortars = self.d1d[self.estimates.estimates_kw]["mortar_jump"].copy()
+        # jump_in_mortars = (
+        #     mortar_jump(self.estimates, self.g1d) / self.g1d.cell_volumes
+        # ).reshape(self.g1d.num_cells, 1)
 
         # Integration method and retrieving elements
         method = qp.c1.newton_cotes_closed(10)
-        g_rot = utils.rotate_embedded_grid(self.g1d)
+        g_rot = mde.RotatedGrid(self.g1d)
         elements = utils.get_quadpy_elements(self.g1d, g_rot)
         elements *= -1  # we have to use the real y coordinates here
 
@@ -313,7 +314,7 @@ class TrueErrors2D(ExactSolution2D):
 
         # Obtain elements and declare integration method
         method = qp.c1.newton_cotes_closed(10)
-        g_rot = utils.rotate_embedded_grid(self.g1d)
+        g_rot = mde.RotatedGrid(self.g1d)
         elements = utils.get_quadpy_elements(self.g1d, g_rot)
         elements *= -1  # we have to use the real y coordinates here
 
@@ -464,7 +465,7 @@ class TrueErrors2D(ExactSolution2D):
 
         # Obtain elements and declare integration method
         method = qp.c1.newton_cotes_closed(10)
-        g_rot = utils.rotate_embedded_grid(self.g1d)
+        g_rot = mde.RotatedGrid(self.g1d)
         elements = utils.get_quadpy_elements(self.g1d, g_rot)
 
         # Compute the true error
