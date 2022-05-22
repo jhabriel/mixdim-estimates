@@ -7,10 +7,21 @@ import mdestimates.estimates_utils as utils
 
 
 class PressureReconstruction(mde.ErrorEstimate):
-    """ Main class for pressure reconstruction techniques."""
+    """Class for pressure reconstruction techniques"""
 
-    def __init__(self, gb):
-        super().__init__(gb)
+    def __init__(self, estimate: mde.ErrorEstimate):
+        super().__init__(
+            gb=estimate.gb,
+            kw=estimate.kw,
+            sd_operator_name=estimate.sd_operator_name,
+            p_name=estimate.p_name,
+            flux_name=estimate.flux_name,
+            lam_name=estimate.lam_name,
+            estimates_kw=estimate.estimates_kw,
+            p_recon_method=estimate.p_recon_method,
+            source_list=estimate.source_list,
+            poincare_list=estimate.poincare_list
+        )
 
     def reconstruct_pressure(self):
         """

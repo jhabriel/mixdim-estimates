@@ -139,7 +139,7 @@ class ErrorEstimate:
         print("\u2713")
 
         print("Performing pressure reconstruction...", end="")
-        p_rec = mde.PressureReconstruction(self.gb)
+        p_rec = mde.PressureReconstruction(self)
         # 2.1: Reconstruct pressure
         p_rec.reconstruct_pressure()
         print("\u2713")
