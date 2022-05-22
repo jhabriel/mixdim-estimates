@@ -1,7 +1,7 @@
 __all__ = []
 from .error_estimates import ErrorEstimate
-from .pressure_reconstruction import PressureReconstruction
-from .velocity_reconstruction import VelocityReconstruction
-from .diffusive_error import DiffusiveError
-from .residual_error import ResidualError
+from mdestimates.pressure_reconstruction.pressure_reconstruction import PressureReconstruction
+from mdestimates.velocity_reconstruction.velocity_reconstruction import VelocityReconstruction
+from mdestimates.error_evaluation.diffusive_error import DiffusiveError
+from mdestimates.pressure_reconstruction.residual_error import ResidualError
 from .grid_rotation import RotatedGrid
