@@ -5,9 +5,6 @@ import quadpy as qp
 import scipy.sparse as sps
 
 import mdestimates.estimates_utils as utils
-from mdestimates._velocity_reconstruction import (
-    _internal_source_term_contribution as mortar_jump,
-)
 from analytical_3d import ExactSolution3D
 
 
@@ -49,7 +46,7 @@ class TrueErrors3D(ExactSolution3D):
         p = utils.poly2col(recon_p)
 
         # Rotate grid and get cell centers
-        g_rot = utils.rotate_embedded_grid(self.g2d)
+        g_rot = mde.RotatedGrid(self.g2d)
         cc = g_rot.cell_centers
 
         # Project reconstructed pressure onto the cell centers
@@ -129,7 +126,7 @@ class TrueErrors3D(ExactSolution3D):
         """Compute reconstructed velocity for the fracture"""
 
         # Rotate embedded grid and
-        g_rot = utils.rotate_embedded_grid(self.g2d)
+        g_rot = mde.RotatedGrid(self.g2d)
         cc = g_rot.cell_centers
 
         recon_u = self.d2d[self.estimates.estimates_kw]["recon_u"].copy()
@@ -246,12 +243,12 @@ class TrueErrors3D(ExactSolution3D):
 
         # Jump in mortar fluxes
         jump_in_mortars = (
-            mortar_jump(self.estimates, self.g2d) / self.g2d.cell_volumes
+            self.d2d[self.estimates.estimates_kw]["mortar_jump"].copy() / self.g2d.cell_volumes
         ).reshape(self.g2d.num_cells, 1)
 
         # Integration method and retrieving elements
         method = qp.t2.get_good_scheme(10)
-        g_rot = utils.rotate_embedded_grid(self.g2d)
+        g_rot = mde.RotatedGrid(self.g2d)
         elements = utils.get_quadpy_elements(self.g2d, g_rot)
         elements *= -1  # we have to use the real y coordinates here
 
@@ -316,7 +313,7 @@ class TrueErrors3D(ExactSolution3D):
 
         # Obtain elements and declare integration method
         method = qp.t2.get_good_scheme(10)
-        g_rot = utils.rotate_embedded_grid(self.g2d)
+        g_rot = mde.RotatedGrid(self.g2d)
         elements = utils.get_quadpy_elements(self.g2d, g_rot)
         elements *= -1  # we have to use the real y coordinates here
 
@@ -343,11 +340,7 @@ class TrueErrors3D(ExactSolution3D):
 
     def pressure_error_squared_mortar(self) -> np.ndarray:
 
-        # Import functions
-        from mdestimates._error_evaluation import (
-            _get_high_pressure_trace,
-            _get_low_pressure,
-        )
+        dfe = mde.DiffusiveError(self.estimates)
 
         def compute_sidegrid_error(side_tuple):
             """
@@ -371,7 +364,7 @@ class TrueErrors3D(ExactSolution3D):
             sidegrid = side_tuple[1]
 
             # Rotate side-grid
-            sidegrid_rot = utils.rotate_embedded_grid(sidegrid)
+            sidegrid_rot = mde.RotatedGrid(sidegrid)
 
             # Obtain QuadPy elements
             elements = utils.get_quadpy_elements(sidegrid, sidegrid_rot)
@@ -405,12 +398,10 @@ class TrueErrors3D(ExactSolution3D):
         frac_cells = sps.find(mg.secondary_to_mortar_avg().T)[0]
 
         # Obtain the trace of the higher-dimensional pressure
-        tracep_high = _get_high_pressure_trace(
-            self.estimates, g_l, g_h, d_h, frac_faces
-        )
+        tracep_high = dfe._get_high_pressure_trace(g_l, g_h, d_h, frac_faces)
 
         # Obtain the lower-dimensional pressure
-        p_low = _get_low_pressure(self.estimates, g_l, d_l, frac_cells)
+        p_low = dfe._get_low_pressure(d_l, frac_cells)
 
         # Now, we can work with the pressure difference
         deltap = p_low - tracep_high
@@ -484,7 +475,7 @@ class TrueErrors3D(ExactSolution3D):
 
         # Obtain elements and declare integration method
         method = qp.t2.get_good_scheme(10)
-        g_rot = utils.rotate_embedded_grid(self.g2d)
+        g_rot = mde.RotatedGrid(self.g2d)
         elements = utils.get_quadpy_elements(self.g2d, g_rot)
 
         # Compute the true error
@@ -505,8 +496,7 @@ class TrueErrors3D(ExactSolution3D):
 
     def velocity_error_squared_mortar(self) -> np.ndarray:
 
-        # Import functions
-        from mdestimates._error_evaluation import _get_normal_velocity
+        dfe = mde.DiffusiveError(self.estimates)
 
         def compute_sidegrid_error(side_tuple):
 
@@ -515,7 +505,7 @@ class TrueErrors3D(ExactSolution3D):
             sidegrid = side_tuple[1]
 
             # Rotate side-grid
-            sidegrid_rot = utils.rotate_embedded_grid(sidegrid)
+            sidegrid_rot = mde.RotatedGrid(sidegrid)
 
             # Obtain QuadPy elements
             elements = utils.get_quadpy_elements(sidegrid, sidegrid_rot)
@@ -538,7 +528,7 @@ class TrueErrors3D(ExactSolution3D):
         mg = self.mg
 
         # Obtain normal velocities
-        normal_vel = _get_normal_velocity(self.estimates, self.de)
+        normal_vel = dfe._get_normal_velocity(self.de)
 
         # Declare integration method
         method = qp.t2.get_good_scheme(5)

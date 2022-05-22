@@ -4,10 +4,9 @@ import numpy as np
 import quadpy as qp
 
 import mdestimates.estimates_utils as utils
-from mdestimates._velocity_reconstruction import (
-    _internal_source_term_contribution as mortar_jump,
-)
+
 from analytical_2d import ExactSolution2D
+
 from typing import List
 
 
@@ -48,7 +47,7 @@ class TrueErrors2D(ExactSolution2D):
         p = utils.poly2col(recon_p)
 
         # Rotate grid and get cell centers
-        g_rot = utils.rotate_embedded_grid(self.g1d)
+        g_rot = mde.RotatedGrid(self.g1d)
         cc = g_rot.cell_centers
 
         # Project reconstructed pressure onto the cell centers
@@ -130,7 +129,7 @@ class TrueErrors2D(ExactSolution2D):
         """Compute reconstructed velocity for the fracture"""
 
         # Rotate embedded grid and
-        g_rot = utils.rotate_embedded_grid(self.g1d)
+        g_rot = mde.RotatedGrid(self.g1d)
         cc = g_rot.cell_centers
 
         recon_u = self.d1d[self.estimates.estimates_kw]["recon_u"].copy()
@@ -246,12 +245,12 @@ class TrueErrors2D(ExactSolution2D):
 
         # Jump in mortar fluxes
         jump_in_mortars = (
-            mortar_jump(self.estimates, self.g1d) / self.g1d.cell_volumes
+            self.d1d[self.estimates.estimates_kw]["mortar_jump"].copy() / self.g1d.cell_volumes
         ).reshape(self.g1d.num_cells, 1)
 
         # Integration method and retrieving elements
         method = qp.c1.newton_cotes_closed(10)
-        g_rot = utils.rotate_embedded_grid(self.g1d)
+        g_rot = mde.RotatedGrid(self.g1d)
         elements = utils.get_quadpy_elements(self.g1d, g_rot)
         elements *= -1  # we have to use the real y coordinates here
 
@@ -313,7 +312,7 @@ class TrueErrors2D(ExactSolution2D):
 
         # Obtain elements and declare integration method
         method = qp.c1.newton_cotes_closed(10)
-        g_rot = utils.rotate_embedded_grid(self.g1d)
+        g_rot = mde.RotatedGrid(self.g1d)
         elements = utils.get_quadpy_elements(self.g1d, g_rot)
         elements *= -1  # we have to use the real y coordinates here
 
@@ -333,15 +332,8 @@ class TrueErrors2D(ExactSolution2D):
 
     def pressure_error_squared_mortar(self) -> np.ndarray:
 
-        # Import functions
-        from mdestimates._error_evaluation import (
-            _sorted_highdim_edge_grid,
-            _sorted_side_grid,
-            _sorted_low_grid,
-            _merge_grids,
-            _get_grid_uniongrid_elements,
-            _project_poly_to_merged_grid,
-        )
+        # Instatiate diffusive flux object to access private methods
+        dfe = mde.DiffusiveError(self.estimates)
 
         # Get hold of grids and dictionaries
         g_l, g_h = self.gb.nodes_of_edge(self.e)
@@ -360,12 +352,12 @@ class TrueErrors2D(ExactSolution2D):
         for side in sides:
 
             # Get rotated grids and sorted elements
-            high_grid, frac_faces = _sorted_highdim_edge_grid(g_h, g_l, mg, side)
-            mortar_grid, mortar_cells = _sorted_side_grid(mg, g_l, side)
-            low_grid, low_cells = _sorted_low_grid(g_l)
+            high_grid, frac_faces = dfe._sorted_highdim_edge_grid(g_h, g_l, mg, side)
+            mortar_grid, mortar_cells = dfe._sorted_side_grid(mg, g_l, side)
+            low_grid, low_cells = dfe._sorted_low_grid(g_l)
 
             # Merge the three grids into one
-            merged_grid = _merge_grids(low_grid, mortar_grid, high_grid)
+            merged_grid = dfe._merge_grids(low_grid, mortar_grid, high_grid)
 
             # Note that the following mappings are local for each merged grid.
             # For example, to retrieve the global fracture faces indices, we
@@ -373,14 +365,13 @@ class TrueErrors2D(ExactSolution2D):
             # global mortar cells, we should write
             # mortar_cells[merged_mortar_ele]
             # Retrieve element mapping from sorted grids to merged grid
-            merged_high_ele = _get_grid_uniongrid_elements(merged_grid, high_grid)
-            merged_mortar_ele = _get_grid_uniongrid_elements(merged_grid, mortar_grid)
-            merged_low_ele = _get_grid_uniongrid_elements(merged_grid, low_grid)
+            merged_high_ele = dfe._get_grid_uniongrid_elements(merged_grid, high_grid)
+            merged_mortar_ele = dfe._get_grid_uniongrid_elements(merged_grid, mortar_grid)
+            merged_low_ele = dfe._get_grid_uniongrid_elements(merged_grid, low_grid)
 
             # Get projected pressure jump, normal permeabilities, and
             # normal velocities
-            pressure_jump, k_perp, _ = _project_poly_to_merged_grid(
-                self.estimates,
+            pressure_jump, k_perp, _ = dfe._project_poly_to_merged_grid(
                 self.e,
                 self.de,
                 [low_cells, mortar_cells, frac_faces],
@@ -464,7 +455,7 @@ class TrueErrors2D(ExactSolution2D):
 
         # Obtain elements and declare integration method
         method = qp.c1.newton_cotes_closed(10)
-        g_rot = utils.rotate_embedded_grid(self.g1d)
+        g_rot = mde.RotatedGrid(self.g1d)
         elements = utils.get_quadpy_elements(self.g1d, g_rot)
 
         # Compute the true error
@@ -482,18 +473,21 @@ class TrueErrors2D(ExactSolution2D):
 
     def velocity_error_squared_mortar(self) -> np.ndarray:
 
-        # Import functions
-        from mdestimates._error_evaluation import (
-            _sorted_side_grid,
-            _get_normal_velocity,
-        )
+        # Instatiate diffusive flux object to access private methods
+        dfe = mde.DiffusiveError(self.estimates)
+
+        # # Import functions
+        # from mdestimates._error_evaluation import (
+        #     _sorted_side_grid,
+        #     _get_normal_velocity,
+        # )
 
         # Get hold of grids and dictionaries
         g_l, g_h = self.gb.nodes_of_edge(self.e)
         mg = self.mg
 
         # Get hold normal velocities
-        normal_vel = _get_normal_velocity(self.estimates, self.de)
+        normal_vel = dfe._get_normal_velocity(self.de)
 
         # Loop over the sides of the mortar grid
         true_error = np.zeros(mg.num_cells)
@@ -508,7 +502,7 @@ class TrueErrors2D(ExactSolution2D):
         for side in sides:
 
             # Get rotated grids and sorted elements
-            mortar_grid, mortar_cells = _sorted_side_grid(mg, g_l, side)
+            mortar_grid, mortar_cells = dfe._sorted_side_grid(mg, g_l, side)
 
             # Retrieve normal velocities from the side grid
             normal_vel_side = normal_vel[mortar_cells]

@@ -1,3 +1,4 @@
+import mdestimates
 import porepy as pp
 import numpy as np
 import sympy as sym
@@ -20,7 +21,7 @@ class ExactSolution2D:
         # 1D grid and its dictionary
         self.g1d: pp.Grid = self.gb.grids_of_dimension(1)[0]
         self.d1d: dict = self.gb.node_props(self.g1d)
-        self.g1d_rot = utils.rotate_embedded_grid(self.g1d)
+        self.g1d_rot = mdestimates.RotatedGrid(self.g1d)
 
         # Mortar grid and its dictionary
         self.e: Tuple[pp.Grid, pp.Grid] = (self.g2d, self.g1d)
@@ -409,7 +410,7 @@ class ExactSolution2D:
     def integrate_f1d(self):
 
         method = qp.c1.newton_cotes_closed(10)
-        g_rot = utils.rotate_embedded_grid(self.g1d)
+        g_rot = mdestimates.RotatedGrid(self.g1d)
         elements = utils.get_quadpy_elements(self.g1d, g_rot)
         elements *= -1  # we have to use the real y coordinates here
 
