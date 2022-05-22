@@ -46,10 +46,11 @@ jobs:
         pip freeze
         wget https://raw.githubusercontent.com/keileg/polyhedron/master/polyhedron.py
         mv polyhedron.py robust_point_in_polyhedron.py
+        cd ..
 
     - name: Install md-estimates
       run: |
-        pip instal -r requirements.txt
+        pip install -r requirements.txt
         pip install .
 
 #    - name: black
