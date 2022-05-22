@@ -111,7 +111,7 @@ if __name__ == "__main__":
                 estimates = mde.ErrorEstimate(gb, lam_name="mortar_flux")
                 estimates.estimate_error()
                 estimates.transfer_error_to_state()
-                scaled_majorant = estimates.get_scaled_majorant()
+                majorant = estimates.get_majorant()
 
                 print(f"Errors succesfully estimated. Time {time() - tic}")
 
@@ -126,16 +126,12 @@ if __name__ == "__main__":
                 # Get subdomain errors
                 for g, d in gb:
                     if g.dim == 2:
-                        error_node_2d += estimates.get_scaled_local_errors(g, d)
+                        error_node_2d += estimates.get_local_errors(g, d)
                     elif g.dim == 1:
                         if d["is_low"]:
-                            error_node_1d_bloc += estimates.get_scaled_local_errors(
-                                g, d
-                            )
+                            error_node_1d_bloc += estimates.get_local_errors(g, d)
                         else:
-                            error_node_1d_cond += estimates.get_scaled_local_errors(
-                                g, d
-                            )
+                            error_node_1d_cond += estimates.get_local_errors(g, d)
                     else:
                         continue
 
@@ -144,15 +140,11 @@ if __name__ == "__main__":
                     mg = d["mortar_grid"]
                     if mg.dim == 1:
                         if d["is_low"]:
-                            error_edge_1d_bloc += estimates.get_scaled_local_errors(
-                                mg, d
-                            )
+                            error_edge_1d_bloc += estimates.get_local_errors(mg, d)
                         else:
-                            error_edge_1d_cond += estimates.get_scaled_local_errors(
-                                mg, d
-                            )
+                            error_edge_1d_cond += estimates.get_local_errors(mg, d)
                     elif mg.dim == 0:
-                        error_edge_0d += estimates.get_scaled_local_errors(mg, d)
+                        error_edge_0d += estimates.get_local_errors(mg, d)
 
                 # Populate dictionary with proper fields
                 out[solver_name][resol]["error_node_2d"] = error_node_2d
@@ -161,7 +153,7 @@ if __name__ == "__main__":
                 out[solver_name][resol]["error_edge_1d_cond"] = error_edge_1d_cond
                 out[solver_name][resol]["error_edge_1d_bloc"] = error_edge_1d_bloc
                 out[solver_name][resol]["error_edge_0d"] = error_edge_0d
-                out[solver_name][resol]["scaled_majorant"] = scaled_majorant
+                out[solver_name][resol]["majorant"] = majorant
 
                 # Print info in the console
                 print("SUMMARY OF ERRORS")
@@ -171,21 +163,21 @@ if __name__ == "__main__":
                 print("Error edge 1D [Conductive]:", error_edge_1d_cond)
                 print("Error edge 1D [Blocking]:", error_edge_1d_bloc)
                 print("Error edge 0D:", error_edge_0d)
-                print("Scaled majorant:", scaled_majorant)
+                print("Majorant:", majorant)
                 print("\n")
 
-                # Export to PARAVIEW. Change discretization method if desired
-                if solver_name == "mpfa":
-                    if mesh_size == 0.05:
-                        paraview = pp.Exporter(gb, "mpfa_coarse", folder_name="out")
-                    elif mesh_size == 0.025:
-                        paraview = pp.Exporter(
-                            gb, "mpfa_intermediate", folder_name="out"
-                        )
-                    elif mesh_size == 0.0125:
-                        paraview = pp.Exporter(gb, "mpfa_fine", folder_name="out")
-
-                    paraview.write_vtu(["pressure", "diffusive_error"])
+                # Uncomment to export to ParaView. Change discretization method if desired.
+                # if solver_name == "mpfa":
+                #     if mesh_size == 0.05:
+                #         paraview = pp.Exporter(gb, "mpfa_coarse", folder_name="out")
+                #     elif mesh_size == 0.025:
+                #         paraview = pp.Exporter(
+                #             gb, "mpfa_intermediate", folder_name="out"
+                #         )
+                #     elif mesh_size == 0.0125:
+                #         paraview = pp.Exporter(gb, "mpfa_fine", folder_name="out")
+                #
+                #     paraview.write_vtu(["pressure", "diffusive_error"])
 
 
 #%% Export
@@ -216,9 +208,9 @@ for i in itertools.product(numerical_methods, mesh_resolutions):
     col_1d_edge_cond.append(out[i[0]][i[1]]["error_edge_1d_cond"])
     col_1d_edge_bloc.append(out[i[0]][i[1]]["error_edge_1d_bloc"])
     col_0d_edge.append(out[i[0]][i[1]]["error_edge_0d"])
-    col_majorant_pressure.append(out[i[0]][i[1]]["scaled_majorant"])
-    col_majorant_flux.append(out[i[0]][i[1]]["scaled_majorant"])
-    col_majorant_combined.append(2 * out[i[0]][i[1]]["scaled_majorant"])
+    col_majorant_pressure.append(out[i[0]][i[1]]["majorant"])
+    col_majorant_flux.append(out[i[0]][i[1]]["majorant"])
+    col_majorant_combined.append(2 * out[i[0]][i[1]]["majorant"])
 
 
 # Prepare for exporting
@@ -256,7 +248,7 @@ header = "num_method mesh_size eta_omega_2d eta_omega_1d_c eta_omega_1d_b "
 header += "eta_gamma_1d_c eta_gamma_1d_b eta_gamma_0d M_p M_u M_pu "
 
 np.savetxt(
-    "convergence_bench2d.txt",
+    "benchmark2d.txt",
     export,
     delimiter=",",
     fmt="%4s %8s %2.2e %2.2e %2.2e %2.2e %2.2e %2.2e %2.2e %2.2e %2.2e",

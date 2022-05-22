@@ -119,11 +119,13 @@ def set_parameters_conductive(gb):
 
             labels = np.array(["neu"] * b_faces.size)
             labels[b_outflow] = "dir"
+            labels[b_inflow] = "dir"
             bc = pp.BoundaryCondition(g, b_faces, labels)
 
-            f_faces = b_faces[b_inflow]
-            bc_val[f_faces] = -aperture * g.face_areas[f_faces]
-            bc_val[b_faces[b_outflow]] = 1
+            outflow_faces = b_faces[b_outflow]
+            inflow_faces = b_faces[b_inflow]
+            bc_val[outflow_faces] = 0
+            bc_val[inflow_faces] = 1
 
         else:
             bc = pp.BoundaryCondition(g, empty, empty)
@@ -239,10 +241,15 @@ for i in itertools.product(numerical_methods, mesh_resolutions):
     )
     estimates.estimate_error()
     estimates.transfer_error_to_state()
-    scaled_majorant = estimates.get_scaled_majorant()
+    majorant = estimates.get_majorant()
     print(f"Errors succesfully estimated. Time {time() - tic}")
-    estimates.print_summary(scaled=True)
-    print("\n")
+    estimates.print_summary(scaled=False)
+    print()
+
+    # Uncomment to export to ParaView
+    # if i[0] == "RT0" and i[1] == "fine":
+    #     paraview = pp.Exporter(gb, "rt0_fine", folder_name="out")
+    #     paraview.write_vtu(["pressure", "diffusive_error"])
 
     #%% Compute errors
     error_node_3d = 0
@@ -255,11 +262,11 @@ for i in itertools.product(numerical_methods, mesh_resolutions):
     # Get subdomain errors
     for g, d in gb:
         if g.dim == 3:
-            error_node_3d += estimates.get_scaled_local_errors(g, d)
+            error_node_3d += estimates.get_local_errors(g, d)
         elif g.dim == 2:
-            error_node_2d += estimates.get_scaled_local_errors(g, d)
+            error_node_2d += estimates.get_local_errors(g, d)
         elif g.dim == 1:
-            error_node_1d += estimates.get_scaled_local_errors(g, d)
+            error_node_1d += estimates.get_local_errors(g, d)
         else:
             continue
 
@@ -267,11 +274,11 @@ for i in itertools.product(numerical_methods, mesh_resolutions):
     for e, d_e in gb.edges():
         mg = d_e["mortar_grid"]
         if mg.dim == 2:
-            error_edge_2d += estimates.get_scaled_local_errors(mg, d_e)
+            error_edge_2d += estimates.get_local_errors(mg, d_e)
         elif mg.dim == 1:
-            error_edge_1d += estimates.get_scaled_local_errors(mg, d_e)
+            error_edge_1d += estimates.get_local_errors(mg, d_e)
         elif mg.dim == 0:
-            error_edge_0d += estimates.get_scaled_local_errors(mg, d_e)
+            error_edge_0d += estimates.get_local_errors(mg, d_e)
 
     # Populate dictionary with proper fields
     out[i[0]][i[1]]["error_node_3d"] = error_node_3d
@@ -280,9 +287,9 @@ for i in itertools.product(numerical_methods, mesh_resolutions):
     out[i[0]][i[1]]["error_edge_2d"] = error_edge_2d
     out[i[0]][i[1]]["error_edge_1d"] = error_edge_1d
     out[i[0]][i[1]]["error_edge_0d"] = error_edge_0d
-    out[i[0]][i[1]]["majorant_pressure"] = scaled_majorant
-    out[i[0]][i[1]]["majorant_velocity"] = scaled_majorant
-    out[i[0]][i[1]]["majorant_combined"] = 2 * scaled_majorant
+    out[i[0]][i[1]]["majorant_pressure"] = majorant
+    out[i[0]][i[1]]["majorant_velocity"] = majorant
+    out[i[0]][i[1]]["majorant_combined"] = 2 * majorant
 
 #%% Export
 # Permutations
@@ -352,7 +359,7 @@ header += " eta_gamma_2d eta_gamma_1d eta_gamma_0d M_p M_u M_pu"
 
 # Write into txt
 np.savetxt(
-    "convergence_bench3d.txt",
+    "benchmark3d.txt",
     export,
     delimiter=",",
     fmt="%4s %8s %2.2e %2.2e %2.2e %2.2e %2.2e %2.2e %2.2e %2.2e %2.2e",
