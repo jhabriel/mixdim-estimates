@@ -340,11 +340,7 @@ class TrueErrors3D(ExactSolution3D):
 
     def pressure_error_squared_mortar(self) -> np.ndarray:
 
-        # Import functions
-        from mdestimates._error_evaluation import (
-            _get_high_pressure_trace,
-            _get_low_pressure,
-        )
+        dfe = mde.DiffusiveError(self.estimates)
 
         def compute_sidegrid_error(side_tuple):
             """
@@ -402,12 +398,10 @@ class TrueErrors3D(ExactSolution3D):
         frac_cells = sps.find(mg.secondary_to_mortar_avg().T)[0]
 
         # Obtain the trace of the higher-dimensional pressure
-        tracep_high = _get_high_pressure_trace(
-            self.estimates, g_l, g_h, d_h, frac_faces
-        )
+        tracep_high = dfe._get_high_pressure_trace(g_l, g_h, d_h, frac_faces)
 
         # Obtain the lower-dimensional pressure
-        p_low = _get_low_pressure(self.estimates, g_l, d_l, frac_cells)
+        p_low = dfe._get_low_pressure(d_l, frac_cells)
 
         # Now, we can work with the pressure difference
         deltap = p_low - tracep_high
@@ -502,8 +496,7 @@ class TrueErrors3D(ExactSolution3D):
 
     def velocity_error_squared_mortar(self) -> np.ndarray:
 
-        # Import functions
-        from mdestimates._error_evaluation import _get_normal_velocity
+        dfe = mde.DiffusiveError(self.estimates)
 
         def compute_sidegrid_error(side_tuple):
 
@@ -535,7 +528,7 @@ class TrueErrors3D(ExactSolution3D):
         mg = self.mg
 
         # Obtain normal velocities
-        normal_vel = _get_normal_velocity(self.estimates, self.de)
+        normal_vel = dfe._get_normal_velocity(self.de)
 
         # Declare integration method
         method = qp.t2.get_good_scheme(5)

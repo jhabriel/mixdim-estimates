@@ -12,7 +12,7 @@ Edge = Tuple[pp.Grid, pp.Grid]
 
 
 class DiffusiveError(mde.ErrorEstimate):
-    """ Parent class for the estimation of diffusive errors. """
+    """ Class for the estimation of diffusive errors. """
 
     def __init__(self, estimate: mde.ErrorEstimate):
         super().__init__(
