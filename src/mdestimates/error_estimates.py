@@ -102,24 +102,19 @@ class ErrorEstimate:
         """
         Main method to estimate the errors in all nodes and edges of the grid bucket.
 
-        Technical note
-        --------------
-
         General algortihm overview:
+        ---------------------------
 
         [1] Flux-related calculations
-
             [1.1] Perform reconstruction of the subdomain velocities using RT0
                 extension of the normal fluxes and store them in d["estimates"]["rec_u"].
 
         [2] Pressure-related calculations
-
             [2.1] Reconstruct the pressure. Perform a P1 reconstruction of the subdomain
                 pressures using the inverse of the local pressure gradient. The
                 reconstructed pressure is stored in d['estimates']["rec_p"].
 
         [3] Computation of the error estimates
-
             [3.1] Compute diffusive errors for the entire grid bucket. The errors (squared)
                 are stored element-wise under d[self.estimates_kw]["diffusive_error"].
             [3.2] Compute residual errors for the entire grid bucket. The errors (squared)
