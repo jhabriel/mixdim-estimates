@@ -31,6 +31,9 @@ jobs:
 
     - name: Install porepy
       run: |
+        cd ..
+        mkdir external_packages
+        cd external_packages
         sudo apt-get update
         sudo apt-get install libglu1-mesa
         sudo apt-get install libgeos-dev
@@ -46,7 +49,6 @@ jobs:
         pip freeze
         wget https://raw.githubusercontent.com/keileg/polyhedron/master/polyhedron.py
         mv polyhedron.py robust_point_in_polyhedron.py
-        cd ..
 
     - name: Install md-estimates
       run: |
@@ -71,6 +73,4 @@ jobs:
 
     - name: pytest
       if: ${{always()}}
-      run: |
-        cd tests/
-        pytest
+      run: pytest
