@@ -146,10 +146,10 @@ class ErrorEstimate:
 
         print("Computing upper bounds...", end="")
         # 3.1 Diffusive errors
-        diffusive_error = mde.DiffusiveError(self.gb)
+        diffusive_error = mde.DiffusiveError(self)
         diffusive_error.compute_diffusive_error()
         # 3.2 Residual errors
-        residual_error = mde.ResidualError(self.gb)
+        residual_error = mde.ResidualError(self)
         residual_error.compute_residual_error()
         print("\u2713")
 
