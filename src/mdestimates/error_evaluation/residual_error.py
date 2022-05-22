@@ -93,7 +93,9 @@ class ResidualError(mde.ErrorEstimate):
         div_u: np.ndarray = g.dim * u[0]
 
         # Retrieve jump in mortar fluxes
-        mortar_jump: np.ndarray = d[self.estimates_kw]["mortar_jump"].reshape(g.num_cells, 1)
+        mortar_jump = (
+            d[self.estimates_kw]["mortar_jump"].copy() / g.cell_volumes
+        ).reshape(g.num_cells, 1)
 
         # Integration methods an retrieving elements
         elements = utils.get_quadpy_elements(g, g_rot)
