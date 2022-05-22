@@ -9,8 +9,19 @@ import mdestimates.estimates_utils as utils
 class VelocityReconstruction(mde.ErrorEstimate):
     """ Main class for RT0 velocity reconstruction."""
 
-    def __init__(self, gb: pp.GridBucket):
-        super().__init__(gb)
+    def __init__(self, estimate: mde.ErrorEstimate):
+        super().__init__(
+            gb=estimate.gb,
+            kw=estimate.kw,
+            sd_operator_name=estimate.sd_operator_name,
+            p_name=estimate.p_name,
+            flux_name=estimate.flux_name,
+            lam_name=estimate.lam_name,
+            estimates_kw=estimate.estimates_kw,
+            p_recon_method=estimate.p_recon_method,
+            source_list=estimate.source_list,
+            poincare_list=estimate.poincare_list
+            )
 
     def compute_full_flux(self):
         """
