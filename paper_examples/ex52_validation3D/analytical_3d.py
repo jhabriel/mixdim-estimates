@@ -1,3 +1,4 @@
+import mdestimates
 import porepy as pp
 import numpy as np
 import sympy as sym
@@ -20,7 +21,7 @@ class ExactSolution3D:
         # 2D grid, its dictionary and the corresponding rotated grid
         self.g2d: pp.Grid = self.gb.grids_of_dimension(2)[0]
         self.d2d: dict = self.gb.node_props(self.g2d)
-        self.g2d_rot = utils.rotate_embedded_grid(self.g2d)
+        self.g2d_rot = mdestimates.RotatedGrid(self.g2d)
 
         # Edge, its dictionary, and the mortar grid
         self.e: Tuple[pp.Grid, pp.Grid] = (self.g3d, self.g2d)
@@ -508,7 +509,7 @@ class ExactSolution3D:
     def integrate_f2d(self):
 
         method = qp.t2.get_good_scheme(10)
-        g_rot = utils.rotate_embedded_grid(self.g2d)
+        g_rot = mdestimates.RotatedGrid(self.g2d)
         elements = utils.get_quadpy_elements(self.g2d, g_rot)
         elements *= -1  # we have to use the real y coordinates here
         # TODO: CHECK IF THIS TRICK STILL WORKS FOR 3D
