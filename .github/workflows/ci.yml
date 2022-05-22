@@ -43,6 +43,7 @@ jobs:
         cd porepy
         pip install -r requirements-dev.txt
         pip install .
+        pip freeze
         wget https://raw.githubusercontent.com/keileg/polyhedron/master/polyhedron.py
         mv polyhedron.py robust_point_in_polyhedron.py
 
