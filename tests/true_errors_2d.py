@@ -4,9 +4,6 @@ import numpy as np
 import quadpy as qp
 
 import mdestimates.estimates_utils as utils
-# from mdestimates._velocity_reconstruction import (
-#     _internal_source_term_contribution as mortar_jump,
-# )
 from analytical_2d import ExactSolution2D
 from typing import List
 
@@ -245,10 +242,9 @@ class TrueErrors2D(ExactSolution2D):
         div_u = u[0]
 
         # Jump in mortar fluxes
-        jump_in_mortars = self.d1d[self.estimates.estimates_kw]["mortar_jump"].copy()
-        # jump_in_mortars = (
-        #     mortar_jump(self.estimates, self.g1d) / self.g1d.cell_volumes
-        # ).reshape(self.g1d.num_cells, 1)
+        jump_in_mortars = (
+            self.d1d[self.estimates.estimates_kw]["mortar_jump"].copy() / self.g1d.cell_volumes
+        ).reshape(self.g1d.num_cells, 1)
 
         # Integration method and retrieving elements
         method = qp.c1.newton_cotes_closed(10)
