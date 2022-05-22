@@ -254,10 +254,10 @@ class ErrorEstimate:
 
         return scaled_majorant
 
-    def get_local_error(self,
-                        g: Union[pp.Grid, pp.MortarGrid],
-                        d: dict,
-                        error_type: str = "all") -> Union[int, float]:
+    def get_local_errors(self,
+                         g: Union[pp.Grid, pp.MortarGrid],
+                         d: dict,
+                         error_type: str = "all") -> Union[int, float]:
         """
         Computes the sum of the local errors of a subdomain or interface.
 
@@ -452,7 +452,7 @@ class ErrorEstimate:
             error = 0
             for g in g_list:
                 d = self.gb.node_props(g)
-                error += self.get_local_error(g, d)
+                error += self.get_local_errors(g, d)
             print(f"{dim}D Subdomain error: {error}")
 
         # Print summary of interface errors
@@ -461,7 +461,7 @@ class ErrorEstimate:
             for _, d in self.gb.edges():
                 mg = d["mortar_grid"]
                 if mg.dim == dim:
-                    error += self.get_local_error(mg, d)
+                    error += self.get_local_errors(mg, d)
             print(f"{dim}D Interface error: {error}")
 
     def _print_summary_scaled(self):
