@@ -12,6 +12,7 @@ class PressureReconstruction(mde.ErrorEstimate):
     def __init__(self, estimate: mde.ErrorEstimate):
         super().__init__(
             gb=estimate.gb,
+            conservation=estimate.conservation,
             kw=estimate.kw,
             sd_operator_name=estimate.sd_operator_name,
             p_name=estimate.p_name,

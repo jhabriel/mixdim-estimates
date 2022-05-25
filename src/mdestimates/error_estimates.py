@@ -6,11 +6,12 @@ from typing import Callable, List, Optional, Union, Tuple
 
 
 class ErrorEstimate:
-    """ Main class for the computation of a posteriori error estimates for mD equations."""
+    """Class for the computation of a posteriori error estimates for mD equations."""
 
     def __init__(
         self,
         gb: pp.GridBucket,
+        conservation: str = "local",
         kw: str = "flow",
         sd_operator_name: str = "diffusion",
         p_name: str = "pressure",
@@ -52,6 +53,7 @@ class ErrorEstimate:
         """
 
         self.gb: pp.GridBucket = gb
+        self.conservation: str = conservation
         self.kw: str = kw
         self.sd_operator_name: str = sd_operator_name
         self.p_name: str = p_name
@@ -59,17 +61,12 @@ class ErrorEstimate:
         self.lam_name: str = lam_name
         self.estimates_kw: str = estimates_kw
         self.p_recon_method: str = p_recon_method
+        self.poincare_list: Optional[List[Union[float, int]]] = poincare_list
 
+        # If source list is not given (None), assume 0 in each subdomain
         if source_list is None:
             source_list = [0 for _ in gb]
         self.source_list = source_list
-
-        if poincare_list is None:
-            poincare_list = [1 for _ in gb]
-            self.poincare = "local"
-        else:
-            self.poincare = "global"
-        self.poincare_list = poincare_list
 
     def __str__(self):
         return "Error estimate object."

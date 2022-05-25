@@ -9,11 +9,12 @@ from typing import Callable, Union
 
 
 class ResidualError(mde.ErrorEstimate):
-    """ Parent class for the estimation of residual errors. """
+    """ Class for the estimation of residual errors """
 
     def __init__(self, estimate: mde.ErrorEstimate):
         super().__init__(
             gb=estimate.gb,
+            conservation=estimate.conservation,
             kw=estimate.kw,
             sd_operator_name=estimate.sd_operator_name,
             p_name=estimate.p_name,
@@ -51,12 +52,13 @@ class ResidualError(mde.ErrorEstimate):
             source: Union[Callable[..., np.ndarray], int] = self.source_list[node]
 
             # Obtain the subdomain residual error
-            if self.poincare == "global":
+            if self.conservation == "global":
                 poincare_constant: Union[float, int] = self.poincare_list[node]
-                residual_error = self.residual_error_global_poincare(g, g_rot, d, source,
-                                                                     poincare_constant)
+                residual_error = self.residual_error_global_poincare(
+                    g, g_rot, d, source, poincare_constant)
             else:
-                residual_error = self.residual_error_local_poincare(g, g_rot, d, source)
+                residual_error = self.residual_error_local_poincare(
+                    g, g_rot, d, source)
 
             d[self.estimates_kw]["residual_error"] = residual_error
 
