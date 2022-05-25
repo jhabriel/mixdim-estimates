@@ -45,7 +45,7 @@ class ExactSolution:
         cc = self.g.cell_centers
         x, y = sym.symbols("x y")
 
-        p_sym = sym.sin(sym.pi * x) * sym.sin(sym.pi * y)
+        p_sym = sym.sin(2 * sym.pi * x) * sym.sin(2 * sym.pi * y)
         p_fun = sym.lambdify((x, y), p_sym, "numpy")
         p_cc = p_fun(cc[0], cc[1])
 
@@ -180,12 +180,12 @@ class ExactSolution:
 
         # Evaluate exact pressure at external boundary faces
         bc_values = np.zeros(self.g.num_faces)
-        idx = self.g.get_all_boundary_faces()
+        idx = self.g.get_boundary_faces()
         bc_values[idx] = self.p("fun")(fc[0][idx], fc[1][idx])
 
         return bc_values
 
-    def integrate_f(self, degree: int = 4) -> np.ndarray:
+    def integrate_f(self, degree: int = 10) -> np.ndarray:
         """
         Computes the numerical integration of the source term
 
@@ -202,8 +202,6 @@ class ExactSolution:
         # Declare integration method and get hold of elements in QuadPy format
         int_method = qp.t2.get_good_scheme(degree)
         elements = utils.get_quadpy_elements(self.g, self.g)
-
-        integral = np.zeros(self.g.num_cells)
 
         def integrand(x):
             return self.f("fun")(x[0], x[1]) * np.ones_like(x[0])

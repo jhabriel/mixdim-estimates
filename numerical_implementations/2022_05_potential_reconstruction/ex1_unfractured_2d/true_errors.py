@@ -10,7 +10,7 @@ from analytical import ExactSolution
 from typing import List
 
 
-class TrueErrors(ExactSolution):
+class TrueError(ExactSolution):
     def __init__(self, estimates: mde.ErrorEstimate):
         super().__init__(gb=estimates.gb)
         self.estimates = estimates
