@@ -116,21 +116,13 @@ class TrueError(ExactSolution):
     # Exact pressure error
     def true_error(self) -> float:
 
-        if self.estimates.p_recon_method == "keilegavlen" or "cochez-dhondt":
-            true_error = self.pressure_error_squared_p1().sum() ** 0.5
-        elif self.estimates.p_recon_method == "vohralik":
-            true_error = self.pressure_error_squared_p2().sum() ** 0.5
-        else:
-            raise NotImplementedError("Pressure reconstruction technique not "
-                                      "implemented")
-
-        return true_error
-
-    def pressure_error_squared_p1(self) -> np.ndarray:
-
         # Get hold of reconstructed pressure and create list of coefficients
-        recon_p = self.d[self.estimates.estimates_kw]["recon_p"]
-        pr = utils.poly2col(recon_p)
+        if self.estimates.p_recon_method in ["keilegavlen", "cochez"]:
+            p = self.d[self.estimates.estimates_kw]["recon_p"]
+        else:
+            p = self.d[self.estimates.estimates_kw]["postprocessed_p"]
+
+        p = utils.poly2col(p)
 
         # Obtain elements and declare integration method
         method = qp.t2.get_good_scheme(10)
@@ -141,9 +133,15 @@ class TrueError(ExactSolution):
             # gradp exact in x and y
             gradp_exact_x = self.gradp("fun")[0](x[0], x[1])
             gradp_exact_y = self.gradp("fun")[1](x[0], x[1])
+
             # gradp reconstructed in x and y
-            gradp_recon_x = pr[0] * np.ones_like(x[0])
-            gradp_recon_y = pr[1] * np.ones_like(x[1])
+            if self.estimates.p_recon_method in ["keilegavlen", "cochez"]:
+                gradp_recon_x = p[0] * np.ones_like(x[0])
+                gradp_recon_y = p[1] * np.ones_like(x[1])
+            else:
+                gradp_recon_x = 2 * p[0] * x[0] + p[1] * x[1] + p[2] * np.ones_like(x[0])
+                gradp_recon_y = p[1] * x[0] + 2 * p[3] * x[1] + p[4] * np.ones_like(x[1])
+
             # integral in x and y
             int_x = (gradp_exact_x - gradp_recon_x) ** 2
             int_y = (gradp_exact_y - gradp_recon_y) ** 2
@@ -152,8 +150,7 @@ class TrueError(ExactSolution):
         # Compute numerical integration
         integral = method.integrate(integrand, elements)
 
-        return integral
+        # Compute true error
+        true_error = integral.sum() ** 0.5
 
-    def pressure_error_squared_p2(self) -> np.ndarray:
-
-        pass
+        return true_error
