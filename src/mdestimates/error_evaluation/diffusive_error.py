@@ -307,7 +307,7 @@ class DiffusiveError(mde.ErrorEstimate):
 
         # Evaluate the polynomials at the relevant Lagrangian nodes
         point_coo_rot = get_edge_lagragian_coordinates(gh_rot)
-        point_val = utils.eval_P1(p_high, point_coo_rot)
+        point_val = utils.eval_p1(p_high, point_coo_rot)
 
         # Rotate the coordinates of the Lagrangian nodes w.r.t. the lower-dimensional grid
         point_coo = get_edge_lagragian_coordinates(g_h)
@@ -317,10 +317,10 @@ class DiffusiveError(mde.ErrorEstimate):
         point_edge_coo_rot = point_edge_coo_rot[dim_bool]
 
         # Construct a polynomial (of reduced dimensionality) using the rotated coo
-        trace_pressure = utils.interpolate_P1(point_val, point_edge_coo_rot)
+        trace_pressure = utils.interpolate_p1(point_val, point_edge_coo_rot)
 
         # Test if the values of the original polynomial match the new one
-        point_val_rot = utils.eval_P1(trace_pressure, point_edge_coo_rot)
+        point_val_rot = utils.eval_p1(trace_pressure, point_edge_coo_rot)
         np.testing.assert_almost_equal(point_val, point_val_rot, decimal=12)
 
         return trace_pressure
@@ -451,7 +451,7 @@ class DiffusiveError(mde.ErrorEstimate):
         p_1d = p_1d[cells_of_frac_faces]
         coo_frac_faces = gh_rot.face_centers[:, frac_faces].T
         coo_frac_faces = coo_frac_faces[np.newaxis, :, :]
-        trace_p = utils.eval_P1(p_1d, coo_frac_faces)
+        trace_p = utils.eval_p1(p_1d, coo_frac_faces)
 
         # Obtain the pressure of the 0D grid
         p_0d = d_l[self.estimates_kw]["recon_p"].copy()
@@ -523,7 +523,7 @@ class DiffusiveError(mde.ErrorEstimate):
             # Declare integrand
             def integrand(x):
                 coors = x[np.newaxis, :, :]  # this is needed for 1D grids
-                p_jump = utils.eval_P1(deltap_side, coors)
+                p_jump = utils.eval_p1(deltap_side, coors)
                 return (k_side ** (-0.5) * normalvel_side + k_side ** 0.5 * p_jump) ** 2
 
             # Compute integral
@@ -631,7 +631,7 @@ class DiffusiveError(mde.ErrorEstimate):
 
             # Declare integrand
             def integrand(x):
-                p_jump = utils.eval_P1(deltap_side, x)
+                p_jump = utils.eval_p1(deltap_side, x)
                 return (k_side ** (-0.5) * normalvel_side + k_side ** 0.5 * p_jump) ** 2
 
             # Compute integral
@@ -1210,7 +1210,7 @@ class DiffusiveError(mde.ErrorEstimate):
             # Define integrand
             def integrand(x):
                 coors = x[np.newaxis, :, :]  # this is needed for 1D grids
-                p_jump = utils.eval_P1(pressure_jump, coors)  # eval pressure jump
+                p_jump = utils.eval_p1(pressure_jump, coors)  # eval pressure jump
                 return (k_perp ** (-0.5) * normal_vel + k_perp ** 0.5 * p_jump) ** 2
 
             # Evaluate integral

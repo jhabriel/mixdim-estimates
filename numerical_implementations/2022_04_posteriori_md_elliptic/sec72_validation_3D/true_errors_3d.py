@@ -376,7 +376,7 @@ class TrueErrors3D(ExactSolution3D):
             # Declare integrand
             def integrand(x):
                 true_jump = self.p2d("fun")
-                p_jump = utils.eval_P1(deltap_side, -x)  # -x due to rotation
+                p_jump = utils.eval_p1(deltap_side, -x)  # -x due to rotation
                 diff = true_jump(x[0], x[1]) - p_jump
                 return diff ** 2
 

@@ -386,9 +386,7 @@ class TrueErrors2D(ExactSolution2D):
             # Define integrand
             def integrand(x):
                 coors = x[np.newaxis, :, :]  # this is needed for 1D grids
-                p_jump = utils.eval_P1(
-                    pressure_jump, -coors
-                )  # -coors because is rotated
+                p_jump = utils.eval_p1(pressure_jump, -coors)  # -coors because is rotated
                 return (self.p1d("fun")(x) - p_jump) ** 2
 
             # Evaluate integral
