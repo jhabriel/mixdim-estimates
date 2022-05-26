@@ -6,6 +6,8 @@ import scipy.sparse as sps
 import mdestimates as mde
 import mdestimates.estimates_utils as utils
 
+from typing import Tuple
+
 
 class PressureReconstruction(mde.ErrorEstimate):
     """Class for pressure reconstruction techniques"""
@@ -29,15 +31,9 @@ class PressureReconstruction(mde.ErrorEstimate):
         """
         Reconstructs the pressure in all subdomains of the grid bucket.
 
-        Returns
-        -------
-        None.
-
-        Notes
-        -----
-        (*) The data dictionary of each node of the grid bucket is updated
-        with the field d[self.estimates_kw]["recon_p"], a NumPy nd-array
-        containing the coefficients of the reconstructed pressure.
+        The data dictionary of each node of the grid bucket is updated with the field
+        d[self.estimates_kw]["recon_p"], a NumPy nd-array containing the coefficients of the
+        reconstructed pressure.
         """
 
         # Loop through all subdomains
@@ -53,27 +49,30 @@ class PressureReconstruction(mde.ErrorEstimate):
             # Rotate grid
             g_rot: mde.RotatedGrid = mde.RotatedGrid(g)
 
-            # Obtain Lagrangian coordinates
-            if self.p_recon_method == "keilegavlen":
-                point_val, point_coo = self.keilegavlen_p1(g, g_rot, d)
-            elif self.p_recon_method == "cochez":
+            # Obtain Lagrangian nodes and Lagrangian coordinates
+            if self.p_recon_method == "cochez":
                 point_val, point_coo = self.cochez_p1(g, g_rot, d)
+            elif self.p_recon_method == "keilegavlen":
+                point_val, point_coo = self.keilegavlen_p1(g, g_rot, d)
             elif self.p_recon_method == "vohralik":
                 point_val, point_coo = self.vohralik_p2(g, g_rot, d)
             else:
                 raise ValueError("Pressure reconstruction method not available.")
 
             # Obtain pressure coefficients
-            recons_p = utils.interpolate_P1(point_val, point_coo)
+            if self.p_recon_method in ["cochez", "keilegavlen"]:
+                recons_p = utils.interpolate_p1(point_val, point_coo)
+            else:
+                recons_p = utils.interpolate_p2(point_val, point_coo)
 
-            # TEST: Pressure reconstruction
-            self._test_pressure_reconstruction(g, recons_p, point_val, point_coo)
-            # END TEST
+            # Test
+            if self.p_recon_method in ["cochez", "keilegavlen"]:
+                self._test_p1_recons(g, recons_p, point_val)
+            else:
+                self._test_p2_recons(g, recons_p, point_val)
 
             # Save in the data dictionary.
             d[self.estimates_kw]["recon_p"] = recons_p
-
-        return None
 
     def cochez_p1(self, g: pp.Grid, g_rot: mde.RotatedGrid, d: dict):
         """
@@ -282,12 +281,16 @@ class PressureReconstruction(mde.ErrorEstimate):
 
         return point_val, point_coo
 
-    def vohralik_p2(self, g: pp.Grid, g_rot: mde.RotatedGrid, d: dict):
+    def vohralik_p2(self,
+                    g: pp.Grid,
+                    g_rot: mde.RotatedGrid,
+                    d: dict
+                    ) -> Tuple[np.ndarray, np.ndarray]:
         """
         P2 reconstruction based on solving a local Neumann problem + Oswald interpolation.
 
-        Reference:
-        ----------
+        Reference
+        ---------
         Vohralík, M. (2010). Unified primal formulation-based a priori and a posteriori error
         analysis of mixed finite element methods. Mathematics of computation, 79(272),
         2001-2032.
@@ -314,7 +317,13 @@ class PressureReconstruction(mde.ErrorEstimate):
 
         """
 
-        pass
+        # Obtain quadratic post postprocessed pressure
+        postprocessed_p2 = self._postprocessed_p2(g, g_rot, d)
+
+        # Apply Oswald interpolator
+        point_val, point_coo = self._oswald_p2(g, g_rot, d, postprocessed_p2)
+
+        return point_val, point_coo
 
     def _postprocessed_p2(self, g: pp.Grid, g_rot: mde.RotatedGrid, d: dict) -> np.ndarray:
         """
@@ -418,8 +427,238 @@ class PressureReconstruction(mde.ErrorEstimate):
 
         return coeff
 
+    def _oswald_p2(self, g, g_rot, d, p2_coeff):
+        """Wrapper for P2 Oswald interpolator"""
+
+        if g.dim == 1:
+            return self._oswald_p2_1d(g, g_rot, d, p2_coeff)
+        elif g.dim == 2:
+            return self._oswald_p2_2d(g, g_rot, d, p2_coeff)
+        else:
+            return self._oswald_p2_3d(g, g_rot, d, p2_coeff)
+
+    def _oswald_p2_1d(self,
+                      g: pp.Grid,
+                      g_rot: mde.RotatedGrid,
+                      d: dict,
+                      p2_coeff: np.ndarray
+                      ) -> Tuple[np.ndarray, np.ndarray]:
+
+        """
+        Apply Oswald interplator to 1D subdomains for P2 functions.
+
+        This requires averaging of the Lagrangian points, which in the case of 1D domains,
+        are simply the nodal points.
+
+        Parameters
+        ----------
+        g (pp.Grid): PorePy grid.
+        g_rot (mde.RotatedGrid): Rotated grid.
+        d (dict): Data dictionary with pressure solution in d[pp.STATE].
+        p2_coeff (np.ndarray): Pressure polynomial of size g.num_cells x 3.
+
+        Returns
+        -------
+        (point_val, point_coo) Tuple[np.ndarray, np.ndarray]: Containing the values and the
+            coordinates at Lagrangian nodes.
+        """
+
+        # Abbreviations
+        nn = g.num_nodes
+        nf = g.num_faces
+        nc = g.num_cells
+
+        # Sanity check
+        if not p2_coeff == (g.num_cells, 3):
+            raise ValueError("Wrong shape of P2 polynomial.")
+
+        # Get coefficients
+        p = utils.poly2col(p2_coeff)
+
+        # Mappings
+        cell_nodes_map, _, _ = sps.find(g.cell_nodes())
+        cell_faces_map, _, _ = sps.find(g.cell_faces)
+        nodes_cell = cell_nodes_map.reshape(np.array([nc, g.dim + 1]))
+
+        # Treatment of the cell-center pressures
+        cc = g_rot.cell_centers
+        cc_p = p[0] * cc[0] ** 2 + p[1] * cc[0] + p[2]  # c0x^2 + c1x + c2
+
+        # Treatment of the nodes
+        # Evaluate post-processed pressure at the nodes
+        nx = g_rot.nodes[0][nodes_cell]  # local node x-coordinates
+        nodes_p = (
+                p[0] * nx ** 2  # c0x^2
+                + p[1] * nx  # c1x
+                + p[2]  # c2
+        )
+
+        # Average nodal pressure
+        node_cardinality = np.bincount(cell_nodes_map)
+        node_pressure = np.zeros(g.num_nodes)
+        for col in range(g.dim + 1):
+            node_pressure += np.bincount(
+                nodes_cell[:, col], weights=nodes_p[:, col], minlength=g.num_nodes
+            )
+        node_pressure /= node_cardinality
+
+        # Treatment of the boundary points
+        bc = d[pp.PARAMETERS][self.kw]["bc"]
+        bc_values = d[pp.PARAMETERS][self.kw]["bc_values"]
+        dir_bound_faces = bc.is_dir
+        face_vec = np.zeros(g.num_faces)
+        face_vec[dir_bound_faces] = 1
+        num_dir_face_of_node = g.face_nodes * face_vec
+        is_dir_node = num_dir_face_of_node > 0
+        face_vec *= 0
+        face_vec[dir_bound_faces] = bc_values[dir_bound_faces]
+        node_val_dir = g.face_nodes * face_vec
+        node_val_dir[is_dir_node] /= num_dir_face_of_node[is_dir_node]
+        node_pressure[is_dir_node] = node_val_dir[is_dir_node]
+
+        # Prepare for exporting
+        point_val = np.column_stack([node_pressure[nodes_cell], cc_p.reshape(nc, 1)])
+        point_coo = np.column_stack([nx, cc])
+
+        return point_val, point_coo
+
+    def _oswald_p2_2d(self,
+                      g: pp.Grid,
+                      g_rot: mde.RotatedGrid,
+                      d: dict,
+                      p2_coeff: np.ndarray
+                      ) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Apply Oswald interplator to 2D subdomains for P2 functions.
+
+        This requires averaging of the Lagrangian points, which in the case of 2D domains,
+        include nodes and edge-centers.
+
+        Parameters
+        ----------
+        g (pp.Grid): PorePy grid.
+        g_rot (mde.RotatedGrid): Rotated grid.
+        d (dict): Data dictionary with pressure solution in d[pp.STATE].
+        p2_coeff (np.ndarray): Pressure polynomial of size g.num_cells x 6.
+
+        Returns
+        -------
+        (point_val, point_coo) Tuple[np.ndarray, np.ndarray]: Containing the values and the
+            coordinates at Lagrangian nodes.
+        """
+
+        # Abbreviations
+        nn = g.num_nodes
+        nf = g.num_faces
+        nc = g.num_cells
+
+        # Sanity check
+        if not p2_coeff == (g.num_cells, 6):
+            raise ValueError("Wrong shape of P2 polynomial.")
+
+        # Get coefficients
+        p = utils.poly2col(p2_coeff)
+
+        # Mappings
+        cell_nodes_map, _, _ = sps.find(g.cell_nodes())
+        cell_faces_map, _, _ = sps.find(g.cell_faces)
+        nodes_cell = cell_nodes_map.reshape(np.array([nc, g.dim + 1]))
+        faces_cell = cell_faces_map.reshape(np.array([g.num_cells, g.dim + 1]))
+
+        # Treatment of the nodes
+        # Evaluate post-processed pressure at the nodes
+        nodes_p = np.zeros([g.num_cells, 3])
+        nx = g_rot.nodes[0][nodes_cell]  # local node x-coordinates
+        ny = g_rot.nodes[1][nodes_cell]  # local node y-coordinates
+
+        # Compute node pressures
+        for col in range(g.dim + 1):
+            nodes_p[:, col] = (
+                    p[0] * nx[:, col] ** 2  # c0x^2
+                    + p[1] * nx[:, col] * ny[:, col]  # c1xy
+                    + p[2] * nx[:, col]  # c2x
+                    + p[3] * ny[:, col] ** 2  # c3y^2
+                    + p[4] * ny[:, col]  # c4x
+                    + p[5]  # c5
+            )
+
+        # Average nodal pressure
+        node_cardinality = np.bincount(cell_nodes_map)
+        node_pressure = np.zeros(g.num_nodes)
+        for col in range(g.dim + 1):
+            node_pressure += np.bincount(
+                nodes_cell[:, col], weights=nodes_p[:, col], minlength=g.num_nodes
+            )
+        node_pressure /= node_cardinality
+
+        # Treatment of the faces
+        # Evaluate post-processed pressure at the face-centers
+        faces_p = np.zeros([g.num_cells, 3])
+        fx = g_rot.face_centers[0][faces_cell]  # local face-center x-coordinates
+        fy = g_rot.face_centers[1][faces_cell]  # local face-center y-coordinates
+
+        for col in range(g.dim + 1):
+            faces_p[:, col] = (
+                    p[0] * fx[:, col] ** 2  # c0x^2
+                    + p[1] * fx[:, col] * fy[:, col]  # c1xy
+                    + p[2] * fx[:, col]  # c2x
+                    + p[3] * fy[:, col] ** 2  # c3y^2
+                    + p[4] * fy[:, col]  # c4x
+                    + p[5]  # c5
+            )
+
+        # Average face pressure
+        face_cardinality = np.bincount(cell_faces_map)
+        face_pressure = np.zeros(g.num_faces)
+        for col in range(3):
+            face_pressure += np.bincount(
+                faces_cell[:, col], weights=faces_p[:, col], minlength=g.num_faces
+            )
+        face_pressure /= face_cardinality
+
+        # Treatment of the boundary points
+        bc = d[pp.PARAMETERS][self.kw]["bc"]
+        bc_values = d[pp.PARAMETERS][self.kw]["bc_values"]
+        # If external boundary face is Dirichlet, we overwrite the value,
+        # If external boundary face is Neumann, we leave it as it is.
+        external_dir_bound_faces = np.logical_and(
+            bc.is_dir, g.tags["domain_boundary_faces"]
+        )
+        external_dir_bound_faces_vals = bc_values[external_dir_bound_faces]
+        face_pressure[external_dir_bound_faces] = external_dir_bound_faces_vals
+
+        # Now the nodes
+        face_vec = np.zeros(g.num_faces)
+        face_vec[external_dir_bound_faces] = 1
+        num_dir_face_of_node = g.face_nodes * face_vec
+        is_dir_node = num_dir_face_of_node > 0
+        face_vec *= 0
+        face_vec[external_dir_bound_faces] = bc_values[external_dir_bound_faces]
+        node_val_dir = g.face_nodes * face_vec
+        node_val_dir[is_dir_node] /= num_dir_face_of_node[is_dir_node]
+        node_pressure[is_dir_node] = node_val_dir[is_dir_node]
+
+        # Prepare for exporting
+        point_val = np.column_stack(
+            [node_pressure[nodes_cell], face_pressure[faces_cell]]
+        )
+        point_coo = np.empty([g.dim, g.num_cells, 6])
+        point_coo[0] = np.column_stack([nx, fx])
+        point_coo[1] = np.column_stack([ny, fy])
+
+        return point_val, point_coo
+
+    def _oswald_p2_3d(self,
+                      g: pp.Grid,
+                      g_rot: mde.RotatedGrid,
+                      d: dict,
+                      p2_coeff: np.ndarray
+                      ) -> Tuple[np.ndarray, np.ndarray]:
+
+        pass
+
     @staticmethod
-    def _test_pressure_reconstruction(recon_p, point_val, point_coo):
+    def _test_p1_recons(recon_p, point_val, point_coo):
         """
         Testing pressure reconstruction. This function uses the reconstructed
         pressure local polynomial and perform an evaluation at the Lagrangian
@@ -449,5 +688,39 @@ class PressureReconstruction(mde.ErrorEstimate):
                 err_msg="Pressure reconstruction has failed",
             )
 
-        eval_poly = utils.eval_P1(recon_p, point_coo)
+        eval_poly = utils.eval_p1(recon_p, point_coo)
+        assert_reconp(eval_poly, point_val)
+
+    @staticmethod
+    def _test_p2_recons(recon_p, point_val, point_coo):
+        """
+        Testing pressure reconstruction. This function uses the reconstructed
+        pressure local polynomial and perform an evaluation at the Lagrangian
+        points, and checks if the those values are equal to the point_val array.
+
+        Parameters
+        ----------
+        recon_p : NumPy nd-Array
+            Reconstructed pressure polynomial.
+        point_val : NumPy nd-Array
+            Pressure avlues at the Lagrangian nodes.
+        point_coo : NumPy array
+            Coordinates at the Lagrangian nodes.
+
+        Returns
+        -------
+        None.
+
+        """
+
+        def assert_reconp(evaluated_polynomial, lagrangian_val):
+            np.testing.assert_allclose(
+                evaluated_polynomial,
+                lagrangian_val,
+                rtol=1e-6,
+                atol=1e-3,
+                err_msg="Pressure reconstruction has failed",
+            )
+
+        eval_poly = utils.eval_p2(recon_p, point_coo)
         assert_reconp(eval_poly, point_val)
