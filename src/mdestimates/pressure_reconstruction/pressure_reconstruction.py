@@ -1,6 +1,7 @@
 from __future__ import annotations
 import porepy as pp
 import numpy as np
+import quadpy as qp
 import scipy.sparse as sps
 import mdestimates as mde
 import mdestimates.estimates_utils as utils
@@ -259,15 +260,13 @@ class PressureReconstruction(mde.ErrorEstimate):
         # TODO: Check this: We should only look for Dirichlet bc at the ambient grid
         bc = d[pp.PARAMETERS][self.kw]["bc"]
         bc_values = d[pp.PARAMETERS][self.kw]["bc_values"]
-        external_dirichlet_boundary = np.logical_and(
-            bc.is_dir, g.tags["domain_boundary_faces"]
-        )
+        external_dir_bc = np.logical_and(bc.is_dir, g.tags["domain_boundary_faces"])
         face_vec = np.zeros(nf)
-        face_vec[external_dirichlet_boundary] = 1
+        face_vec[external_dir_bc] = 1
         num_dir_face_of_node = g.face_nodes * face_vec
         is_dir_node = num_dir_face_of_node > 0
         face_vec *= 0
-        face_vec[external_dirichlet_boundary] = bc_values[external_dirichlet_boundary]
+        face_vec[external_dir_bc] = bc_values[external_dir_bc]
         node_val_dir = g.face_nodes * face_vec
         node_val_dir[is_dir_node] /= num_dir_face_of_node[is_dir_node]
         nodal_pressures[is_dir_node] = node_val_dir[is_dir_node]
@@ -284,9 +283,143 @@ class PressureReconstruction(mde.ErrorEstimate):
         return point_val, point_coo
 
     def vohralik_p2(self, g: pp.Grid, g_rot: mde.RotatedGrid, d: dict):
+        """
+        P2 reconstruction based on solving a local Neumann problem + Oswald interpolation.
+
+        Reference:
+        ----------
+        Vohralík, M. (2010). Unified primal formulation-based a priori and a posteriori error
+        analysis of mixed finite element methods. Mathematics of computation, 79(272),
+        2001-2032.
+
+        Parameters
+        ----------
+        g : PorePy object
+            Grid
+        g_rot: Rotated grid object
+            Rotated pseudo-grid
+        d : Dictionary
+            Dicitionary containing the parameters
+
+        Raises
+        ------
+        Value Error:
+            If pressure solution is not in d[pp.STATE]
+            If pressure solution does not have the correct size
+
+        Returns
+        -------
+        [point_val, point_coo]: Tuple
+            List containing the pressures and coordinates at the Lagrangian points
+
+        """
+
         pass
 
-    def _test_pressure_reconstruction(self, g, recon_p, point_val, point_coo):
+    def _postprocessed_p2(self, g: pp.Grid, g_rot: mde.RotatedGrid, d: dict) -> np.ndarray:
+        """
+        Obtain nonconforming postprocessed pressure from the local RT0 field
+
+        Parameters
+        ----------
+        g (grid): Subdomain grid
+        g_rot (rotated grid): Rotated grid
+        d (dict): Data dictionary with pressure solution and reconstructed velocities.
+
+        Returns
+        -------
+        coeff (ndarray): Numpy array of size g.num_cells x dof. For 1d, dof = 3; for 2d,
+        dof = 6; for 3d, dof = 10.
+
+        """
+
+        # Sanity checks
+        if self.p_name not in d[pp.STATE]:
+            raise ValueError("Pressure solution not found.")
+
+        if d[pp.STATE][self.p_name].size != g.num_cells:
+            raise ValueError("Inconsistent size of pressure solution.")
+
+        # Retrieve data from dictionaries
+        p_cc = d[pp.STATE][self.p_name].copy()
+
+        # Retrieve reconstructed velocity
+        u = d[self.estimates_kw]["recon_u"].copy()
+
+        # Retrieve permeability
+        perm = d[pp.PARAMETERS][self.kw]["second_order_tensor"].values
+        k = perm[0][0].reshape(g.num_cells, 1)
+
+        # Scale the velocity by the inverse of the permeability
+        u = k ** (-1) * u
+
+        # Obtain coefficients
+        u = utils.poly2col(u)
+
+        # Get quadpy elements and declare integration method
+        elements = utils.get_quadpy_elements(g, g_rot)
+        if g.dim == 1:
+            method = qp.c1.newton_cotes_closed(3)
+        elif g.dim == 2:
+            method = qp.t2.get_good_scheme(4)
+        else:
+            method = qp.t3.get_good_scheme(3)
+
+        # Declare integrands
+        def integrand(x):
+            if g.dim == 1:
+                out = -0.5 * u[0] * x ** 2 - u[1] * x
+                return out
+            elif g.dim == 2:
+                out = -0.5 * u[0] * (x[0] ** 2 + x[1] ** 2) - u[1] * x[0] - u[2] * x[1]
+                return out
+            else:
+                out = (
+                        -0.5 * u[0] * (x[0] ** 2 + x[1] ** 2 + x[2] ** 2)
+                        - u[1] * x[0] - u[2] * x[1] - u[3] * x[2]
+                )
+                return out
+
+        # Perform integration
+        integral = method.integrate(integrand, elements)
+
+        # Obtain constant of the integration to satisfy |K|^-1 (p_post, 1)_K = p_cc
+        # We assume that the postprocessed pressure satisfies (at most) a P2 polynomial
+        vol = g.cell_volumes
+        zeros = np.zeros(g.num_cells)
+        if g.dim == 1:
+            # p(x)|K = c0x^2 + c1x + c2
+            coeff = np.zeros([g.num_cells, 3])
+            coeff[:, 0] = -u[0].flatten() / 2  # x ** 2
+            coeff[:, 1] = -u[1].flatten()  # x
+            coeff[:, 2] = p_cc - integral / vol  # 1
+        elif g.dim == 2:
+            # p(x,y)|K = c0x^2 + c1xy + c2x + c3y^2 + c4y + c5
+            coeff = np.zeros([g.num_cells, 6])
+            coeff[:, 0] = -u[0].flatten() / 2  # x ** 2
+            coeff[:, 1] = zeros  # x * y
+            coeff[:, 2] = -u[1].flatten()  # x
+            coeff[:, 3] = -u[0].flatten() / 2  # y ** 2
+            coeff[:, 4] = -u[2].flatten()  # y
+            coeff[:, 5] = p_cc - integral / vol  # 1
+        else:
+            # p(x,y,z)|K = c0x^2 + c1xy + c2xz + c3x + c4y^2 + c5yz + c6y + c7z^2 + c8z + c9
+            coeff = np.zeros([g.num_cells, 10])
+            coeff[:, 0] = -u[0].flatten() / 2  # x ** 2
+            coeff[:, 1] = zeros  # x * y
+            coeff[:, 2] = zeros  # x * z
+            coeff[:, 3] = -u[1].flatten()  # x
+            coeff[:, 4] = -u[0].flatten() / 2  # y ** 2
+            coeff[:, 5] = zeros  # y * z
+            coeff[:, 6] = -u[2].flatten()  # y
+            coeff[:, 7] = -u[0].flatten() / 2  # z ** 2
+            coeff[:, 8] = -u[3].flatten()  # z
+            coeff[:, 9] = p_cc - integral / vol  # 1
+
+        return coeff
+
+    @staticmethod
+    def _test_pressure_reconstruction(recon_p, point_val, point_coo):
         """
         Testing pressure reconstruction. This function uses the reconstructed
         pressure local polynomial and perform an evaluation at the Lagrangian
@@ -294,8 +427,6 @@ class PressureReconstruction(mde.ErrorEstimate):
 
         Parameters
         ----------
-        g : PorePy object
-            Grid.
         recon_p : NumPy nd-Array
             Reconstructed pressure polynomial.
         point_val : NumPy nd-Array
@@ -309,10 +440,10 @@ class PressureReconstruction(mde.ErrorEstimate):
 
         """
 
-        def assert_reconp(eval_poly, point_val):
+        def assert_reconp(evaluated_polynomial, lagrangian_val):
             np.testing.assert_allclose(
-                eval_poly,
-                point_val,
+                evaluated_polynomial,
+                lagrangian_val,
                 rtol=1e-6,
                 atol=1e-3,
                 err_msg="Pressure reconstruction has failed",
@@ -320,5 +451,3 @@ class PressureReconstruction(mde.ErrorEstimate):
 
         eval_poly = utils.eval_P1(recon_p, point_coo)
         assert_reconp(eval_poly, point_val)
-
-        return None
