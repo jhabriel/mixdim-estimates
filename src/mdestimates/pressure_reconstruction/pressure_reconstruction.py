@@ -425,6 +425,9 @@ class PressureReconstruction(mde.ErrorEstimate):
             coeff[:, 8] = -u[3].flatten()  # z
             coeff[:, 9] = p_cc - integral / vol  # 1
 
+        # Save in data dictionary
+        d[self.estimates_kw]["postprocessed_p"] = coeff
+
         return coeff
 
     def _oswald_p2(self, g, g_rot, d, p2_coeff):
