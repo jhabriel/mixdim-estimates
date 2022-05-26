@@ -190,7 +190,7 @@ def get_qp_elements_from_union_grid_1d(union_grid: np.ndarray) -> np.ndarray:
 
 
 #%% Interpolation and polynomial-related functions
-def interpolate_P1(point_val, point_coo):
+def interpolate_p1(point_val, point_coo):
     """
     Performs a linear local interpolation of a P1 FEM element given the
     the pressure values and the coordinates at the Lagrangian nodes.
@@ -275,25 +275,109 @@ def interpolate_P1(point_val, point_coo):
     return coeff
 
 
-def eval_P1(p1_coefficients: np.ndarray, coordinates: np.ndarray) -> np.ndarray:
+def interpolate_p2(point_val, point_coo):
     """
-    Evaluates a P1 polynomial at the given coordinates
+    Performs a linear local interpolation of a P2 FEM element given the
+    the pressure values and the coordinates at the Lagrangian nodes.
 
     Parameters
     ----------
-        p1_coefficients (np.ndarray) : Polynomial to be evaluated, i.e., the one obtained from
-            interpolate_P1. The expected shape is: rows x num_lagrangian_nodes.
-        coordinates (np.ndarray): Coordinates with shape axes x rows x cols, where axes is
-            the number of dimensions. If there is only one dimension present, we expect to
-            to have 1 x row x cols nd-array.
+    point_val : NumPy nd-array of shape (g.num_cells x dof)
+        Pressures values at the Lagrangian nodes.
+    point_coo : NumPy nd-array of shape (g.dim x g.num_cells x dof)
+        Coordinates of the Lagrangian nodes. In the case of embedded entities,
+        the points should correspond to the rotated coordinates.
 
     Raises
     ------
-        ValueError: if there is any incosistencty in the shape of the inputs.
+    Value Error
+        If number of cols of point_val is different from 10 (3D), 6 (2D), or 3 (1D).
 
     Returns
     -------
-        val (np.ndarray): Values of the polynomial at the coordinate points.
+    coeff : Numpy nd-array of shape (g.num_cells x dof)
+        Coefficients of the cell-wise P2 polynomial satisfying:
+        c0x^2 + c1x + c2                                                    (1D),
+        c0x^2 + c1xy + c2x + c3y^2 + c4y + c5                               (2D),
+        c0x^2 + c1xy + c2xz + c3x + c4y^2 + c5yz + c6y + c7z^2 + c8z + c9   (3D).
+    """
+
+    # Get rows, cols, and dimensionality
+    rows = point_val.shape[0]  # number of cells
+    cols = point_val.shape[1]  # number of Lagrangian nodes per cell
+    if cols == 10:
+        dim = 3
+    elif cols == 6:
+        dim = 2
+    elif cols == 3:
+        dim = 1
+    else:
+        raise ValueError("P2 reconstruction only valid for 1D, 2D, and 3D.")
+
+    if dim == 3:
+        x = point_coo[0].flatten()
+        y = point_coo[1].flatten()
+        z = point_coo[2].flatten()
+        ones = np.ones(rows * (dim + 1))
+
+        lcl = np.column_stack([x ** 2, x * y, x * z, x, y ** 2, y * z, y, z ** 2, z, ones])
+        lcl = np.reshape(lcl, [rows, 10, 10])
+
+        p_vals = np.reshape(point_val, [rows, 10, 1])
+
+        coeff = np.empty([rows, 10])
+        for cell in range(rows):
+            coeff[cell] = (np.dot(np.linalg.inv(lcl[cell]), p_vals[cell])).T
+
+    elif dim == 2:
+        x = point_coo[0].flatten()
+        y = point_coo[1].flatten()
+        ones = np.ones(6 * rows)
+
+        lcl = np.column_stack([x ** 2, x * y, x, y ** 2, y, ones])
+        lcl = np.reshape(lcl, [rows, 6, 6])
+
+        p_vals = np.reshape(point_val, [rows, 6, 1])
+
+        coeff = np.empty([rows, 6])
+        for cell in range(rows):
+            coeff[cell] = (np.dot(np.linalg.inv(lcl[cell]), p_vals[cell])).T
+
+    else:
+        x = point_coo.flatten()
+        ones = np.ones(3 * rows)
+
+        lcl = np.column_stack([x ** 2, x, ones])
+        lcl = np.reshape(lcl, [rows, 3, 3])
+
+        p_vals = np.reshape(point_val, [rows, 3, 1])
+
+        coeff = np.empty([rows, 3])
+        for cell in range(rows):
+            coeff[cell] = (np.dot(np.linalg.inv(lcl[cell]), p_vals[cell])).T
+
+    return coeff
+
+
+def eval_p1(p1_coefficients: np.ndarray, coordinates: np.ndarray) -> np.ndarray:
+    """
+    Evaluate a P1 polynomial at the given coordinates
+
+    Parameters
+    ----------
+    p1_coefficients (np.ndarray) : Polynomial to be evaluated, i.e., the one obtained from
+        interpolate_P1. The expected shape is: rows x num_lagrangian_nodes.
+    coordinates (np.ndarray): Coordinates with shape axes x rows x cols, where axes is
+        the number of dimensions. If there is only one dimension present, we expect to
+        to have 1 x row x cols nd-array.
+
+    Raises
+    ------
+    ValueError: if there is any incosistencty in the shape of the inputs.
+
+    Returns
+    -------
+    val (np.ndarray): Values of the polynomial at the coordinate points.
     """
 
     # Check if p1 coefficientes has the correct shape
@@ -313,6 +397,80 @@ def eval_P1(p1_coefficients: np.ndarray, coordinates: np.ndarray) -> np.ndarray:
         val = c[0] * coordinates[0] + c[1] * coordinates[1] + c[2]
     else:
         val = c[0] * coordinates[0] + c[1]
+
+    return val
+
+
+def eval_p2(p2_coefficients: np.ndarray, coordinates: np.ndarray) -> np.ndarray:
+    """
+    Evaluate a P2 polynomial at the given coordinates
+
+    Parameters
+    ----------
+        p2_coefficients (np.ndarray) : Polynomial to be evaluated, i.e., the one obtained from
+            interpolate_p2. The expected shape is g.num_cells x dof, where dof = 3 for 1D,
+            dof = 6 for 2D, and dof = 10 for 3D.
+        coordinates (np.ndarray): Coordinates with shape axes x rows x cols, where axes is
+            the number of dimensions. If there is only one dimension present, we expect to
+            to have 1 x row x cols nd-array.
+
+    Raises
+    ------
+        ValueError: if there is any incosistencty in the shape of the inputs.
+
+    Returns
+    -------
+        val (np.ndarray): Values of the polynomial at the coordinate points.
+    """
+
+    # Check if p1 coefficientes has the correct shape
+    if p2_coefficients.shape[1] not in [3, 6, 10]:
+        raise ValueError("Number of coefficients does not match a P2 polynomial")
+
+    # Check if coordinates has the correct number of dimensions
+    if len(coordinates.shape) != 3:
+        raise ValueError("Coordinates array must be three-dimensional")
+
+    # Retrieve coefficients
+    c = poly2col(p2_coefficients)
+
+    if len(c) == 10:  # 3D
+        # c0x^2 + c1xy + c2xz + c3x + c4y^2 + c5yz + c6y + c7z^2 + c8z + c9
+        x = coordinates[0]
+        y = coordinates[1]
+        z = coordinates[2]
+        val = (
+            c[0] * x ** 2
+            + c[1] * x * y
+            + c[2] * x * z
+            + c[3] * x
+            + c[4] * y ** 2
+            + c[5] * y * z
+            + c[6] * y
+            + c[7] * z ** 2
+            + c[8] * z
+            + c[9]
+        )
+    elif len(c) == 6:  # 2D
+        # c0x^2 + c1xy + c2x + c3y^2 + c4y + c5
+        x = coordinates[0]
+        y = coordinates[1]
+        val = (
+            c[0] * x ** 2
+            + c[1] * x * y
+            + c[2] * x
+            + c[3] * y ** 2
+            + c[4] * y
+            + c[5]
+        )
+    else:  # 1D
+        # c0x^2 + c1x + c2
+        x = coordinates[0]
+        val = (
+            c[0] * x ** 2
+            + c[1] * x
+            + c[2]
+        )
 
     return val
 
