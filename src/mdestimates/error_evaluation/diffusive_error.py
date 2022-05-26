@@ -99,8 +99,10 @@ class DiffusiveError(mde.ErrorEstimate):
         # Sanity checks
         if g.dim not in [1, 2, 3]:
             raise ValueError("Error not defined for the given grid dimension.")
+
         if "recon_p" not in d[self.estimates_kw]:
             raise ValueError("Pressure must be reconstructed first.")
+
         if "recon_u" not in d[self.estimates_kw]:
             raise ValueError("Velocity must be reconstructed first.")
 
@@ -117,11 +119,11 @@ class DiffusiveError(mde.ErrorEstimate):
         # Get QuadPy elements and declare integration method
         elements = utils.get_quadpy_elements(g, g_rot)
         if g.dim == 1:
-            method = qp.c1.newton_cotes_closed(3)
+            method = qp.c1.newton_cotes_closed(5)
         elif g.dim == 2:
-            method = qp.t2.get_good_scheme(3)
+            method = qp.t2.get_good_scheme(5)
         else:
-            method = qp.t3.get_good_scheme(3)
+            method = qp.t3.get_good_scheme(5)
 
         # Obtain coefficients
         p = utils.poly2col(recon_p)
@@ -134,7 +136,10 @@ class DiffusiveError(mde.ErrorEstimate):
             if g.dim == 1:
                 veloc_x = u[0] * x + u[1]
 
-                gradp_x = p[0] * np.ones_like(x)
+                if self.p_recon_method in ["cochez", "keilegavlen"]:
+                    gradp_x = p[0] * np.ones_like(x)
+                else:
+                    gradp_x = 2 * p[0] * x + p[1] * np.ones_like(x)
 
                 int_x = (k ** (-0.5) * veloc_x + k ** 0.5 * gradp_x) ** 2
 
@@ -145,8 +150,12 @@ class DiffusiveError(mde.ErrorEstimate):
                 veloc_x = u[0] * x[0] + u[1]
                 veloc_y = u[0] * x[1] + u[2]
 
-                gradp_x = p[0] * np.ones_like(x[0])
-                gradp_y = p[1] * np.ones_like(x[1])
+                if self.p_recon_method in ["cochez", "keilegavlen"]:
+                    gradp_x = p[0] * np.ones_like(x[0])
+                    gradp_y = p[1] * np.ones_like(x[1])
+                else:
+                    gradp_x = 2 * p[0] * x[0] + p[1] * x[1] + p[2] * np.ones_like(x[0])
+                    gradp_y = p[1] * x[0] + 2 * p[3] * x[1] + p[4] * np.ones_like(x[1])
 
                 int_x = (k ** (-0.5) * veloc_x + k ** 0.5 * gradp_x) ** 2
                 int_y = (k ** (-0.5) * veloc_y + k ** 0.5 * gradp_y) ** 2
@@ -159,9 +168,23 @@ class DiffusiveError(mde.ErrorEstimate):
                 veloc_y = u[0] * x[1] + u[2]
                 veloc_z = u[0] * x[2] + u[3]
 
-                gradp_x = p[0] * np.ones_like(x[0])
-                gradp_y = p[1] * np.ones_like(x[1])
-                gradp_z = p[2] * np.ones_like(x[2])
+                if self.p_recon_method in ["cochez", "keilegavlen"]:
+                    gradp_x = p[0] * np.ones_like(x[0])
+                    gradp_y = p[1] * np.ones_like(x[1])
+                    gradp_z = p[2] * np.ones_like(x[2])
+                else:
+                    gradp_x = (
+                            2 * p[0] * x[0] + p[1] * x[1] * p[2] * x[2]
+                            + p[3] * np.ones_like(x[0])
+                    )
+                    gradp_y = (
+                            p[1] * x[0] + 2 * p[4] * x[1] + p[5] * x[2]
+                            + p[6] * np.ones_like(x[1])
+                    )
+                    gradp_z = (
+                            p[2] * x[0] + p[5] * x[1] + 2 * p[7] * x[2]
+                            + p[8] * np.ones_like(x[2])
+                    )
 
                 int_x = (k ** (-0.5) * veloc_x + k ** 0.5 * gradp_x) ** 2
                 int_y = (k ** (-0.5) * veloc_y + k ** 0.5 * gradp_y) ** 2
