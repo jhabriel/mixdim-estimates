@@ -67,9 +67,9 @@ class PressureReconstruction(mde.ErrorEstimate):
 
             # Test
             if self.p_recon_method in ["cochez", "keilegavlen"]:
-                self._test_p1_recons(g, recons_p, point_val)
+                self._test_p1_recons(recons_p, point_val, point_coo)
             else:
-                self._test_p2_recons(g, recons_p, point_val)
+                self._test_p2_recons(recons_p, point_val, point_coo)
 
             # Save in the data dictionary.
             d[self.estimates_kw]["recon_p"] = recons_p
@@ -469,11 +469,8 @@ class PressureReconstruction(mde.ErrorEstimate):
         nc = g.num_cells
 
         # Sanity check
-        if not p2_coeff == (g.num_cells, 3):
+        if not p2_coeff.shape == (g.num_cells, 3):
             raise ValueError("Wrong shape of P2 polynomial.")
-
-        # Get coefficients
-        p = utils.poly2col(p2_coeff)
 
         # Mappings
         cell_nodes_map, _, _ = sps.find(g.cell_nodes())
@@ -482,15 +479,18 @@ class PressureReconstruction(mde.ErrorEstimate):
 
         # Treatment of the cell-center pressures
         cc = g_rot.cell_centers
-        cc_p = p[0] * cc[0] ** 2 + p[1] * cc[0] + p[2]  # c0x^2 + c1x + c2
-
+        cc_p = (
+                p2_coeff[:, 0] * cc[0] ** 2  # c0x^2
+                + p2_coeff[:, 1] * cc[0]  # c1x
+                + p2_coeff[:, 2]  # c2
+        )
         # Treatment of the nodes
         # Evaluate post-processed pressure at the nodes
         nx = g_rot.nodes[0][nodes_cell]  # local node x-coordinates
         nodes_p = (
-                p[0] * nx ** 2  # c0x^2
-                + p[1] * nx  # c1x
-                + p[2]  # c2
+                p2_coeff[:, 0] * nx ** 2  # c0x^2
+                + p2_coeff[:, 1] * nx  # c1x
+                + p2_coeff[:, 2]  # c2
         )
 
         # Average nodal pressure
@@ -553,17 +553,14 @@ class PressureReconstruction(mde.ErrorEstimate):
         nc = g.num_cells
 
         # Sanity check
-        if not p2_coeff == (g.num_cells, 6):
+        if not p2_coeff.shape == (nc, 6):
             raise ValueError("Wrong shape of P2 polynomial.")
-
-        # Get coefficients
-        p = utils.poly2col(p2_coeff)
 
         # Mappings
         cell_nodes_map, _, _ = sps.find(g.cell_nodes())
         cell_faces_map, _, _ = sps.find(g.cell_faces)
         nodes_cell = cell_nodes_map.reshape(np.array([nc, g.dim + 1]))
-        faces_cell = cell_faces_map.reshape(np.array([g.num_cells, g.dim + 1]))
+        faces_cell = cell_faces_map.reshape(np.array([nc, g.dim + 1]))
 
         # Treatment of the nodes
         # Evaluate post-processed pressure at the nodes
@@ -574,12 +571,12 @@ class PressureReconstruction(mde.ErrorEstimate):
         # Compute node pressures
         for col in range(g.dim + 1):
             nodes_p[:, col] = (
-                    p[0] * nx[:, col] ** 2  # c0x^2
-                    + p[1] * nx[:, col] * ny[:, col]  # c1xy
-                    + p[2] * nx[:, col]  # c2x
-                    + p[3] * ny[:, col] ** 2  # c3y^2
-                    + p[4] * ny[:, col]  # c4x
-                    + p[5]  # c5
+                    p2_coeff[:, 0] * nx[:, col] ** 2  # c0x^2
+                    + p2_coeff[:, 1] * nx[:, col] * ny[:, col]  # c1xy
+                    + p2_coeff[:, 2] * nx[:, col]  # c2x
+                    + p2_coeff[:, 3] * ny[:, col] ** 2  # c3y^2
+                    + p2_coeff[:, 4] * ny[:, col]  # c4x
+                    + p2_coeff[:, 5]  # c5
             )
 
         # Average nodal pressure
@@ -599,12 +596,12 @@ class PressureReconstruction(mde.ErrorEstimate):
 
         for col in range(g.dim + 1):
             faces_p[:, col] = (
-                    p[0] * fx[:, col] ** 2  # c0x^2
-                    + p[1] * fx[:, col] * fy[:, col]  # c1xy
-                    + p[2] * fx[:, col]  # c2x
-                    + p[3] * fy[:, col] ** 2  # c3y^2
-                    + p[4] * fy[:, col]  # c4x
-                    + p[5]  # c5
+                    p2_coeff[:, 0] * fx[:, col] ** 2  # c0x^2
+                    + p2_coeff[:, 1] * fx[:, col] * fy[:, col]  # c1xy
+                    + p2_coeff[:, 2] * fx[:, col]  # c2x
+                    + p2_coeff[:, 3] * fy[:, col] ** 2  # c3y^2
+                    + p2_coeff[:, 4] * fy[:, col]  # c4x
+                    + p2_coeff[:, 5]  # c5
             )
 
         # Average face pressure
