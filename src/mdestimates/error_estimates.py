@@ -18,7 +18,7 @@ class ErrorEstimate:
         flux_name: str = "flux",
         lam_name: str = "mortar_flux",
         estimates_kw: str = "estimates",
-        p_recon_method: str = "inv_local_gradp",
+        p_recon_method: str = "keilegavlen",
         source_list: Optional[List[Union[Callable[..., np.ndarray], int]]] = None,
         poincare_list: Optional[List[Union[float, int]]] = None,
     ):
@@ -33,6 +33,8 @@ class ErrorEstimate:
             gb (GridBucket): Mixed-dimensional grid bucket. It is assumed that a valid
                 pressure solution is stored in d[pp.STATE][self.p_name]. In addition, for
                 mixed methods, a valid flux solution is stored in d[pp.STATE][self.flux_name].
+            conservation (str): This can either be "local" or "global". Note that "global"
+                requires passing values of in poincare_list.
             kw (str): Keyword parameter. Default is "flow".
             sd_operator_name (str): Subdomain operator name. Default is "diffusion".
             p_name (str): Pressure name. Default is "pressure".
@@ -40,7 +42,7 @@ class ErrorEstimate:
             lam_name (str): Mortar flux name. Default is "mortar flux".
             estimates_kw (str): Error estimates name. Default is "estimates".
             p_recon_method (str): Pressure reconstruction method. Default is
-                "inv_local_gradp". The other valid method is "direct_reconstruction".
+                "keilegavlen". Other valid methods are "cochez" and "vohralik"
             source_list (list): Each item of this list is either a callable function or 0.
                 For the first case, the callable function corresponds to the exact
                 source term of the given grid. For the second case, it is assumed that no
@@ -51,6 +53,17 @@ class ErrorEstimate:
             poincare_list (list): List of Poincare constants for each subdomain. Default is
                 1 for each subdomain.
         """
+        # Sanity checks
+        if conservation not in ["local", "global"]:
+            raise ValueError("Expected conservation to be 'local' or 'global'")
+
+        if p_recon_method not in ["cochez", "keilegavlen", "vohralik"]:
+            raise ValueError("Expected p_recon_method to be 'cochez', "
+                             "'keilegavlen', or 'vohralik'")
+
+        if conservation == "global" and poincare_list is None:
+            raise TypeError("Since conservation is 'global', poincare_list "
+                            "cannot be NoneType")
 
         self.gb: pp.GridBucket = gb
         self.conservation: str = conservation
