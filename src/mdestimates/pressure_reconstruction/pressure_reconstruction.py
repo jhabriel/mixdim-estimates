@@ -55,13 +55,12 @@ class PressureReconstruction(mde.ErrorEstimate):
             # Obtain Lagrangian coordinates
             if self.p_recon_method == "keilegavlen":
                 point_val, point_coo = self.keilegavlen_p1(g, g_rot, d)
-            elif self.p_recon_method == "cochez-dhondt":
+            elif self.p_recon_method == "cochez":
                 point_val, point_coo = self.cochez_p1(g, g_rot, d)
             elif self.p_recon_method == "vohralik":
                 point_val, point_coo = self.vohralik_p2(g, g_rot, d)
             else:
-                raise ValueError("Pressure reconstruction method not "
-                                 "available.")
+                raise ValueError("Pressure reconstruction method not available.")
 
             # Obtain pressure coefficients
             recons_p = utils.interpolate_P1(point_val, point_coo)
@@ -78,6 +77,12 @@ class PressureReconstruction(mde.ErrorEstimate):
     def cochez_p1(self, g: pp.Grid, g_rot: mde.RotatedGrid, d: dict):
         """
         Pressure reconstruction using average of P0 potentials over patches.
+
+        Reference:
+        ----------
+        Cochez-Dhondt, S & Nicaise, Serge & Repin, Sergey. (2009). A Posteriori
+        Error Estimates for Finite Volume Approximations. Math. Model. Nat. Phenom. 4.
+        106-122. 10.1051/mmnp/20094105.
 
         Parameters
         ----------
@@ -118,63 +123,42 @@ class PressureReconstruction(mde.ErrorEstimate):
 
         # Perform reconstruction
         cell_nodes = g.cell_nodes()
-        cell_node_volumes = cell_nodes * sps.dia_matrix((g.cell_volumes, 0), (nc, nc))
-        sum_cell_nodes = cell_node_volumes * np.ones(nc)
-        cell_nodes_scaled = (
-                sps.dia_matrix((1.0 / sum_cell_nodes, 0), (nn, nn)) * cell_node_volumes
-        )
+        cell_nodes_volume = cell_nodes * sps.dia_matrix((g.cell_volumes, 0), (nc, nc))
+        cell_nodes_pressure = cell_nodes * sps.dia_matrix((p_cc, 0), (nc, nc))
 
-        cell_nodes_pressure = (
-            sps.dia_matrix((1.0 / sum))
-        )
-
-
-        # Obtaining nodal pressures
-        cell_nodes_map, _, _ = sps.find(g.cell_nodes())
-        cell_node_matrix = cell_nodes_map.reshape(np.array([g.num_cells, g.dim + 1]))
-        nodal_pressures = np.zeros(nn)
-
-        for col in range(g.dim + 1):
-            nodes = cell_node_matrix[:, col]
-            dist = g_rot.nodes[: g.dim, nodes] - g_rot.cell_centers[: g.dim]
-            scaling = cell_nodes_scaled[nodes, np.arange(nc)]
-            contribution = (
-                    np.asarray(scaling) * (p_cc + np.sum(dist * loc_grad, axis=0))
-            ).ravel()
-            nodal_pressures += np.bincount(nodes, weights=contribution, minlength=nn)
+        numerator = cell_nodes_volume.multiply(cell_nodes_pressure)
+        numerator = np.array(numerator.sum(axis=1)).flatten()
+        denominator = np.array(cell_nodes_volume.sum(axis=1)).flatten()
+        node_pressure = numerator / denominator
 
         # Treatment of boundary conditions
-        # TODO: Check this: We should only look for Dirichlet bc at the ambient grid
         bc = d[pp.PARAMETERS][self.kw]["bc"]
         bc_values = d[pp.PARAMETERS][self.kw]["bc_values"]
-        external_dirichlet_boundary = np.logical_and(
-            bc.is_dir, g.tags["domain_boundary_faces"]
-        )
+        external_dir_bc = np.logical_and(bc.is_dir, g.tags["domain_boundary_faces"])
         face_vec = np.zeros(nf)
-        face_vec[external_dirichlet_boundary] = 1
+        face_vec[external_dir_bc] = 1
         num_dir_face_of_node = g.face_nodes * face_vec
         is_dir_node = num_dir_face_of_node > 0
         face_vec *= 0
-        face_vec[external_dirichlet_boundary] = bc_values[external_dirichlet_boundary]
+        face_vec[external_dir_bc] = bc_values[external_dir_bc]
         node_val_dir = g.face_nodes * face_vec
         node_val_dir[is_dir_node] /= num_dir_face_of_node[is_dir_node]
-        nodal_pressures[is_dir_node] = node_val_dir[is_dir_node]
+        node_pressure[is_dir_node] = node_val_dir[is_dir_node]
 
         # Save in the dictionary
-        d[self.estimates_kw]["node_pressure"] = nodal_pressures
+        d[self.estimates_kw]["node_pressure"] = node_pressure
 
         # Export lagrangian nodes and coordinates
         cell_nodes_map, _, _ = sps.find(g.cell_nodes())
         nodes_cell = cell_nodes_map.reshape(np.array([g.num_cells, g.dim + 1]))
-        point_val = nodal_pressures[nodes_cell]
+        point_val = node_pressure[nodes_cell]
         point_coo = g_rot.nodes[:, nodes_cell]
 
         return point_val, point_coo
 
     def keilegavlen_p1(self, g: pp.Grid, g_rot: mde.RotatedGrid, d: dict):
         """
-        Pressure reconstruction using the inverse of the numerical fluxes.
-        Author: Eirik Keilegavlen
+        Pressure reconstruction using the nodal projection of local pressure gradient
 
         Parameters
         ----------
@@ -199,23 +183,18 @@ class PressureReconstruction(mde.ErrorEstimate):
 
         """
 
-        # CHECK: Pressure solution in dictionary?
+        # Sanity checks
         if self.p_name not in d[pp.STATE]:
             raise ValueError("Pressure solution not found.")
 
-        # CHECK: Pressure solution shape?
         if d[pp.STATE][self.p_name].size != g.num_cells:
             raise ValueError("Inconsistent size of pressure solution.")
 
-        # CHECK: Full flux in dictionary?
         if "full_flux" not in d[self.estimates_kw]:
             raise ValueError("Full flux must be computed first")
 
-        # Retrieve P0 cell-center pressure
+        # Retrieve data from dictionaries
         p_cc = d[pp.STATE][self.p_name].copy()
-
-        # Retrieve full fluxes
-        flux = d[self.estimates_kw]["full_flux"].copy()
 
         # Retrieving topological data
         nc = g.num_cells
@@ -229,11 +208,6 @@ class PressureReconstruction(mde.ErrorEstimate):
         cell_nodes_scaled = (
                 sps.dia_matrix((1.0 / sum_cell_nodes, 0), (nn, nn)) * cell_node_volumes
         )
-
-        # Project fluxes using RT0
-        # d_RT0 = d.copy()
-        # pp.RT0(self.kw).discretize(g, d_RT0)
-        # proj_flux = pp.RT0(self.kw).project_flux(g, flux, d_RT0)[: g.dim]
 
         # Retrieve reconstructed velocities
         coeff = d[self.estimates_kw]["recon_u"]
