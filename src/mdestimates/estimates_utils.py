@@ -5,6 +5,8 @@ import numpy.matlib as matlib
 import mdestimates as mde
 import scipy.sparse as sps
 
+from typing import List, Tuple, Union
+
 
 def get_opposite_side_nodes(g: pp.Grid) -> np.ndarray:
     """
@@ -187,6 +189,99 @@ def get_qp_elements_from_union_grid_1d(union_grid: np.ndarray) -> np.ndarray:
         elements = elements.reshape(dim + 1, nc)
 
     return elements
+
+
+def cell_edge_map(g: pp.Grid) -> np.ndarray:
+    """
+    Compute cell-edges mapping for 3D grids
+
+    Parameters
+    ----------
+    g (pp.Grid): PorePy grid with g.dim = 3 and computed geometry.
+
+    Returns
+    -------
+    cell_edge (ndarray): cell-edge mapping with size 2 x num_cells x 6. The number 2 comes
+        from the the fact that an edge is defined by a pair of nodes, and 6 are total number
+        edges for a tetrahedra.
+
+    NOTE: The mapping is constructed such that the first dimension refers to the node number,
+    the second dimension refers to the cell number, and the third dimension refers to the
+    edge number. For example, the pair of nodes defining the edge number 4 of the cell
+    number 2 is given by the tuple: (cell_edge[0][2][4], cell_edge[1][2][4]).
+
+    """
+
+    # Sanity check
+    if g.dim != 3:
+        raise ValueError("cell_edge_map only makes sense for three-dimensional grids")
+
+    # Retrieve number of cells and nodes for rapid access
+    nc: int = g.num_cells
+    nn: int = g.num_nodes
+
+    # Obtain mappings in dense form
+
+    # node_of_cell is a matrix with "nodes" as rows and "cells" as columns. For example,
+    # nodes_of_cell[0] will return the (four) node numbers associated to the cell number 0
+    nodes_of_cell: np.ndarray = sps.find(g.cell_nodes().T.A)[1].reshape((nc, 4))
+
+    # cells_of_node is the transpose of node_of_cell
+    cells_of_node: np.ndarray = nodes_of_cell.T
+
+    # Now we have to "manually" create the edges. Since a tetrahedra has 4 nodes,
+    # each cell will contain six edges
+    edges = np.empty((6, 2, nc), dtype=np.int32)
+    edges[0] = np.vstack([cells_of_node[0], cells_of_node[1]])
+    edges[1] = np.vstack([cells_of_node[0], cells_of_node[2]])
+    edges[2] = np.vstack([cells_of_node[0], cells_of_node[3]])
+    edges[3] = np.vstack([cells_of_node[1], cells_of_node[2]])
+    edges[4] = np.vstack([cells_of_node[1], cells_of_node[3]])
+    edges[5] = np.vstack([cells_of_node[2], cells_of_node[3]])
+
+    # Sort in ascending order the pair of nodes defining an edge. E.g., the pair (1, 0) will
+    # be changed to (0, 1).
+    edges_sorted: np.ndarray = np.empty((6, 2, nc), dtype=np.int32)
+    for edge in range(6):
+        edges_sorted[edge] = np.sort(edges[edge], axis=0)
+
+    # Create a list of edges
+    edge_list = []
+    for edge in range(6):
+        for cell in range(nc):
+            edge_list.append(tuple(edges_sorted[edge][:, cell]))
+
+    # Make the list of edges unique
+    u_edge_list = np.unique(edge_list, axis=0)
+
+    # Create a dictionary to store node to edge mapping
+    n2e = dict()
+    for idx, edge in enumerate(u_edge_list):
+        n2e.update({tuple(edge): idx})
+    ne = len(u_edge_list)
+
+    # Populate cell_edges mapping matrix. This process is based on looping so that slow
+    # performance should be expected. Basically, we loop through each edge (out of the six
+    # possible edges) and then store the node number associated (from the node pair) to each
+    # cell
+    # Obtain edge-cell connectivity and store it in sparse form
+    edge_cells_sparse = np.zeros((nc, ne), dtype=bool)
+    edge_cells_dense = np.empty((2, nc, 6), dtype=np.int32)
+    for edge in range(6):
+        for node_pair, cell in zip(edges_sorted[edge].T, range(nc)):
+            # Fill out mapping
+            edge_cells_sparse[cell, n2e[tuple(node_pair)]] = True
+            # Fill out dense mapping
+            edge_cells_dense[0][cell][edge] = node_pair[0]
+            edge_cells_dense[1][cell][edge] = node_pair[1]
+
+    # Cell-edge mapping as a sparse matrix
+    cell_edges_sparse = sps.csc_matrix(edge_cells_sparse).T
+
+    # Obtain edge cardinality
+    edge_cardinality = np.bincount(sps.find(cell_edges_sparse)[0])
+
+    return cell_edges_sparse, edge_cells_dense
 
 
 #%% Interpolation and polynomial-related functions
