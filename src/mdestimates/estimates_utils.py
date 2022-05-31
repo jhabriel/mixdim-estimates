@@ -191,9 +191,9 @@ def get_qp_elements_from_union_grid_1d(union_grid: np.ndarray) -> np.ndarray:
     return elements
 
 
-def cell_edge_map(g: pp.Grid) -> np.ndarray:
+def edge_mappings(g: pp.Grid) -> Tuple[sps.csc_matrix, sps.csc_matrix, sps.csc_matrix]:
     """
-    Compute cell-edges mapping for 3D grids
+    Compute edge mappings for 3D grids
 
     Parameters
     ----------
@@ -201,14 +201,25 @@ def cell_edge_map(g: pp.Grid) -> np.ndarray:
 
     Returns
     -------
-    cell_edge (ndarray): cell-edge mapping with size 2 x num_cells x 6. The number 2 comes
-        from the the fact that an edge is defined by a pair of nodes, and 6 are total number
-        edges for a tetrahedra.
+    (edge_nodes, cell_edges, face_edges) : Tuple of outputs detailed below
 
-    NOTE: The mapping is constructed such that the first dimension refers to the node number,
-    the second dimension refers to the cell number, and the third dimension refers to the
-    edge number. For example, the pair of nodes defining the edge number 4 of the cell
-    number 2 is given by the tuple: (cell_edge[0][2][4], cell_edge[1][2][4]).
+    edge_nodes (Sparse matrix): Connectivity matrix between nodes and edges. The shape of the
+        sparse matrix is (number_of_nodes, number_of_edges)
+    cell_edges (Sparse matrix): Connectivity matrix between edges and cells. The shape of
+        sparse matrix is (number_of_edges, number_of_cells)
+    face_edges (Sparse matrix): Connectivity matrix between edges and faces. The shape of
+        the sparse matrix is (number_of_faces, number_of_edges)
+
+    Technical note
+    --------------
+    Useful postprocessing of sparse matrices
+
+    # Pair of nodes associated with each edge
+    nodes_of_edge = sps.find(edges_nodes)[0].reshape((num_edges, 2))
+    # Edges associated with each face
+    edges_of_face = sps.find(cell_edges)[0].reshape((num_faces, 3))
+    # Edges associated with each cell
+    edges_of_cell = sps.find(face_edges)[0].reshape((num_cells, 6))
 
     """
 
@@ -216,72 +227,88 @@ def cell_edge_map(g: pp.Grid) -> np.ndarray:
     if g.dim != 3:
         raise ValueError("cell_edge_map only makes sense for three-dimensional grids")
 
-    # Retrieve number of cells and nodes for rapid access
+    # Retrieve number of cells, nodes, and faces for quick access
     nc: int = g.num_cells
     nn: int = g.num_nodes
+    nf: int = g.num_faces
 
-    # Obtain mappings in dense form
+    # Let us first obtain the cell-edges mapping
 
-    # node_of_cell is a matrix with "nodes" as rows and "cells" as columns. For example,
-    # nodes_of_cell[0] will return the (four) node numbers associated to the cell number 0
-    nodes_of_cell: np.ndarray = sps.find(g.cell_nodes().T.A)[1].reshape((nc, 4))
+    # Retrieve cell_nodes mapping in array form
+    nodes_of_cell: np.ndarray = sps.find(g.cell_nodes())[0].reshape((nc, 4))
 
-    # cells_of_node is the transpose of node_of_cell
-    cells_of_node: np.ndarray = nodes_of_cell.T
+    # Manually create edges. There are 6 edges per cell in 3D
+    edges_c = np.empty((6, 2, nc), dtype=np.int32)
+    edges_c[0] = np.vstack([nodes_of_cell[:, 0], nodes_of_cell[:, 1]])
+    edges_c[1] = np.vstack([nodes_of_cell[:, 0], nodes_of_cell[:, 2]])
+    edges_c[2] = np.vstack([nodes_of_cell[:, 0], nodes_of_cell[:, 3]])
+    edges_c[3] = np.vstack([nodes_of_cell[:, 1], nodes_of_cell[:, 2]])
+    edges_c[4] = np.vstack([nodes_of_cell[:, 1], nodes_of_cell[:, 3]])
+    edges_c[5] = np.vstack([nodes_of_cell[:, 2], nodes_of_cell[:, 3]])
 
-    # Now we have to "manually" create the edges. Since a tetrahedra has 4 nodes,
-    # each cell will contain six edges
-    edges = np.empty((6, 2, nc), dtype=np.int32)
-    edges[0] = np.vstack([cells_of_node[0], cells_of_node[1]])
-    edges[1] = np.vstack([cells_of_node[0], cells_of_node[2]])
-    edges[2] = np.vstack([cells_of_node[0], cells_of_node[3]])
-    edges[3] = np.vstack([cells_of_node[1], cells_of_node[2]])
-    edges[4] = np.vstack([cells_of_node[1], cells_of_node[3]])
-    edges[5] = np.vstack([cells_of_node[2], cells_of_node[3]])
-
-    # Sort in ascending order the pair of nodes defining an edge. E.g., the pair (1, 0) will
-    # be changed to (0, 1).
-    edges_sorted: np.ndarray = np.empty((6, 2, nc), dtype=np.int32)
+    # Sort the pair of nodes in ascending order to avoid troubles
+    edges_c_sorted: np.ndarray = np.empty((6, 2, nc), dtype=np.int32)
     for edge in range(6):
-        edges_sorted[edge] = np.sort(edges[edge], axis=0)
+        edges_c_sorted[edge] = np.sort(edges_c[edge], axis=0)
 
-    # Create a list of edges
+    # We can now create a list of edges
     edge_list = []
     for edge in range(6):
         for cell in range(nc):
-            edge_list.append(tuple(edges_sorted[edge][:, cell]))
+            edge_list.append(tuple(edges_c_sorted[edge][:, cell]))
 
-    # Make the list of edges unique
-    u_edge_list = np.unique(edge_list, axis=0)
+    # Many of these edges will repeat, so we have to make the list unique
+    unique_edge_list = np.unique(edge_list, axis=0)
+    ne: int = len(unique_edge_list)
 
-    # Create a dictionary to store node to edge mapping
+    # Having the unique set of edges, we can now create a "nodes -> edge" mapping
+    col_0 = np.array(unique_edge_list[:, 0], dtype=np.int32)
+    col_1 = np.array(unique_edge_list[:, 1], dtype=np.int32)
+    row = np.array(range(ne), dtype=np.int32)
+    data = np.ones(ne, dtype=bool)
+    nodes_edge_0 = sps.csc_matrix((data, (row, col_0)), shape=(ne, nn), dtype=bool)
+    nodes_edge_1 = sps.csc_matrix((data, (row, col_1)), shape=(ne, nn), dtype=bool)
+    edge_nodes = (nodes_edge_0 + nodes_edge_1).T
+
+    # Create a dictionary to store node -> edge mapping
     n2e = dict()
-    for idx, edge in enumerate(u_edge_list):
+    for idx, edge in enumerate(unique_edge_list):
         n2e.update({tuple(edge): idx})
-    ne = len(u_edge_list)
+    ne: int = len(unique_edge_list)  # number of edges
 
-    # Populate cell_edges mapping matrix. This process is based on looping so that slow
-    # performance should be expected. Basically, we loop through each edge (out of the six
-    # possible edges) and then store the node number associated (from the node pair) to each
-    # cell
-    # Obtain edge-cell connectivity and store it in sparse form
-    edge_cells_sparse = np.zeros((nc, ne), dtype=bool)
-    edge_cells_dense = np.empty((2, nc, 6), dtype=np.int32)
+    # Obtain the edge-cell connectivity.
+    # TODO: Avoid looping for better performance
+    edge_cells = np.zeros((nc, ne), dtype=bool)
     for edge in range(6):
-        for node_pair, cell in zip(edges_sorted[edge].T, range(nc)):
-            # Fill out mapping
-            edge_cells_sparse[cell, n2e[tuple(node_pair)]] = True
-            # Fill out dense mapping
-            edge_cells_dense[0][cell][edge] = node_pair[0]
-            edge_cells_dense[1][cell][edge] = node_pair[1]
+        for node_pair, cell in zip(edges_c_sorted[edge].T, range(nc)):
+            edge_cells[cell, n2e[tuple(node_pair)]] = True
+    cell_edges = sps.csc_matrix(edge_cells).T
 
-    # Cell-edge mapping as a sparse matrix
-    cell_edges_sparse = sps.csc_matrix(edge_cells_sparse).T
+    # We do more or less the same for the face -> edge mapping
 
-    # Obtain edge cardinality
-    edge_cardinality = np.bincount(sps.find(cell_edges_sparse)[0])
+    # Retrieve face_nodes mapping in array form
+    nodes_of_face: np.ndarray = sps.find(g.face_nodes)[0].reshape((nf, 3))
 
-    return cell_edges_sparse, edge_cells_dense
+    # Manually create edges. There are 3 edges per face in 3D
+    edges_f = np.empty((3, 2, nf), dtype=np.int32)
+    edges_f[0] = np.vstack([nodes_of_face[:, 0], nodes_of_face[:, 1]])
+    edges_f[1] = np.vstack([nodes_of_face[:, 0], nodes_of_face[:, 2]])
+    edges_f[2] = np.vstack([nodes_of_face[:, 1], nodes_of_face[:, 2]])
+
+    # Obtain edge-face connectivity
+    # TODO: Avoid looping for better performance
+    edges_f_sorted: np.ndarray = np.empty((3, 2, nf), dtype=np.int32)
+    for edge in range(3):
+        edges_f_sorted[edge] = np.sort(edges_f[edge], axis=0)
+
+    # Create a list of edges
+    edge_faces = np.zeros((nf, ne), dtype=bool)
+    for edge in range(3):
+        for node_pair, face in zip(edges_f_sorted[edge].T, range(nf)):
+            edge_faces[face, n2e[tuple(node_pair)]] = True
+    face_edges = sps.csc_matrix(edge_faces).T
+
+    return edge_nodes, cell_edges, face_edges
 
 
 #%% Interpolation and polynomial-related functions
@@ -397,57 +424,62 @@ def interpolate_p2(point_val, point_coo):
         c0x^2 + c1xy + c2xz + c3x + c4y^2 + c5yz + c6y + c7z^2 + c8z + c9   (3D).
     """
 
+    # Local degrees of freedom according to simplex dimensionality
+    DOF_3D: int = 10
+    DOF_2D: int = 6
+    DOF_1D: int = 3
+
     # Get rows, cols, and dimensionality
     rows = point_val.shape[0]  # number of cells
     cols = point_val.shape[1]  # number of Lagrangian nodes per cell
-    if cols == 10:
+    if cols == DOF_3D:
         dim = 3
-    elif cols == 6:
+    elif cols == DOF_2D:
         dim = 2
-    elif cols == 3:
+    elif cols == DOF_1D:
         dim = 1
     else:
         raise ValueError("P2 reconstruction only valid for 1D, 2D, and 3D.")
 
     if dim == 3:
-        x = point_coo[0].flatten()
-        y = point_coo[1].flatten()
-        z = point_coo[2].flatten()
-        ones = np.ones(rows * (dim + 1))
+        x = point_coo[0].flatten()  # (nc * 10,)
+        y = point_coo[1].flatten()  # (nc * 10,)
+        z = point_coo[2].flatten()  # (nc * 10,)
+        ones = np.ones(rows * DOF_3D)
 
         lcl = np.column_stack([x ** 2, x * y, x * z, x, y ** 2, y * z, y, z ** 2, z, ones])
-        lcl = np.reshape(lcl, [rows, 10, 10])
+        lcl = np.reshape(lcl, [rows, DOF_3D, DOF_3D])
 
-        p_vals = np.reshape(point_val, [rows, 10, 1])
+        p_vals = np.reshape(point_val, [rows, DOF_3D, 1])
 
-        coeff = np.empty([rows, 10])
+        coeff = np.empty([rows, DOF_3D])
         for cell in range(rows):
             coeff[cell] = (np.dot(np.linalg.inv(lcl[cell]), p_vals[cell])).T
 
     elif dim == 2:
-        x = point_coo[0].flatten()
-        y = point_coo[1].flatten()
-        ones = np.ones(6 * rows)
+        x = point_coo[0].flatten()  # (nc * 6,)
+        y = point_coo[1].flatten()  # (nc * 6,)
+        ones = np.ones(rows * DOF_2D)
 
         lcl = np.column_stack([x ** 2, x * y, x, y ** 2, y, ones])
-        lcl = np.reshape(lcl, [rows, 6, 6])
+        lcl = np.reshape(lcl, [rows, DOF_2D, DOF_2D])
 
-        p_vals = np.reshape(point_val, [rows, 6, 1])
+        p_vals = np.reshape(point_val, [rows, DOF_2D, 1])
 
-        coeff = np.empty([rows, 6])
+        coeff = np.empty([rows, DOF_2D])
         for cell in range(rows):
             coeff[cell] = (np.dot(np.linalg.inv(lcl[cell]), p_vals[cell])).T
 
     else:
-        x = point_coo.flatten()
-        ones = np.ones(3 * rows)
+        x = point_coo.flatten()  # (nc * 3,)
+        ones = np.ones(rows * DOF_1D)
 
         lcl = np.column_stack([x ** 2, x, ones])
-        lcl = np.reshape(lcl, [rows, 3, 3])
+        lcl = np.reshape(lcl, [rows, DOF_1D, DOF_1D])
 
-        p_vals = np.reshape(point_val, [rows, 3, 1])
+        p_vals = np.reshape(point_val, [rows, DOF_1D, 1])
 
-        coeff = np.empty([rows, 3])
+        coeff = np.empty([rows, DOF_1D])
         for cell in range(rows):
             coeff[cell] = (np.dot(np.linalg.inv(lcl[cell]), p_vals[cell])).T
 
