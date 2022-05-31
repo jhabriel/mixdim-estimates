@@ -3,14 +3,14 @@ import numpy as np
 import mdestimates as mde
 import matplotlib.pyplot as plt
 import scipy.sparse as sps
-import itertools
 
 from analytical import ExactSolution
 from true_errors import TrueError
+import mdestimates.estimates_utils as utils
 
 #%% Study parameters
-recon_methods = ["vohralik"]
-mesh_sizes = [0.3]
+recon_methods = ["cochez", "keilegavlen", "vohralik"]
+mesh_sizes = [0.2, 0.15, 0.1, 0.08, 0.06, 0.05]
 errors = {method: {} for method in recon_methods}
 for method in recon_methods:
     errors[method]["majorant"] = []
@@ -32,7 +32,7 @@ for mesh_size in mesh_sizes:
     mesh_args = {
         "mesh_size_bound": mesh_size,
         "mesh_size_frac": mesh_size,
-        "mesh_size_min": mesh_size/10,
+        "mesh_size_min": mesh_size,
     }
 
     gb = network_3d.mesh(mesh_args)
@@ -84,11 +84,9 @@ for mesh_size in mesh_sizes:
 
     # Overwrite d[pp.STATE][subdomain_variable] to be consistent with FEM
     for g, d in gb:
-        discr = d[pp.DISCRETIZATION][subdomain_variable][
-            subdomain_operator_keyword]
-        pressure = discr.extract_pressure(g, d[pp.STATE][subdomain_variable],
-                                          d).copy()
-        flux = discr.extract_flux(g, d[pp.STATE][subdomain_variable], d).copy()
+        discr = d[pp.DISCRETIZATION][subdomain_variable][subdomain_operator_keyword]
+        pressure = discr.extract_pressure(g, d[pp.STATE][subdomain_variable], d)
+        flux = discr.extract_flux(g, d[pp.STATE][subdomain_variable], d)
         d[pp.STATE][subdomain_variable] = pressure
         d[pp.STATE][flux_variable] = flux
 
@@ -105,6 +103,7 @@ for mesh_size in mesh_sizes:
         i_eff = majorant / true_error
 
         print(f"Mesh size: {mesh_size}")
+        print(f"Number of cells: {g.num_cells}")
         print(f"Pressure Reconstruction Method: {estimates.p_recon_method}")
         print(f"Majorant: {majorant}")
         print(f"True error: {true_error}")
@@ -114,3 +113,157 @@ for mesh_size in mesh_sizes:
         errors[method]["majorant"].append(majorant)
         errors[method]["true_error"].append(true_error)
         errors[method]["i_eff"].append(i_eff)
+
+# #%% Exporting to Paraview
+# reconstructed_p1 = te.reconstructed_p_p1()
+# reconstructed_p2 = te.reconstructed_p_p2()
+# postprocessed_p2 = te.postprocessed_p_p2()
+# d[pp.STATE]["reconstructed_p_p2"] = reconstructed_p2
+# d[pp.STATE]["postprocessed_p_p2"] = postprocessed_p2
+# d[pp.STATE]["exact_p"] = te.p("cc")
+#
+# exporter = pp.Exporter(gb, file_name="unfractured_3d", folder_name="out")
+# exporter.write_vtu([
+#     "pressure",
+#     "reconstructed_p_p2",
+#     "postprocessed_p_p2",
+#     "exact_p",
+#     "diffusive_error",
+#     "residual_error"
+# ])
+#
+
+#%% Plotting
+plt.rcParams.update({'font.size': 13})
+fig, (ax1, ax2) = plt.subplots(
+    nrows=1,
+    ncols=2,
+    gridspec_kw={'width_ratios': [2, 1]},
+    figsize=(11, 5)
+)
+
+ax1.plot(
+    np.log2(1/np.array(mesh_sizes)),
+    np.log2(np.array(errors["cochez"]["majorant"])),
+    linewidth=3,
+    linestyle="-",
+    color="red",
+    marker=".",
+    markersize="10",
+    label="Majorant PR1",
+)
+
+ax1.plot(
+    np.log2(1/np.array(mesh_sizes)),
+    np.log2(np.array(errors["cochez"]["true_error"])),
+    linewidth=2,
+    linestyle="--",
+    color="red",
+    marker=".",
+    markersize="10",
+    label="True error PR1",
+)
+
+ax1.plot(
+    np.log2(1/np.array(mesh_sizes)),
+    np.log2(np.array(errors["keilegavlen"]["majorant"])),
+    linewidth=3,
+    linestyle="-",
+    color="blue",
+    marker=".",
+    markersize="10",
+    label="Majorant PR2",
+)
+
+ax1.plot(
+    np.log2(1/np.array(mesh_sizes)),
+    np.log2(np.array(errors["keilegavlen"]["true_error"])),
+    linewidth=2,
+    linestyle="--",
+    color="blue",
+    marker=".",
+    markersize="10",
+    label="True error PR2",
+)
+
+ax1.plot(
+    np.log2(1/np.array(mesh_sizes)),
+    np.log2(np.array(errors["vohralik"]["majorant"])),
+    linewidth=3,
+    linestyle="-",
+    color="green",
+    marker=".",
+    markersize="10",
+    label="Majorant PR3",
+)
+
+ax1.plot(
+    np.log2(1/np.array(mesh_sizes)),
+    np.log2(np.array(errors["vohralik"]["true_error"])),
+    linewidth=2,
+    linestyle="--",
+    color="green",
+    marker=".",
+    markersize="10",
+    label="True error PR3",
+)
+
+# Plot reference line
+x1 = 0
+y1 = 2
+y2 = -2
+x2 = x1 - y2 + y1
+ax1.plot(
+    [x1, x2],
+    [y1, y2],
+    linewidth=3,
+    linestyle="-",
+    color="black",
+    label="Linear"
+)
+
+ax1.set_xlabel(r"$\mathrm{log_2}\left(1/h\right)$")
+ax1.set_ylabel(r"$\mathrm{log_2\left(error\right)}$")
+ax1.legend()
+
+ax2.plot(
+    np.log2(1/np.array(mesh_sizes)),
+    np.array(errors["cochez"]["i_eff"]),
+    linewidth=3,
+    linestyle="-",
+    color="red",
+    marker=".",
+    markersize="10",
+    label="PR1",
+)
+
+ax2.plot(
+    np.log2(1/np.array(mesh_sizes)),
+    np.array(errors["keilegavlen"]["i_eff"]),
+    linewidth=3,
+    linestyle="-",
+    color="blue",
+    marker=".",
+    markersize="10",
+    label="PR2",
+)
+
+ax2.plot(
+    np.log2(1/np.array(mesh_sizes)),
+    np.array(errors["vohralik"]["i_eff"]),
+    linewidth=3,
+    linestyle="-",
+    color="green",
+    marker=".",
+    markersize="10",
+    label="PR3",
+)
+
+ax2.set_xlabel(r"$\mathrm{log_2}\left(1/h\right)$")
+ax2.set_ylabel(r"$\mathrm{Efficiency~index}$")
+ax2.legend()
+
+plt.tight_layout()
+plt.savefig("unfractured.pdf")
+plt.show()
+
