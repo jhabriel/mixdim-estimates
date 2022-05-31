@@ -350,10 +350,10 @@ class PressureReconstruction(mde.ErrorEstimate):
             raise ValueError("Inconsistent size of pressure solution.")
 
         # Retrieve data from dictionaries
-        p_cc = d[pp.STATE][self.p_name].copy()
+        p_cc = d[pp.STATE][self.p_name]
 
         # Retrieve reconstructed velocity
-        u = d[self.estimates_kw]["recon_u"].copy()
+        u = d[self.estimates_kw]["recon_u"]
 
         # Retrieve permeability
         perm = d[pp.PARAMETERS][self.kw]["second_order_tensor"].values
@@ -368,24 +368,33 @@ class PressureReconstruction(mde.ErrorEstimate):
         # Get quadpy elements and declare integration method
         elements = utils.get_quadpy_elements(g, g_rot)
         if g.dim == 1:
-            method = qp.c1.newton_cotes_closed(3)
+            method = qp.c1.newton_cotes_closed(10)
         elif g.dim == 2:
-            method = qp.t2.get_good_scheme(4)
+            method = qp.t2.get_good_scheme(10)
         else:
-            method = qp.t3.get_good_scheme(3)
+            method = qp.t3.get_good_scheme(10)
 
         # Declare integrands
         def integrand(x):
             if g.dim == 1:
-                out = -0.5 * u[0] * x ** 2 - u[1] * x
+                out = (
+                        -0.5 * u[0] * x ** 2
+                        - u[1] * x
+                )
                 return out
             elif g.dim == 2:
-                out = -0.5 * u[0] * (x[0] ** 2 + x[1] ** 2) - u[1] * x[0] - u[2] * x[1]
+                out = (
+                        -0.5 * u[0] * (x[0] ** 2 + x[1] ** 2)
+                        - u[1] * x[0]
+                        - u[2] * x[1]
+                )
                 return out
             else:
                 out = (
                         -0.5 * u[0] * (x[0] ** 2 + x[1] ** 2 + x[2] ** 2)
-                        - u[1] * x[0] - u[2] * x[1] - u[3] * x[2]
+                        - u[1] * x[0]
+                        - u[2] * x[1]
+                        - u[3] * x[2]
                 )
                 return out
 
@@ -683,19 +692,22 @@ class PressureReconstruction(mde.ErrorEstimate):
             raise ValueError("Wrong shape of P2 polynomial.")
 
         # Mappings
-        cell_nodes_map, _, _ = sps.find(g.cell_nodes())
-        nodes_cell = cell_nodes_map.reshape((nc, 4))
+        cell_nodes_flat = sps.find(g.cell_nodes())[0]
+        nodes_of_cell = cell_nodes_flat.reshape((nc, 4))
 
-        cell_edges, nodepairs_cells = utils.cell_edge_map(g)
-        cell_edges_map, _, _ = sps.find(cell_edges)
-        edges_cell = cell_edges_map.reshape((nc, 6))
+        edge_nodes, cell_edges, face_edges = utils.edge_mappings(g)
+        ne: int = np.shape(edge_nodes)[1]  # number of edges
+        edge_nodes_flat = sps.find(edge_nodes)[0]
+        cell_edges_flat = sps.find(cell_edges)[0]
+        nodes_of_edge = edge_nodes_flat.reshape((ne, 2))  # (ne, 2)
+        edges_of_cell = cell_edges_flat.reshape((nc, 6))  # (nc, 6)
 
-        # Treatment of the nodes
+        # Treatment of nodes
         # Evaluate post-processed pressure at the nodes
         nodes_p = np.zeros([nc, 4])
-        nx = g_rot.nodes[0][nodes_cell]  # local node x-coordinates
-        ny = g_rot.nodes[1][nodes_cell]  # local node y-coordinates
-        nz = g_rot.nodes[2][nodes_cell]  # local node z-coordinates
+        nx = g_rot.nodes[0][nodes_of_cell]  # local node x-coordinates
+        ny = g_rot.nodes[1][nodes_of_cell]  # local node y-coordinates
+        nz = g_rot.nodes[2][nodes_of_cell]  # local node z-coordinates
 
         # Compute node pressures
         for col in range(4):
@@ -713,23 +725,29 @@ class PressureReconstruction(mde.ErrorEstimate):
             )
 
         # Average nodal pressure
-        node_cardinality = np.bincount(cell_nodes_map)
+        node_cardinality = np.bincount(cell_nodes_flat)
         node_pressure = np.zeros(nn)
         for col in range(4):
             node_pressure += np.bincount(
-                nodes_cell[:, col], weights=nodes_p[:, col], minlength=nn
+                nodes_of_cell[:, col], weights=nodes_p[:, col], minlength=nn
             )
         node_pressure /= node_cardinality
 
         # Treatment of the edges
         # Evaluate post-processed pressure at the edge-centers
-        # Note that PorePy does not provide a cell-edges mapping. Thus, we have to take the
-        # mean of the function between two nodes. For 3D, for each cell, we have 6 possible
-        # combinations
         edges_p = np.zeros([nc, 6])
-        ex = 0.5 * (g_rot.nodes[0][nodepairs_cells[0]] + g_rot.nodes[0][nodepairs_cells[1]])
-        ey = 0.5 * (g_rot.nodes[1][nodepairs_cells[0]] + g_rot.nodes[1][nodepairs_cells[1]])
-        ez = 0.5 * (g_rot.nodes[2][nodepairs_cells[0]] + g_rot.nodes[2][nodepairs_cells[1]])
+        # This is a bit tricky. First, create two arrays separating the first and second
+        # pairs of nodes of each edge
+        n0 = nodes_of_edge[:, 0]  # (ne,) set of first nodes of edges
+        n1 = nodes_of_edge[:, 1]  # (ne,) set of second nodes of edges
+        # Now, we use the above arrays to obtain the nodes corresponding to each edge for
+        # each cell
+        cell_n0 = n0[edges_of_cell]  # (nc, 6)first nodes of edges per cell
+        cell_n1 = n1[edges_of_cell]  # (nc, 6) second nodes of edges per cell
+        # The coordinates will be given by the average between the nodes composing the edge
+        ex = 0.5 * (g_rot.nodes[0][cell_n0] + g_rot.nodes[0][cell_n1])
+        ey = 0.5 * (g_rot.nodes[1][cell_n0] + g_rot.nodes[1][cell_n1])
+        ez = 0.5 * (g_rot.nodes[2][cell_n0] + g_rot.nodes[2][cell_n1])
 
         # Compute edge pressures
         for col in range(6):
@@ -748,44 +766,50 @@ class PressureReconstruction(mde.ErrorEstimate):
             )
 
         # Average edge pressure
-        edge_cardinality = np.bincount(cell_edges_map)  # check how to do this
+        edge_cardinality = np.bincount(cell_edges_flat)  # check how to do this
         ne = edge_cardinality.size
         edge_pressure = np.zeros(ne)
         for col in range(6):
             edge_pressure += np.bincount(
-                edges_cell[:, col],
+                edges_of_cell[:, col],
                 weights=edges_p[:, col],
                 minlength=ne
             )
         edge_pressure /= edge_cardinality
 
-        # Treatment of the boundary points
+        # Treatment of the boundary nodes and edges
+        # Note that continuity of the pressure at the boundaries is an essential condition
         bc = d[pp.PARAMETERS][self.kw]["bc"]
         bc_values = d[pp.PARAMETERS][self.kw]["bc_values"]
-        # If external boundary face is Dirichlet, we overwrite the value,
-        # If external boundary face is Neumann, we leave it as it is.
-        external_dir_bound_faces = np.logical_and(
-            bc.is_dir, g.tags["domain_boundary_faces"]
-        )
-        external_dir_bound_faces_vals = bc_values[external_dir_bound_faces]
-        edge_pressure[external_dir_bound_faces] = external_dir_bound_faces_vals
+        ext_dir_bc_faces_idx = np.logical_and(bc.is_dir, g.tags["domain_boundary_faces"])
 
-        # Now the nodes
-        face_vec = np.zeros(g.num_faces)
-        face_vec[external_dir_bound_faces] = 1
-        num_dir_face_of_node = g.face_nodes * face_vec
+        # First, the nodes
+        face_vec_nodes = np.zeros(nf)
+        face_vec_nodes[ext_dir_bc_faces_idx] = 1
+        num_dir_face_of_node = g.face_nodes * face_vec_nodes
         is_dir_node = num_dir_face_of_node > 0
-        face_vec *= 0
-        face_vec[external_dir_bound_faces] = bc_values[external_dir_bound_faces]
-        node_val_dir = g.face_nodes * face_vec
+        face_vec_nodes *= 0
+        face_vec_nodes[ext_dir_bc_faces_idx] = bc_values[ext_dir_bc_faces_idx]
+        node_val_dir = g.face_nodes * face_vec_nodes
         node_val_dir[is_dir_node] /= num_dir_face_of_node[is_dir_node]
         node_pressure[is_dir_node] = node_val_dir[is_dir_node]
 
+        # Now, the edges
+        face_vec_edges = np.zeros(nf)
+        face_vec_edges[ext_dir_bc_faces_idx] = 1
+        num_dir_face_of_edge = face_edges * face_vec_edges
+        is_dir_edge = num_dir_face_of_edge > 0
+        face_vec_edges *= 0
+        face_vec_edges[ext_dir_bc_faces_idx] = bc_values[ext_dir_bc_faces_idx]
+        edge_val_dir = face_edges * face_vec_edges
+        edge_val_dir[is_dir_edge] /= num_dir_face_of_edge[is_dir_edge]
+        edge_pressure[is_dir_edge] = edge_val_dir[is_dir_edge]
+
         # Prepare for exporting
         point_val = np.column_stack(
-            [node_pressure[nodes_cell], edge_pressure[edges_cell]]
+            [node_pressure[nodes_of_cell], edge_pressure[edges_of_cell]]
         )
-        point_coo = np.empty((g.dim, g.num_cells, 10))
+        point_coo = np.empty((g.dim, nc, 10))
         point_coo[0] = np.column_stack([nx, ex])
         point_coo[1] = np.column_stack([ny, ey])
         point_coo[2] = np.column_stack([nz, ez])
