@@ -46,6 +46,7 @@ class ExactSolution:
         x, y, z = sym.symbols("x y z")
 
         p_sym = sym.sin(2 * sym.pi * x) * sym.sin(2 * sym.pi * y) * sym.sin(2 * sym.pi * z)
+        # p_sym = x * (1 - x) * y * (1 - y) * z * (1 - z)
         p_fun = sym.lambdify((x, y, z), p_sym, "numpy")
         p_cc = p_fun(cc[0], cc[1], cc[2])
 
@@ -232,7 +233,7 @@ class ExactSolution:
         def integrand(x):
             return self.f("fun")(x[0], x[1], x[2]) * np.ones_like(x[0])
 
-        # Integrate, and add the contribution of each subregion
+        # Integrate
         integral = int_method.integrate(integrand, elements)
 
         return integral
