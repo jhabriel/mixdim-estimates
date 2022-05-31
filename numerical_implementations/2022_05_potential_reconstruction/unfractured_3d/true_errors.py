@@ -37,6 +37,63 @@ class TrueError(ExactSolution):
 
         return rp_cc.flatten()
 
+    def reconstructed_p_p2(self) -> np.ndarray:
+        """Compute reconstructed pressure for P2 elements"""
+
+        cc = self.g.cell_centers
+        nc = self.g.num_cells
+
+        # Get reconstructed pressure
+        recon_p = self.d[self.estimates.estimates_kw]["recon_p"]
+        p = utils.poly2col(recon_p)
+        x = cc[0].reshape(nc, 1)
+        y = cc[1].reshape(nc, 1)
+        z = cc[2].reshape(nc, 1)
+
+        # Project reconstructed pressure onto the cell centers
+        rp_cc = (p[0] * x ** 2
+                 + p[1] * x * y
+                 + p[2] * x * z
+                 + p[3] * x
+                 + p[4] * y ** 2
+                 + p[5] * y * z
+                 + p[6] * y
+                 + p[7] * z ** 2
+                 + p[8] * z
+                 + p[9]
+                 )
+
+        return rp_cc.flatten()
+
+    def postprocessed_p_p2(self) -> np.ndarray:
+        """Compute postprocessed pressure for P2 elements"""
+
+        cc = self.g.cell_centers
+        nc = self.g.num_cells
+
+        # Get reconstructed pressure
+        recon_p = self.d[self.estimates.estimates_kw]["postprocessed_p"]
+        p = utils.poly2col(recon_p)
+        x = cc[0].reshape(nc, 1)
+        y = cc[1].reshape(nc, 1)
+        z = cc[2].reshape(nc, 1)
+
+        # Project reconstructed pressure onto the cell centers
+        rp_cc = (p[0] * x ** 2
+                 + p[1] * x * y
+                 + p[2] * x * z
+                 + p[3] * x
+                 + p[4] * y ** 2
+                 + p[5] * y * z
+                 + p[6] * y
+                 + p[7] * z ** 2
+                 + p[8] * z
+                 + p[9]
+                 )
+
+        return rp_cc.flatten()
+
+
     # Reconstructed pressure gradients
     def reconstructed_gradp_p1(self) -> List[np.ndarray]:
         """Compute reconstructed pressure gradient for P1 elements"""
@@ -136,7 +193,14 @@ class TrueError(ExactSolution):
             gradp_exact_y = self.gradp("fun")[1](x[0], x[1], x[2])
             gradp_exact_z = self.gradp("fun")[2](x[0], x[1], x[2])
 
-            # gradp reconstructed in x and y
+            # gradp reconstructed in x, y, and z
+            # Recall that:
+            # p(x,y,z)|K = c0x^2 + c1xy + c2xz + c3x + c4y^2 + c5yz + c6y + c7z^2 + c8z + c9
+            #
+            #                  [ 2c0x + c1y + c2z + c3 ]
+            # gradp(x,y,z)|K = [ c1x + 2c4y + c5z + c6 ]
+            #                  [ c2x + c5y + 2c7z + c8 ]
+            #
             if self.estimates.p_recon_method in ["keilegavlen", "cochez"]:
                 gradp_recon_x = p[0] * np.ones_like(x[0])
                 gradp_recon_y = p[1] * np.ones_like(x[1])
