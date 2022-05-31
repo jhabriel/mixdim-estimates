@@ -107,10 +107,10 @@ class DiffusiveError(mde.ErrorEstimate):
             raise ValueError("Velocity must be reconstructed first.")
 
         # Retrieve reconstructed pressure
-        recon_p = d[self.estimates_kw]["recon_p"].copy()
+        recon_p = d[self.estimates_kw]["recon_p"]
 
         # Retrieve reconstructed velocity
-        recon_u = d[self.estimates_kw]["recon_u"].copy()
+        recon_u = d[self.estimates_kw]["recon_u"]
 
         # Retrieve permeability
         perm = d[pp.PARAMETERS][self.kw]["second_order_tensor"].values
@@ -163,6 +163,14 @@ class DiffusiveError(mde.ErrorEstimate):
                 return int_x + int_y
 
             # Three-dimensional subdomains
+            # gradp reconstructed in x, y, and z
+            # Recall that:
+            # p(x,y,z)|K = c0x^2 + c1xy + c2xz + c3x + c4y^2 + c5yz + c6y + c7z^2 + c8z + c9
+            #
+            #                  [ 2c0x + c1y + c2z + c3 ]
+            # gradp(x,y,z)|K = [ c1x + 2c4y + c5z + c6 ]
+            #                  [ c2x + c5y + 2c7z + c8 ]
+            #
             else:
                 veloc_x = u[0] * x[0] + u[1]
                 veloc_y = u[0] * x[1] + u[2]
