@@ -174,15 +174,21 @@ class DiffusiveError(mde.ErrorEstimate):
                     gradp_z = p[2] * np.ones_like(x[2])
                 else:
                     gradp_x = (
-                            2 * p[0] * x[0] + p[1] * x[1] * p[2] * x[2]
+                            2 * p[0] * x[0]
+                            + p[1] * x[1]
+                            + p[2] * x[2]
                             + p[3] * np.ones_like(x[0])
                     )
                     gradp_y = (
-                            p[1] * x[0] + 2 * p[4] * x[1] + p[5] * x[2]
+                            p[1] * x[0]
+                            + 2 * p[4] * x[1]
+                            + p[5] * x[2]
                             + p[6] * np.ones_like(x[1])
                     )
                     gradp_z = (
-                            p[2] * x[0] + p[5] * x[1] + 2 * p[7] * x[2]
+                            p[2] * x[0]
+                            + p[5] * x[1]
+                            + 2 * p[7] * x[2]
                             + p[8] * np.ones_like(x[2])
                     )
 
