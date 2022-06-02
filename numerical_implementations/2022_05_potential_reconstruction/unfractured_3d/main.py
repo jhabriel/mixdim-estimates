@@ -3,6 +3,7 @@ import numpy as np
 import mdestimates as mde
 import matplotlib.pyplot as plt
 import scipy.sparse as sps
+import pypardiso
 
 from analytical import ExactSolution
 from true_errors import TrueError
@@ -79,7 +80,8 @@ for mesh_size in mesh_sizes:
     assembler = pp.Assembler(gb)
     assembler.discretize()
     A, b = assembler.assemble_matrix_rhs()
-    sol = sps.linalg.spsolve(A, b)
+    # sol = sps.linalg.spsolve(A, b)
+    sol = pypardiso.spsolve(A, b)
     assembler.distribute_variable(sol)
 
     # Overwrite d[pp.STATE][subdomain_variable] to be consistent with FEM
