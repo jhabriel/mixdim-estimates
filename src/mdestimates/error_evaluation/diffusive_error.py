@@ -449,7 +449,7 @@ class DiffusiveError(mde.ErrorEstimate):
 
     # Interface errors for matching grids
     # TODO: Review diffusive error for 0d mortars
-    def _interface_diffusive_error_0d(self, edge: Edge, d_e: dict):
+    def _interface_diffusive_error_0d(self, edge: Edge, d_e: dict) -> np.ndarray:
         """
         Computes interface diffusive flux error for 0D mortar grids.
 
@@ -529,7 +529,7 @@ class DiffusiveError(mde.ErrorEstimate):
 
         return diffusive_error
 
-    def _interface_diffusive_error_1d(self, edge: Edge, d_e: dict):
+    def _interface_diffusive_error_1d(self, edge: Edge, d_e: dict) -> np.ndarray:
         """
         Computes diffusive flux error (squared) for one-dimensional mortar grids.
 

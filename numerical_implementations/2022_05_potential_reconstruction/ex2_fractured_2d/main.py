@@ -10,7 +10,7 @@ from true_errors_2d import TrueErrors2D
 
 # %% Study parameters
 recon_methods = ["cochez", "keilegavlen", "vohralik"]
-recon_methods = ["cochez", "keilegavlen"]
+# recon_methods = ["cochez", "keilegavlen"]
 errors = {method: {} for method in recon_methods}
 for method in recon_methods:
     errors[method]["majorant"] = []
@@ -172,8 +172,8 @@ for mesh_size in mesh_sizes:
             + diffusive_sq_rmortar.sum()
         )
 
-        residual_sq_2d = te.residual_error_2d_local_poincare()
-        residual_sq_1d = te.residual_error_1d_local_poincare()
+        residual_sq_2d = te.residual_error_2d()
+        residual_sq_1d = te.residual_error_1d()
         residual_error = np.sqrt(residual_sq_2d.sum() + residual_sq_1d.sum())
 
         majorant = diffusive_error + residual_error
@@ -246,41 +246,41 @@ ax1.plot(
     label="True error PR2",
 )
 
-# ax1.plot(
-#     np.log2(1/np.array(mesh_sizes)),
-#     np.log2(np.array(errors["vohralik"]["majorant"])),
-#     linewidth=3,
-#     linestyle="-",
-#     color="green",
-#     marker=".",
-#     markersize="10",
-#     label="Majorant PR3",
-# )
-#
-# ax1.plot(
-#     np.log2(1/np.array(mesh_sizes)),
-#     np.log2(np.array(errors["vohralik"]["true_error"])),
-#     linewidth=2,
-#     linestyle="--",
-#     color="green",
-#     marker=".",
-#     markersize="10",
-#     label="True error PR3",
-# )
+ax1.plot(
+    np.log2(1/np.array(mesh_sizes)),
+    np.log2(np.array(errors["vohralik"]["majorant"])),
+    linewidth=3,
+    linestyle="-",
+    color="green",
+    marker=".",
+    markersize="10",
+    label="Majorant PR3",
+)
 
-# # Plot reference line
-# x1 = 0
-# y1 = 2
-# y2 = -2
-# x2 = x1 - y2 + y1
-# ax1.plot(
-#     [x1, x2],
-#     [y1, y2],
-#     linewidth=3,
-#     linestyle="-",
-#     color="black",
-#     label="Linear"
-# )
+ax1.plot(
+    np.log2(1/np.array(mesh_sizes)),
+    np.log2(np.array(errors["vohralik"]["true_error"])),
+    linewidth=2,
+    linestyle="--",
+    color="green",
+    marker=".",
+    markersize="10",
+    label="True error PR3",
+)
+
+# Plot reference line
+x1 = 0
+y1 = 2
+y2 = -2
+x2 = x1 - y2 + y1
+ax1.plot(
+    [x1, x2],
+    [y1, y2],
+    linewidth=3,
+    linestyle="-",
+    color="black",
+    label="Linear"
+)
 
 ax1.set_xlabel(r"$\mathrm{log_2}\left(1/h\right)$")
 ax1.set_ylabel(r"$\mathrm{log_2\left(error\right)}$")
@@ -308,16 +308,16 @@ ax2.plot(
     label="PR2",
 )
 
-# ax2.plot(
-#     np.log2(1/np.array(mesh_sizes)),
-#     np.array(errors["vohralik"]["i_eff"]),
-#     linewidth=3,
-#     linestyle="-",
-#     color="green",
-#     marker=".",
-#     markersize="10",
-#     label="PR3",
-# )
+ax2.plot(
+    np.log2(1/np.array(mesh_sizes)),
+    np.array(errors["vohralik"]["i_eff"]),
+    linewidth=3,
+    linestyle="-",
+    color="green",
+    marker=".",
+    markersize="10",
+    label="PR3",
+)
 
 ax2.set_xlabel(r"$\mathrm{log_2}\left(1/h\right)$")
 ax2.set_ylabel(r"$\mathrm{Efficiency~index}$")

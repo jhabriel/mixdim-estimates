@@ -2,12 +2,13 @@ import mdestimates as mde
 import porepy as pp
 import numpy as np
 import quadpy as qp
+import scipy.sparse as sps
 
 import mdestimates.estimates_utils as utils
 
 from analytical_2d import ExactSolution2D
 
-from typing import List
+from typing import List, Tuple
 
 
 class TrueErrors2D(ExactSolution2D):
@@ -32,10 +33,10 @@ class TrueErrors2D(ExactSolution2D):
         rp_cc_2d = np.zeros([self.g2d.num_cells, 1])
         for idx in self.cell_idx:
             rp_cc_2d += (
-                p[0] * cc[0].reshape(self.g2d.num_cells, 1)
-                + p[1] * cc[1].reshape(self.g2d.num_cells, 1)
-                + p[2]
-            ) * idx.reshape(self.g2d.num_cells, 1)
+                                p[0] * cc[0].reshape(self.g2d.num_cells, 1)
+                                + p[1] * cc[1].reshape(self.g2d.num_cells, 1)
+                                + p[2]
+                        ) * idx.reshape(self.g2d.num_cells, 1)
 
         return rp_cc_2d.flatten()
 
@@ -43,7 +44,7 @@ class TrueErrors2D(ExactSolution2D):
         """Compute reconstructed pressure for the fracture"""
 
         # Get hold of reconstructed pressure
-        recon_p = self.d1d[self.estimates.estimates_kw]["recon_p"].copy()
+        recon_p = self.d1d[self.estimates.estimates_kw]["recon_p"]
         p = utils.poly2col(recon_p)
 
         # Rotate grid and get cell centers
@@ -60,7 +61,7 @@ class TrueErrors2D(ExactSolution2D):
         """Compute reconstructed pressure gradient for the matrix"""
 
         # Get reconstructed pressure
-        recon_p = self.d2d[self.estimates.estimates_kw]["recon_p"].copy()
+        recon_p = self.d2d[self.estimates.estimates_kw]["recon_p"]
         p = utils.poly2col(recon_p)
 
         # Project reconstructed pressure onto the cell centers
@@ -80,7 +81,7 @@ class TrueErrors2D(ExactSolution2D):
         """Compute reconstructed pressure gradient for the fracture"""
 
         # Get reconstructed pressure
-        recon_p = self.d1d[self.estimates.estimates_kw]["recon_p"].copy()
+        recon_p = self.d1d[self.estimates.estimates_kw]["recon_p"]
         p = utils.poly2col(recon_p)
 
         # Project reconstructed pressure onto the cell centers
@@ -102,7 +103,7 @@ class TrueErrors2D(ExactSolution2D):
 
         cc = self.g2d.cell_centers
 
-        recon_u = self.d2d[self.estimates.estimates_kw]["recon_u"].copy()
+        recon_u = self.d2d[self.estimates.estimates_kw]["recon_u"]
         u = utils.poly2col(recon_u)
 
         ru_cc_2d_x = np.zeros([self.g2d.num_cells, 1])
@@ -111,11 +112,11 @@ class TrueErrors2D(ExactSolution2D):
 
         for idx in self.cell_idx:
             ru_cc_2d_x += (
-                u[0] * cc[0].reshape(self.g2d.num_cells, 1) + u[1]
-            ) * idx.reshape(self.g2d.num_cells, 1)
+                                  u[0] * cc[0].reshape(self.g2d.num_cells, 1) + u[1]
+                          ) * idx.reshape(self.g2d.num_cells, 1)
             ru_cc_2d_y += (
-                u[0] * cc[1].reshape(self.g2d.num_cells, 1) + u[2]
-            ) * idx.reshape(self.g2d.num_cells, 1)
+                                  u[0] * cc[1].reshape(self.g2d.num_cells, 1) + u[2]
+                          ) * idx.reshape(self.g2d.num_cells, 1)
 
         ru_cc_2d = [
             ru_cc_2d_x.flatten(),
@@ -132,7 +133,7 @@ class TrueErrors2D(ExactSolution2D):
         g_rot = mde.RotatedGrid(self.g1d)
         cc = g_rot.cell_centers
 
-        recon_u = self.d1d[self.estimates.estimates_kw]["recon_u"].copy()
+        recon_u = self.d1d[self.estimates.estimates_kw]["recon_u"]
         u = utils.poly2col(recon_u)
 
         ru_cc_1d_x = u[0].flatten() * cc[0] + u[1].flatten()
@@ -177,7 +178,7 @@ class TrueErrors2D(ExactSolution2D):
         """Compute square of residual errors for 2D (onnly the norm)"""
 
         # Retrieve reconstructed velocity
-        recon_u = self.d2d[self.estimates.estimates_kw]["recon_u"].copy()
+        recon_u = self.d2d[self.estimates.estimates_kw]["recon_u"]
 
         # Obtain coefficients of the full flux and compute its divergence
         u = utils.poly2col(recon_u)
@@ -204,7 +205,7 @@ class TrueErrors2D(ExactSolution2D):
         """Compute square of residual errors for 1D (onnly the norm)"""
 
         # Retrieve reconstructed velocity
-        recon_u = self.d1d[self.estimates.estimates_kw]["recon_u"].copy()
+        recon_u = self.d1d[self.estimates.estimates_kw]["recon_u"]
 
         # Obtain coefficients of the full flux and compute its divergence
         u = utils.poly2col(recon_u)
@@ -214,7 +215,8 @@ class TrueErrors2D(ExactSolution2D):
 
         # Jump in mortar fluxes
         jump_in_mortars = (
-            self.d1d[self.estimates.estimates_kw]["mortar_jump"].copy() / self.g1d.cell_volumes
+                self.d1d[self.estimates.estimates_kw][
+                    "mortar_jump"].copy() / self.g1d.cell_volumes
         ).reshape(self.g1d.num_cells, 1)
 
         # Integration method and retrieving elements
@@ -247,7 +249,7 @@ class TrueErrors2D(ExactSolution2D):
         if self.estimates.p_recon_method in ["keilegavlen", "cochez"]:
             p = self.d2d[self.estimates.estimates_kw]["recon_p"]
         else:
-            p = self.d2d[self.estimates.estimates_kw]["postprocessed_p"]
+            p = self.d2d[self.estimates.estimates_kw]["recon_p"]
 
         p = utils.poly2col(p)
 
@@ -287,8 +289,12 @@ class TrueErrors2D(ExactSolution2D):
     def pressure_error_squared_1d(self) -> np.ndarray:
 
         # Get hold of reconstructed pressure and create list of coefficients
-        recon_p = self.d1d[self.estimates.estimates_kw]["recon_p"]
-        p = utils.poly2col(recon_p)
+        if self.estimates.p_recon_method in ["keilegavlen", "cochez"]:
+            p = self.d1d[self.estimates.estimates_kw]["recon_p"]
+        else:
+            p = self.d1d[self.estimates.estimates_kw]["recon_p"]
+
+        p = utils.poly2col(p)
 
         # Obtain elements and declare integration method
         method = qp.c1.newton_cotes_closed(10)
@@ -303,9 +309,9 @@ class TrueErrors2D(ExactSolution2D):
 
             # Reconstructed pressure gradient
             if self.estimates.p_recon_method in ["cochez", "keilegavlen"]:
-                gradp_recon_x = p[0] * np.ones_like(x[0])
+                gradp_recon_x = p[0] * np.ones_like(x)
             else:
-                gradp_recon_x = 2 * p[0] * x + p[1] * np.ones_like(x)
+                gradp_recon_x = 2 * p[0] * -x + p[1] * np.ones_like(-x)
 
             # Compute integral
             int_x = (gradp_exact_rot - gradp_recon_x) ** 2
@@ -318,73 +324,114 @@ class TrueErrors2D(ExactSolution2D):
 
     def pressure_error_squared_mortar(self) -> np.ndarray:
 
-        # Instantiate diffusive flux object to access private methods
         dfe = mde.DiffusiveError(self.estimates)
 
-        # Get hold of grids and dictionaries
-        g_l, g_h = self.gb.nodes_of_edge(self.e)
-        mg = self.mg
+        def compute_sidegrid_error(
+                side_tuple: Tuple,
+                delta_pressure,
+                exact_pressure,
+                pressure_degree,
+                integration_method,
+                normal_perm
+        ) -> np.ndarray:
+            """
+            Projects a mortar quantity to a side grid and perform numerical integration.
 
-        # Obtain the number of sides of the mortar grid
-        num_sides = mg.num_sides()
-        if num_sides == 2:
-            sides = [-1, 1]
-        else:
-            sides = [1]
+            Parameters
+            ----------
+                side_tuple (Tuple): Containing the sidegrids
 
-        # Loop over the sides of the mortar grid
-        true_error = np.zeros(mg.num_cells)
+            Returns
+            -------
+                diffusive_error_side (np.ndarray): Diffusive error (squared) for each element
+                    of the side grid.
+            """
 
-        for side in sides:
+            # Get projector and sidegrid object
+            projector = side_tuple[0]
+            sidegrid = side_tuple[1]
 
-            # Get rotated grids and sorted elements
-            high_grid, frac_faces = dfe._sorted_highdim_edge_grid(g_h, g_l, mg, side)
-            mortar_grid, mortar_cells = dfe._sorted_side_grid(mg, g_l, side)
-            low_grid, low_cells = dfe._sorted_low_grid(g_l)
+            # Rotate side-grid
+            sidegrid_rot = mde.RotatedGrid(sidegrid)
 
-            # Merge the three grids into one
-            merged_grid = dfe._merge_grids(low_grid, mortar_grid, high_grid)
+            # Obtain quadpy elements
+            elements = utils.get_quadpy_elements(sidegrid, sidegrid_rot)
+            elements *= -1
 
-            # Note that the following mappings are local for each merged grid.
-            # For example, to retrieve the global fracture faces indices, we
-            # should write frac_faces[merged_high_ele], and to retrieve the
-            # global mortar cells, we should write
-            # mortar_cells[merged_mortar_ele]
-            # Retrieve element mapping from sorted grids to merged grid
-            merged_high_ele = dfe._get_grid_uniongrid_elements(merged_grid, high_grid)
-            merged_mortar_ele = dfe._get_grid_uniongrid_elements(merged_grid, mortar_grid)
-            merged_low_ele = dfe._get_grid_uniongrid_elements(merged_grid, low_grid)
+            # Project relevant quanitites to the side grid
+            deltap_side = projector * delta_pressure
 
-            # Get projected pressure jump, normal permeabilities, and
-            # normal velocities
-            pressure_jump, k_perp, _ = dfe._project_poly_to_merged_grid(
-                self.e,
-                self.de,
-                [low_cells, mortar_cells, frac_faces],
-                [merged_low_ele, merged_mortar_ele, merged_high_ele],
-            )
+            # Project normal permeability
+            k_side = projector * normal_perm
 
-            # Define integration method and obtain quadpy elements
-            method = qp.c1.newton_cotes_closed(10)
-            qp_ele = utils.get_qp_elements_from_union_grid_1d(merged_grid)
-            qp_ele *= -1  # To use real coordinates
-
-            # Define integrand
+            # Declare integrand
             def integrand(x):
                 coors = x[np.newaxis, :, :]  # this is needed for 1D grids
-                p_jump = utils.eval_p1(pressure_jump, -coors)  # -coors because is rotated
-                return (self.p1d("fun")(x) - p_jump) ** 2
+                if pressure_degree == 1:
+                    p_jump = utils.eval_p1(deltap_side, -coors)
+                else:
+                    p_jump = utils.eval_p2(deltap_side, -coors)
+                return (k_side ** 0.5 * (exact_pressure(x) - p_jump)) ** 2
 
-            # Evaluate integral
-            diffusive_error_merged = method.integrate(integrand, qp_ele)
+            # Compute integral
+            diffusive_error_side = integration_method.integrate(integrand, elements)
 
-            # Sum errors corresponding to a mortar cell
-            diffusive_error_side = np.zeros(len(mortar_cells))
-            for mortar_element in range(len(mortar_cells)):
-                idx = mortar_cells[mortar_element] == mortar_cells[merged_mortar_ele]
-                diffusive_error_side[mortar_element] = diffusive_error_merged[idx].sum()
+            return diffusive_error_side
 
-            # Append into the list
-            true_error[mortar_cells] = diffusive_error_side
+        # Get mortar grid and check dimensionality
+        mg = self.mg
+        if mg.dim != 1:
+            raise ValueError("Expected one-dimensional mortar grid")
 
-        return true_error
+        # Get hold of higher- and lower-dimensional neighbors and their dictionaries
+        g_l, g_h = self.gb.nodes_of_edge(self.e)
+        d_h = self.gb.node_props(g_h)
+        d_l = self.gb.node_props(g_l)
+
+        # Retrieve normal diffusivity
+        normal_diff = self.de[pp.PARAMETERS][self.estimates.kw]["normal_diffusivity"]
+        if isinstance(normal_diff, int) or isinstance(normal_diff, float):
+            k = normal_diff * np.ones([mg.num_cells, 1])
+        else:
+            k = normal_diff.reshape(mg.num_cells, 1)
+
+        # Face-cell map between higher- and lower-dimensional subdomains
+        frac_faces = sps.find(mg.primary_to_mortar_avg().T)[0]
+        frac_cells = sps.find(mg.secondary_to_mortar_avg().T)[0]
+
+        # Obtain the trace of the higher-dimensional pressure
+        tracep_high = dfe._get_high_pressure_trace(g_l, g_h, d_h, frac_faces)
+
+        # Obtain the lower-dimensional pressure
+        p_low = dfe._get_low_pressure(d_l, frac_cells)
+
+        # Now, we can work with the pressure difference
+        deltap = p_low - tracep_high
+
+        # # Obtain normal velocities
+        # normal_vel = dfe._get_normal_velocity(self.de)
+
+        # Declare integration method
+        method = qp.c1.newton_cotes_closed(4)
+
+        # Retrieve side-grids tuples
+        sides = mg.project_to_side_grids()
+
+        # Compute the errors for each sidegrid
+        diffusive = []
+        for side in sides:
+            diffusive.append(
+                compute_sidegrid_error(
+                    side,
+                    deltap,
+                    self.p1d("fun"),
+                    self.estimates.p_degree,
+                    method,
+                    k
+                )
+            )
+
+        # Concatenate into one numpy array
+        diffusive_error = np.concatenate(diffusive)
+
+        return diffusive_error
