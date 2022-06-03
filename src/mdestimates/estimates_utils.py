@@ -507,7 +507,7 @@ def eval_p1(p1_coefficients: np.ndarray, coordinates: np.ndarray) -> np.ndarray:
     val (np.ndarray): Values of the polynomial at the coordinate points.
     """
 
-    # Check if p1 coefficientes has the correct shape
+    # Check if P1 coefficients has the correct shape
     if p1_coefficients.shape[1] not in [2, 3, 4]:
         raise ValueError("Number of coefficients does not match a P1 polynomial")
 
@@ -550,7 +550,7 @@ def eval_p2(p2_coefficients: np.ndarray, coordinates: np.ndarray) -> np.ndarray:
         val (np.ndarray): Values of the polynomial at the coordinate points.
     """
 
-    # Check if p1 coefficientes has the correct shape
+    # Check if p1 coefficients has the correct shape
     if p2_coefficients.shape[1] not in [3, 6, 10]:
         raise ValueError("Number of coefficients does not match a P2 polynomial")
 

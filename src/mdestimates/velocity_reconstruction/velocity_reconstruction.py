@@ -61,7 +61,7 @@ class VelocityReconstruction(mde.ErrorEstimate):
                         + matrix_dictionary["bound_flux"] * parameter_dictionary["bc_values"]
                 )
 
-                # Add tcontribution of mortar fluxes from edges associated
+                # Add contribution of mortar fluxes from edges associated
                 # to the high-dim subdomain
                 induced_flux = np.zeros(darcy_flux.size)
                 faces = g.tags["fracture_faces"]
