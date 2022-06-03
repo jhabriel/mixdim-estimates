@@ -77,9 +77,9 @@ class DiffusiveError(mde.ErrorEstimate):
         Raises
         ------
         ValueError:
-            (*) If the reconstructed pressure is not in the data dictionary.
-            (*) If the reconstructed velocity is not in the data dictionary.
-            (*) If the grid dimension is not 1, 2, or 3.
+            If the reconstructed pressure is not in the data dictionary.
+            If the reconstructed velocity is not in the data dictionary.
+            If the grid dimension is not 1, 2, or 3.
 
         Returns
         -------
@@ -116,14 +116,16 @@ class DiffusiveError(mde.ErrorEstimate):
         perm = d[pp.PARAMETERS][self.kw]["second_order_tensor"].values
         k = perm[0][0].reshape(g.num_cells, 1)
 
-        # Get QuadPy elements and declare integration method
+        # Get quadpy elements and declare integration method
+        # Locally, we have at most P1 polynomials, but since we measure the square of the
+        # error, we need at integration methods of order 2 to compute the exact integrals
         elements = utils.get_quadpy_elements(g, g_rot)
         if g.dim == 1:
-            method = qp.c1.newton_cotes_closed(5)
+            method = qp.c1.newton_cotes_closed(3)
         elif g.dim == 2:
-            method = qp.t2.get_good_scheme(5)
+            method = qp.t2.get_good_scheme(3)
         else:
-            method = qp.t3.get_good_scheme(5)
+            method = qp.t3.get_good_scheme(3)
 
         # Obtain coefficients
         p = utils.poly2col(recon_p)
@@ -133,12 +135,17 @@ class DiffusiveError(mde.ErrorEstimate):
         def integrand(x):
 
             # One-dimensional subdomains
+            # gradp reconstructed in x
+            # Recall that
+            # p(x)|K = c0x^2 + c1x + c2
+            # with "gradient"
+            # gradp(x)|K = 2c0x + c1
             if g.dim == 1:
                 veloc_x = u[0] * x + u[1]
 
-                if self.p_recon_method in ["cochez", "keilegavlen"]:
+                if self.p_degree == 1:  # P1
                     gradp_x = p[0] * np.ones_like(x)
-                else:
+                else:  # P2
                     gradp_x = 2 * p[0] * x + p[1] * np.ones_like(x)
 
                 int_x = (k ** (-0.5) * veloc_x + k ** 0.5 * gradp_x) ** 2
@@ -146,14 +153,19 @@ class DiffusiveError(mde.ErrorEstimate):
                 return int_x
 
             # Two-dimensional subdomains
+            # gradp reconstructed in x and y
+            # Recall that
+            # p(x, y)|K = c0x^2 + c1xy + c2x + c3y^2 + c4y + c5
+            # with gradient
+            # gradp(x,y)|K = [2c0x + c1y + c2, c1x + 2c3y + c4]
             elif g.dim == 2:
                 veloc_x = u[0] * x[0] + u[1]
                 veloc_y = u[0] * x[1] + u[2]
 
-                if self.p_recon_method in ["cochez", "keilegavlen"]:
+                if self.p_degree == 1:  # P1
                     gradp_x = p[0] * np.ones_like(x[0])
                     gradp_y = p[1] * np.ones_like(x[1])
-                else:
+                else:  # P2
                     gradp_x = 2 * p[0] * x[0] + p[1] * x[1] + p[2] * np.ones_like(x[0])
                     gradp_y = p[1] * x[0] + 2 * p[3] * x[1] + p[4] * np.ones_like(x[1])
 
@@ -166,21 +178,20 @@ class DiffusiveError(mde.ErrorEstimate):
             # gradp reconstructed in x, y, and z
             # Recall that:
             # p(x,y,z)|K = c0x^2 + c1xy + c2xz + c3x + c4y^2 + c5yz + c6y + c7z^2 + c8z + c9
-            #
+            # with gradient:
             #                  [ 2c0x + c1y + c2z + c3 ]
             # gradp(x,y,z)|K = [ c1x + 2c4y + c5z + c6 ]
             #                  [ c2x + c5y + 2c7z + c8 ]
-            #
             else:
                 veloc_x = u[0] * x[0] + u[1]
                 veloc_y = u[0] * x[1] + u[2]
                 veloc_z = u[0] * x[2] + u[3]
 
-                if self.p_recon_method in ["cochez", "keilegavlen"]:
+                if self.p_degree == 1:  # P1
                     gradp_x = p[0] * np.ones_like(x[0])
                     gradp_y = p[1] * np.ones_like(x[1])
                     gradp_z = p[2] * np.ones_like(x[2])
-                else:
+                else:  # P2
                     gradp_x = (
                             2 * p[0] * x[0]
                             + p[1] * x[1]
@@ -224,9 +235,9 @@ class DiffusiveError(mde.ErrorEstimate):
         Raises
         ------
             ValueError:
-                (*) If the mortar grid dimension is not 0, 1, or 2.
+                If the mortar grid dimension is not 0, 1, or 2.
             NotImplementedError:
-                (*) If non-matching grids for three-dimensional problems are used.
+                If non-matching grids for three-dimensional problems are used.
 
         Returns
         -------
@@ -273,150 +284,51 @@ class DiffusiveError(mde.ErrorEstimate):
         return diffusive_error
 
     # Utility functions
-    def _get_high_pressure_trace_p2(self,
-                                    g_l: pp.Grid,
-                                    g_h: pp.Grid,
-                                    d_h: dict,
-                                    frac_faces: np.ndarray,
-                                    ) -> np.ndarray:
-        """
-        Obtain coefficients of the P2 traces of the pressure at internal boundaries.
+    def _frac_faces_lagrangian_coo(
+            self,
+            gh: pp.Grid,
+            frac_faces: np.ndarray,
+            rotated_coo: bool = False
+    ) -> np.ndarray:
 
-        Parameters
-        ----------
-            g_l (pp.Grid): Lower-dimensional grid.
-            g_h (pp.Grid): Higher-dimensional grid.
-            d_h (dict): Higher-dimensional data dictionary.
-            frac_faces (np.ndarray): Higher-dimensional fracture faces.
-
-        Raises
-        ------
-            ValueError: If the reconstructed pressure is not in the data dictionary
-
-        Returns
-        -------
-            trace_pressure (np.ndarray): Coefficients of the high-dim pressure trace.
-
-        """
-
-        def get_edge_lagrangian_coo(grid: Union[pp.Grid, mde.RotatedGrid]) -> np.ndarray:
-            """
-            Gets coordinates of the Lagrangian nodes of the internal higher-dim boundary.
-
-            Parameters
-            ----------
-                grid (pp.Grid or mde.RotatedGrid): Higher-dimensional grid.
-
-            Returns
-            -------
-                lagran_coo (np.ndarray): Coordinates of the Lagrangian nodes of shape
-                    (frac_faces.size, 3)
-
-            """
+        if self.p_degree == 1:  # P1 polynomials
             # Get nodes of the fracture faces
-            nodes_of_frac_faces = np.reshape(
-                sps.find(g_h.face_nodes.T[frac_faces].T)[0], [frac_faces.size, g_h.dim]
-            )
-
-            # Obtain the coordinates  nodes of the fracture faces
-            lagran_coo_nodes = grid.nodes[:, nodes_of_frac_faces]
-
-            # Obtain the coordinates of the fracture faces centers
-            lagran_coo_fc = grid.face_centers[:, frac_faces.reshape((frac_faces.size, 1))]
-
-            # Stack them
-            lagran_coo = np.dstack((lagran_coo_nodes, lagran_coo_fc))
-
-            return lagran_coo
-
-        # Rotate both grids, and obtain rotation matrix and effective dimension
-        gh_rot = mde.RotatedGrid(g_h)
-        gl_rot = mde.RotatedGrid(g_l)
-        rotation_matrix = gl_rot.rotation_matrix
-        dim_bool = gl_rot.dim_bool
-
-        # Obtain the cells corresponding to the frac_faces
-        cells_of_frac_faces, _, _ = sps.find(g_h.cell_faces[frac_faces].T)
-
-        # Retrieve the coefficients of the polynomials corresponding to those cells
-        if "recon_p" in d_h[self.estimates_kw]:
-            p_high = d_h[self.estimates_kw]["recon_p"].copy()
+            frac_faces_nodes = gh.face_nodes.T[frac_faces].T[0]
+            nodes_of_frac_faces = frac_faces_nodes.reshape((frac_faces.size, gh.dim))
+            # Obtain coordinates of Lagrangian nodes at the nodes of the fracture faces
+            if rotated_coo:
+                gh_rot = mde.RotatedGrid(gh)
+                lagran_coo = gh_rot.nodes[:, nodes_of_frac_faces]
+            else:
+                lagran_coo = gh.nodes[:, nodes_of_frac_faces]
         else:
-            raise ValueError("Pressure must be reconstructed first")
-        p_high = p_high[cells_of_frac_faces]
+            if gh.dim == 3:
+                raise NotImplementedError("P2 elements not implemented for 3D")
+            else:
+                # Get nodes of the fracture faces
+                frac_faces_nodes = sps.find(gh.face_nodes.T[frac_faces].T)[0]
+                nodes_of_frac_faces = frac_faces_nodes.reshape((frac_faces.size, gh.dim))
+                frac_faces_reshaped = frac_faces.reshape((frac_faces.size, 1))
+                # Obtain the coordinates of the nodes of the fracture faces and the
+                # coordinates of the fracture faces centers
+                if rotated_coo:
+                    gh_rot = mde.RotatedGrid(gh)
+                    lagran_coo_nodes = gh_rot.nodes[:, nodes_of_frac_faces]
+                    lagran_coo_fc = gh_rot.face_centers[:, frac_faces_reshaped]
+                    lagran_coo = np.dstack((lagran_coo_nodes, lagran_coo_fc))
+                else:
+                    lagran_coo_nodes = gh.nodes[:, nodes_of_frac_faces]
+                    lagran_coo_fc = gh.face_centers[:, frac_faces_reshaped]
+                    lagran_coo = np.dstack((lagran_coo_nodes, lagran_coo_fc))
 
-        # NOTE: Use the rotated coordinates to perform the evaluation of the pressure,
-        # but use the original coordinates to rotate the edge using the rotation matrix of
-        # the lower-dimensional grid as reference.
-
-        # Evaluate the polynomials at the relevant Lagrangian nodes
-        point_coo_rot = get_edge_lagrangian_coo(gh_rot)
-        point_val = utils.eval_p2(p_high, point_coo_rot)
-
-        # Rotate the coordinates of the Lagrangian nodes w.r.t. the lower-dimensional grid
-        point_coo = get_edge_lagrangian_coo(g_h)
-        point_edge_coo_rot = np.empty_like(point_coo)
-        for element in range(frac_faces.size):
-            point_edge_coo_rot[:, element] = np.dot(rotation_matrix, point_coo[:, element])
-        point_edge_coo_rot = point_edge_coo_rot[dim_bool]
-
-        # Construct a polynomial (of reduced dimensionality) using the rotated coo
-        trace_pressure = utils.interpolate_p2(point_val, point_edge_coo_rot)
-
-        # Test if the values of the original polynomial match the new one
-        point_val_rot = utils.eval_p2(trace_pressure, point_edge_coo_rot)
-        np.testing.assert_almost_equal(point_val, point_val_rot, decimal=12)
-
-        return trace_pressure
+        return lagran_coo
 
     def _get_high_pressure_trace(self,
                                  g_l: pp.Grid,
                                  g_h: pp.Grid,
                                  d_h: dict,
-                                 frac_faces: np.array
+                                 frac_faces: np.ndarray
                                  ) -> np.ndarray:
-        """
-        Obtains the coefficients of the P1 (projected) traces of the pressure.
-
-        Parameters
-        ----------
-            g_l (pp.Grid): Lower-dimensional grid.
-            g_h (pp.Grid): Higher-dimensional grid.
-            d_h (dict): Higher-dimensional data dictionary.
-            frac_faces (np.ndarray): Higher-dimensional fracture faces
-
-        Raises
-        ------
-            ValueError
-                (*) If the pressure has not been reconstructed
-
-        Returns
-        -------
-            trace_pressure (np.ndarray): Coefficients of the higher-dimensional pressure
-                trace.
-        """
-
-        def get_edge_lagragian_coordinates(grid: Union[pp.Grid, mde.RotatedGrid]):
-            """
-            Gets coordinates of the Lagrangian nodes of the internal higher-dim boundary.
-
-            Parameters
-            ----------
-                grid (pp.Grid or mde.RotatedGrid): Higher-dimensional grid.
-
-            Returns
-            -------
-                coordinates (np.ndarray): Coordinates of the Lagrangian nodes.
-            """
-            # Get nodes of the fracture faces
-            nodes_of_frac_faces = np.reshape(
-                sps.find(g_h.face_nodes.T[frac_faces].T)[0], [frac_faces.size, g_h.dim]
-            )
-
-            # Obtain the coordinates of the nodes of the fracture faces
-            lagran_coo = grid.nodes[:, nodes_of_frac_faces]
-
-            return lagran_coo
 
         # Rotate both grids, and obtain rotation matrix and effective dimension
         gh_rot = mde.RotatedGrid(g_h)
@@ -429,7 +341,7 @@ class DiffusiveError(mde.ErrorEstimate):
 
         # Retrieve the coefficients of the polynomials corresponding to those cells
         if "recon_p" in d_h[self.estimates_kw]:
-            p_high = d_h[self.estimates_kw]["recon_p"].copy()
+            p_high = d_h[self.estimates_kw]["recon_p"]
         else:
             raise ValueError("Pressure must be reconstructed first")
         p_high = p_high[cells_of_frac_faces]
@@ -438,22 +350,32 @@ class DiffusiveError(mde.ErrorEstimate):
         # but use the original coordinates to rotate the edge using the rotation matrix of
         # the lower-dimensional grid as reference.
 
-        # Evaluate the polynomials at the relevant Lagrangian nodes
-        point_coo_rot = get_edge_lagragian_coordinates(gh_rot)
-        point_val = utils.eval_p1(p_high, point_coo_rot)
+        # Evaluate the polynomials at the relevant Lagrangian nodes according to poly degree
+        point_coo_rot = self._frac_faces_lagrangian_coo(g_h, frac_faces, rotated_coo=True)
+        if self.p_degree == 1:
+            point_val = utils.eval_p1(p_high, point_coo_rot)
+        else:
+            point_val = utils.eval_p2(p_high, point_coo_rot)
 
         # Rotate the coordinates of the Lagrangian nodes w.r.t. the lower-dimensional grid
-        point_coo = get_edge_lagragian_coordinates(g_h)
+        point_coo = self._frac_faces_lagrangian_coo(g_h, frac_faces)
         point_edge_coo_rot = np.empty_like(point_coo)
         for element in range(frac_faces.size):
             point_edge_coo_rot[:, element] = np.dot(rotation_matrix, point_coo[:, element])
         point_edge_coo_rot = point_edge_coo_rot[dim_bool]
 
-        # Construct a polynomial (of reduced dimensionality) using the rotated coo
-        trace_pressure = utils.interpolate_p1(point_val, point_edge_coo_rot)
+        # Construct a polynomial (of reduced dimensionality) using the rotated coordinates
+        if self.p_degree == 1:
+            trace_pressure = utils.interpolate_p1(point_val, point_edge_coo_rot)
+        else:
+            trace_pressure = utils.interpolate_p2(point_val, point_edge_coo_rot)
 
         # Test if the values of the original polynomial match the new one
-        point_val_rot = utils.eval_p1(trace_pressure, point_edge_coo_rot)
+        if self.p_degree == 1:
+            point_val_rot = utils.eval_p1(trace_pressure, point_edge_coo_rot)
+        else:
+            point_val_rot = utils.eval_p2(trace_pressure, point_edge_coo_rot)
+
         np.testing.assert_almost_equal(point_val, point_val_rot, decimal=12)
 
         return trace_pressure
