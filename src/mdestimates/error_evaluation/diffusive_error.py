@@ -286,39 +286,39 @@ class DiffusiveError(mde.ErrorEstimate):
     # Utility functions
     def _frac_faces_lagrangian_coo(
             self,
-            gh: pp.Grid,
+            g_h: pp.Grid,
             frac_faces: np.ndarray,
             rotated_coo: bool = False
     ) -> np.ndarray:
 
         if self.p_degree == 1:  # P1 polynomials
             # Get nodes of the fracture faces
-            frac_faces_nodes = gh.face_nodes.T[frac_faces].T[0]
-            nodes_of_frac_faces = frac_faces_nodes.reshape((frac_faces.size, gh.dim))
+            frac_faces_nodes = sps.find(g_h.face_nodes.T[frac_faces].T)[0]
+            nodes_of_frac_faces = frac_faces_nodes.reshape((frac_faces.size, g_h.dim))
             # Obtain coordinates of Lagrangian nodes at the nodes of the fracture faces
             if rotated_coo:
-                gh_rot = mde.RotatedGrid(gh)
+                gh_rot = mde.RotatedGrid(g_h)
                 lagran_coo = gh_rot.nodes[:, nodes_of_frac_faces]
             else:
-                lagran_coo = gh.nodes[:, nodes_of_frac_faces]
+                lagran_coo = g_h.nodes[:, nodes_of_frac_faces]
         else:
-            if gh.dim == 3:
+            if g_h.dim == 3:
                 raise NotImplementedError("P2 elements not implemented for 3D")
             else:
                 # Get nodes of the fracture faces
-                frac_faces_nodes = sps.find(gh.face_nodes.T[frac_faces].T)[0]
-                nodes_of_frac_faces = frac_faces_nodes.reshape((frac_faces.size, gh.dim))
+                frac_faces_nodes = sps.find(g_h.face_nodes.T[frac_faces].T)[0]
+                nodes_of_frac_faces = frac_faces_nodes.reshape((frac_faces.size, g_h.dim))
                 frac_faces_reshaped = frac_faces.reshape((frac_faces.size, 1))
                 # Obtain the coordinates of the nodes of the fracture faces and the
                 # coordinates of the fracture faces centers
                 if rotated_coo:
-                    gh_rot = mde.RotatedGrid(gh)
+                    gh_rot = mde.RotatedGrid(g_h)
                     lagran_coo_nodes = gh_rot.nodes[:, nodes_of_frac_faces]
                     lagran_coo_fc = gh_rot.face_centers[:, frac_faces_reshaped]
                     lagran_coo = np.dstack((lagran_coo_nodes, lagran_coo_fc))
                 else:
-                    lagran_coo_nodes = gh.nodes[:, nodes_of_frac_faces]
-                    lagran_coo_fc = gh.face_centers[:, frac_faces_reshaped]
+                    lagran_coo_nodes = g_h.nodes[:, nodes_of_frac_faces]
+                    lagran_coo_fc = g_h.face_centers[:, frac_faces_reshaped]
                     lagran_coo = np.dstack((lagran_coo_nodes, lagran_coo_fc))
 
         return lagran_coo
@@ -380,9 +380,9 @@ class DiffusiveError(mde.ErrorEstimate):
 
         return trace_pressure
 
-    def _get_low_pressure(self, d_l: dict, frac_cells: np.ndarray):
+    def _get_low_pressure(self, d_l: dict, frac_cells: np.ndarray) -> np.ndarray:
         """
-        Obtains the coefficients of the projected lower-dimensional pressure.
+        Obtain coefficients of the projected lower-dimensional pressure.
 
         Parameters
         ----------
@@ -401,16 +401,16 @@ class DiffusiveError(mde.ErrorEstimate):
 
         # Retrieve lower-dimensional reconstructed pressure coefficients
         if "recon_p" in d_l[self.estimates_kw]:
-            p_low = d_l[self.estimates_kw]["recon_p"].copy()
+            p_low = d_l[self.estimates_kw]["recon_p"]
         else:
             raise ValueError("Pressure must be reconstructed first")
         p_low = p_low[frac_cells]
 
         return p_low
 
-    def _get_normal_velocity(self, d_e: dict):
+    def _get_normal_velocity(self, d_e: dict) -> np.ndarray:
         """
-        Obtains the normal velocities for each mortar cell.
+        Obtain the normal velocities for each mortar cell.
 
         Parameters
         ----------
@@ -419,16 +419,15 @@ class DiffusiveError(mde.ErrorEstimate):
         Raises
         ------
             ValueError
-                (*) If the mortar fluxes are not in the data dictionary
+                If the mortar fluxes are not in the data dictionary
 
         Returns
         -------
-            normal_velocity : normal velocities.
+            normal_velocity (np.ndarray): normal velocities (mg.num_cells, 1).
 
-        Technical note
-        --------------
-            The normal velocities are the mortar fluxes scaled by the mortar cell measure.
-            That is, area in 2D, length in 1D, an the unity in 0D.
+        Note
+        ----
+            The normal velocities are the mortar fluxes scaled by the mortar cell volumes.
 
         """
 
@@ -461,9 +460,9 @@ class DiffusiveError(mde.ErrorEstimate):
         Raises
         ------
             ValueError
-                (*) If the dimension of the mortar grid is different from zero.
-                (*) If the reconstructed pressures are not found in the data dictionaries.
-                (*) If the mortar flux is not found in the edge dictionary.
+                If the dimension of the mortar grid is different from zero.
+                If the reconstructed pressures are not found in the data dictionaries.
+                If the mortar flux is not found in the edge dictionary.
 
         Returns
         -------
@@ -471,7 +470,7 @@ class DiffusiveError(mde.ErrorEstimate):
                 The size of the array is mg.num_cells.
         """
 
-        # Get hold of mortar grids, neighboring grids, and data dicitionaries
+        # Get hold of mortar grids, neighboring grids, and data dictionaries
         mg = d_e["mortar_grid"]
         g_l, g_h = self.gb.nodes_of_edge(edge)
         d_h = self.gb.node_props(g_h)
@@ -480,10 +479,13 @@ class DiffusiveError(mde.ErrorEstimate):
         # Run sanity checks
         if mg.dim != 0:
             raise ValueError("Expected zero-dimensional mortar grid")
+
         if "recon_p" not in d_h[self.estimates_kw]:
             raise ValueError("Pressure must be reconstructed first")
+
         if "recon_p" not in d_l[self.estimates_kw]:
             raise ValueError("Pressure must be reconstructed first")
+
         if self.lam_name not in d_e[pp.STATE]:
             raise ValueError("Mortar fluxes not found in the data dictionary")
 
