@@ -448,6 +448,7 @@ class DiffusiveError(mde.ErrorEstimate):
         return normal_velocity
 
     # Interface errors for matching grids
+    # TODO: Review diffusive error for 0d mortars
     def _interface_diffusive_error_0d(self, edge: Edge, d_e: dict):
         """
         Computes interface diffusive flux error for 0D mortar grids.
@@ -504,21 +505,21 @@ class DiffusiveError(mde.ErrorEstimate):
 
         # Obtain the trace of the pressure of the 1D grid
         cells_of_frac_faces, _, _ = sps.find(g_h.cell_faces[frac_faces].T)
-        p_1d = d_h[self.estimates_kw]["recon_p"].copy()
+        p_1d = d_h[self.estimates_kw]["recon_p"]
         p_1d = p_1d[cells_of_frac_faces]
         coo_frac_faces = gh_rot.face_centers[:, frac_faces].T
         coo_frac_faces = coo_frac_faces[np.newaxis, :, :]
         trace_p = utils.eval_p1(p_1d, coo_frac_faces)
 
         # Obtain the pressure of the 0D grid
-        p_0d = d_l[self.estimates_kw]["recon_p"].copy()
+        p_0d = d_l[self.estimates_kw]["recon_p"]
         p_0d = p_0d[frac_cells]
 
         # Pressure jump
         p_jump = p_0d - trace_p
 
         # Retrieve mortar solution
-        mortar_flux = d_e[pp.STATE][self.lam_name].copy()
+        mortar_flux = d_e[pp.STATE][self.lam_name]
         normal_vel = mortar_flux / mg.cell_volumes
         normal_vel = normal_vel.reshape(mg.num_cells, 1)
 
@@ -540,7 +541,7 @@ class DiffusiveError(mde.ErrorEstimate):
         Raises
         ------
             ValueError
-                (*) If the dimension of the mortar grid is different from 1.
+                If the dimension of the mortar grid is different from 1.
 
         Returns
         -------
@@ -569,7 +570,7 @@ class DiffusiveError(mde.ErrorEstimate):
             # Rotate side-grid
             sidegrid_rot = mde.RotatedGrid(sidegrid)
 
-            # Obtain QuadPy elements
+            # Obtain quadpy elements
             elements = utils.get_quadpy_elements(sidegrid, sidegrid_rot)
 
             # Project relevant quanitites to the side grid
@@ -580,7 +581,10 @@ class DiffusiveError(mde.ErrorEstimate):
             # Declare integrand
             def integrand(x):
                 coors = x[np.newaxis, :, :]  # this is needed for 1D grids
-                p_jump = utils.eval_p1(deltap_side, coors)
+                if self.p_degree == 1:
+                    p_jump = utils.eval_p1(deltap_side, coors)
+                else:
+                    p_jump = utils.eval_p2(deltap_side, coors)
                 return (k_side ** (-0.5) * normalvel_side + k_side ** 0.5 * p_jump) ** 2
 
             # Compute integral
@@ -688,7 +692,10 @@ class DiffusiveError(mde.ErrorEstimate):
 
             # Declare integrand
             def integrand(x):
-                p_jump = utils.eval_p1(deltap_side, x)
+                if self.p_degree == 1:
+                    p_jump = utils.eval_p1(deltap_side, x)
+                else:
+                    p_jump = utils.eval_p2(deltap_side, x)
                 return (k_side ** (-0.5) * normalvel_side + k_side ** 0.5 * p_jump) ** 2
 
             # Compute integral
@@ -730,7 +737,7 @@ class DiffusiveError(mde.ErrorEstimate):
         normal_vel = self._get_normal_velocity(d_e)
 
         # Declare integration method
-        method = qp.t2.get_good_scheme(3)
+        method = qp.t2.get_good_scheme(4)
 
         # Retrieve side-grids tuples
         sides = mg.project_to_side_grids()
