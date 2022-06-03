@@ -477,7 +477,6 @@ class PressureReconstruction(mde.ErrorEstimate):
 
         # Abbreviations
         nn = g.num_nodes
-        nf = g.num_faces
         nc = g.num_cells
 
         # Sanity check
@@ -487,7 +486,7 @@ class PressureReconstruction(mde.ErrorEstimate):
         # Mappings
         cell_nodes_map, _, _ = sps.find(g.cell_nodes())
         cell_faces_map, _, _ = sps.find(g.cell_faces)
-        nodes_cell = cell_nodes_map.reshape(np.array([nc, g.dim + 1]))
+        nodes_cell = cell_nodes_map.reshape(np.array([nc, 2]))
 
         # Treatment of the cell-center pressures
         cc = g_rot.cell_centers
@@ -499,18 +498,20 @@ class PressureReconstruction(mde.ErrorEstimate):
         # Treatment of the nodes
         # Evaluate post-processed pressure at the nodes
         nx = g_rot.nodes[0][nodes_cell]  # local node x-coordinates
-        nodes_p = (
-                p2_coeff[:, 0] * nx ** 2  # c0x^2
-                + p2_coeff[:, 1] * nx  # c1x
+        nodes_p = np.empty((nc, 2))
+        for col in range(2):
+            nodes_p[:, col] = (
+                p2_coeff[:, 0] * nx[:, col] ** 2  # c0x^2
+                + p2_coeff[:, 1] * nx[:, col]  # c1x
                 + p2_coeff[:, 2]  # c2
-        )
+            )
 
         # Average nodal pressure
         node_cardinality = np.bincount(cell_nodes_map)
-        node_pressure = np.zeros(g.num_nodes)
-        for col in range(g.dim + 1):
+        node_pressure = np.zeros(nn)
+        for col in range(2):
             node_pressure += np.bincount(
-                nodes_cell[:, col], weights=nodes_p[:, col], minlength=g.num_nodes
+                nodes_cell[:, col], weights=nodes_p[:, col], minlength=nn
             )
         node_pressure /= node_cardinality
 
@@ -529,8 +530,9 @@ class PressureReconstruction(mde.ErrorEstimate):
         node_pressure[is_dir_node] = node_val_dir[is_dir_node]
 
         # Prepare for exporting
-        point_val = np.column_stack([node_pressure[nodes_cell], cc_p.reshape(nc, 1)])
-        point_coo = np.column_stack([nx, cc])
+        point_val = np.column_stack([node_pressure[nodes_cell], cc_p.reshape((nc, 1))])
+        point_coo = np.empty((1, nc, 3))
+        point_coo[0] = np.column_stack([nx, cc.reshape((nc, 1))])
 
         return point_val, point_coo
 
