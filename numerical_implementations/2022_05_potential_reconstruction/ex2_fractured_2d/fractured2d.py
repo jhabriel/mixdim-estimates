@@ -7,6 +7,7 @@ import pypardiso
 
 from analytical_2d import ExactSolution2D
 from true_errors_2d import TrueErrors2D
+import mdestimates.estimates_utils as utils
 
 # %% Study parameters
 recon_methods = ["cochez", "keilegavlen", "vohralik"]
@@ -16,7 +17,7 @@ for method in recon_methods:
     errors[method]["majorant"] = []
     errors[method]["true_error"] = []
     errors[method]["i_eff"] = []
-#mesh_sizes = [0.1, 0.05, 0.025, 0.0125, 0.00625]
+# mesh_sizes = [0.1, 0.05, 0.025, 0.0125, 0.00625]
 mesh_size = 0.1
 
 # Create grid bucket and extract data
@@ -150,11 +151,110 @@ for g, d in gb:
     d[pp.STATE][subdomain_variable] = pressure
     d[pp.STATE][flux_variable] = flux
 
-#%% Testing diffusive error
+# %% Testing diffusive error
 estimates = mde.ErrorEstimate(gb, lam_name=edge_variable, p_recon_method="vohralik")
-estimates.estimate_error()
-estimates.transfer_error_to_state()
+# estimates.estimate_error()
+# estimates.transfer_error_to_state()
 
+# Populating data dicitionaries with the key: self.estimates_kw
+estimates.init_estimates_data_keyword()
+
+print("Performing velocity reconstruction...", end="")
+vel_rec = mde.VelocityReconstruction(estimates)
+# 1.1: Compute full flux
+vel_rec.compute_full_flux()
+# 1.2: Reconstruct velocity
+vel_rec.reconstruct_velocity()
+print("\u2713")
+
+print("Performing pressure reconstruction...", end="")
+p_rec = mde.PressureReconstruction(estimates)
+# 2.1: Reconstruct pressure
+p_rec.reconstruct_pressure()
+print("\u2713")
+
+print("Computing upper bounds...", end="")
+# 3.1 Diffusive errors
+diffusive_error = mde.DiffusiveError(estimates)
+diffusive_error.compute_diffusive_error()
+
+# %% DEV P2 diffusive error
+
+# Loop through all the edges of the grid bucket
+for e, d in estimates.gb.edges():
+    edge = e
+    d_e = d
+    # Obtain the interface diffusive flux error
+    # diffusive_error = estimates.interface_diffusive_error(e, d_e)
+    # d_e[estimates.estimates_kw]["diffusive_error"] = diffusive_error
+
+# Get mortar grid and check dimensionality
+mg = d_e["mortar_grid"]
+if mg.dim != 1:
+    raise ValueError("Expected one-dimensional mortar grid")
+
+# Get hold of higher- and lower-dimensional neighbors and their dictionaries
+g_l, g_h = estimates.gb.nodes_of_edge(edge)
+d_h = estimates.gb.node_props(g_h)
+d_l = estimates.gb.node_props(g_l)
+
+# Retrieve normal diffusivity
+normal_diff = d_e[pp.PARAMETERS][estimates.kw]["normal_diffusivity"]
+if isinstance(normal_diff, int) or isinstance(normal_diff, float):
+    k = normal_diff * np.ones([mg.num_cells, 1])
+else:
+    k = normal_diff.reshape(mg.num_cells, 1)
+
+# Face-cell map between higher- and lower-dimensional subdomains
+frac_faces = sps.find(mg.primary_to_mortar_avg().T)[0]
+frac_cells = sps.find(mg.secondary_to_mortar_avg().T)[0]
+
+gh_rot = mde.RotatedGrid(g_h)
+gl_rot = mde.RotatedGrid(g_l)
+rotation_matrix = gl_rot.rotation_matrix
+dim_bool = gl_rot.dim_bool
+
+# Obtain the cells corresponding to the frac_faces
+cells_of_frac_faces, _, _ = sps.find(g_h.cell_faces[frac_faces].T)
+
+# Retrieve the coefficients of the polynomials corresponding to those cells
+if "recon_p" in d_h[estimates.estimates_kw]:
+    p_high = d_h[estimates.estimates_kw]["recon_p"]
+else:
+    raise ValueError("Pressure must be reconstructed first")
+p_high = p_high[cells_of_frac_faces]
+
+# Get nodes of the fracture faces
+nodes_of_frac_faces = np.reshape(
+    sps.find(g_h.face_nodes.T[frac_faces].T)[0], [frac_faces.size, g_h.dim]
+)
+
+
+def get_lagrangian_coordinates(grid) -> np.ndarray:
+    # Obtain the coordinates of the nodes of the fracture faces
+    lagran_coo_nodes = grid.nodes[:, nodes_of_frac_faces]
+    lagran_coo_fc = grid.face_centers[:, frac_faces.reshape((frac_faces.size, 1))]
+    lagran_coo = np.dstack((lagran_coo_nodes, lagran_coo_fc))
+    return lagran_coo
+
+
+# Evaluate the polynomials at the relevant Lagrangian nodes
+point_coo_rot = get_lagrangian_coordinates(gh_rot)
+point_val = utils.eval_p2(p_high, point_coo_rot)
+
+# Rotate the coordinates of the Lagrangian nodes w.r.t. the lower-dimensional grid
+point_coo = get_lagrangian_coordinates(g_h)
+point_edge_coo_rot = np.empty_like(point_coo)
+for element in range(frac_faces.size):
+    point_edge_coo_rot[:, element] = np.dot(rotation_matrix, point_coo[:, element])
+point_edge_coo_rot = point_edge_coo_rot[dim_bool]
+
+# Construct a polynomial (of reduced dimensionality) using the rotated coordinates
+trace_pressure = utils.interpolate_p2(point_val, point_edge_coo_rot)
+
+# Test if the values of the original polynomial match the new one
+point_val_rot = utils.eval_p2(trace_pressure, point_edge_coo_rot)
+np.testing.assert_almost_equal(point_val, point_val_rot, decimal=12)
 
 #     # %% Obtain error estimates (and transfer them to d[pp.STATE])
 #     for method in recon_methods:
