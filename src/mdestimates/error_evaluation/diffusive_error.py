@@ -299,9 +299,9 @@ class DiffusiveError(mde.ErrorEstimate):
 
         """
 
-        def get_edge_lagrangian_coordinates(grid: Union[pp.Grid, mde.RotatedGrid]):
+        def get_edge_lagrangian_coo(grid: Union[pp.Grid, mde.RotatedGrid]) -> np.ndarray:
             """
-            Get coordinates of the P2 Lagrangian nodes at the high-dim internal boundaries
+            Gets coordinates of the Lagrangian nodes of the internal higher-dim boundary.
 
             Parameters
             ----------
@@ -309,23 +309,23 @@ class DiffusiveError(mde.ErrorEstimate):
 
             Returns
             -------
-                coordinates (np.ndarray): Coordinates of the Lagrangian nodes.
+                lagran_coo (np.ndarray): Coordinates of the Lagrangian nodes of shape
+                    (frac_faces.size, 3)
 
             """
-
-            # Get cell-centered coordinates of the fracture faces
-
             # Get nodes of the fracture faces
             nodes_of_frac_faces = np.reshape(
                 sps.find(g_h.face_nodes.T[frac_faces].T)[0], [frac_faces.size, g_h.dim]
             )
 
-            # Obtain the coordinates of the nodes of the fracture faces
-
-            lagran_coo_ccs = grid.face_centers[:, frac_faces]
+            # Obtain the coordinates  nodes of the fracture faces
             lagran_coo_nodes = grid.nodes[:, nodes_of_frac_faces]
 
-            lagran_coo = np.stack((lagran_coo_ccs, lagran_coo_nodes))
+            # Obtain the coordinates of the fracture faces centers
+            lagran_coo_fc = grid.face_centers[:, frac_faces.reshape((frac_faces.size, 1))]
+
+            # Stack them
+            lagran_coo = np.dstack((lagran_coo_nodes, lagran_coo_fc))
 
             return lagran_coo
 
@@ -350,11 +350,11 @@ class DiffusiveError(mde.ErrorEstimate):
         # the lower-dimensional grid as reference.
 
         # Evaluate the polynomials at the relevant Lagrangian nodes
-        point_coo_rot = get_edge_lagrangian_coordinates(gh_rot)
+        point_coo_rot = get_edge_lagrangian_coo(gh_rot)
         point_val = utils.eval_p2(p_high, point_coo_rot)
 
         # Rotate the coordinates of the Lagrangian nodes w.r.t. the lower-dimensional grid
-        point_coo = get_edge_lagrangian_coordinates(g_h)
+        point_coo = get_edge_lagrangian_coo(g_h)
         point_edge_coo_rot = np.empty_like(point_coo)
         for element in range(frac_faces.size):
             point_edge_coo_rot[:, element] = np.dot(rotation_matrix, point_coo[:, element])
@@ -368,9 +368,6 @@ class DiffusiveError(mde.ErrorEstimate):
         np.testing.assert_almost_equal(point_val, point_val_rot, decimal=12)
 
         return trace_pressure
-
-
-
 
     def _get_high_pressure_trace(self,
                                  g_l: pp.Grid,
@@ -411,7 +408,7 @@ class DiffusiveError(mde.ErrorEstimate):
             -------
                 coordinates (np.ndarray): Coordinates of the Lagrangian nodes.
             """
-            # Get nodes of the fracture fraces
+            # Get nodes of the fracture faces
             nodes_of_frac_faces = np.reshape(
                 sps.find(g_h.face_nodes.T[frac_faces].T)[0], [frac_faces.size, g_h.dim]
             )
