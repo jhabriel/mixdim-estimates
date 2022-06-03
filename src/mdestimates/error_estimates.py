@@ -61,6 +61,11 @@ class ErrorEstimate:
             raise ValueError("Expected p_recon_method to be 'cochez', "
                              "'keilegavlen', or 'vohralik'")
 
+        if p_recon_method in ["cochez", "keilegavlen"]:
+            self.p_degree: int = 1
+        else:
+            self.p_degree: int = 2
+
         if conservation == "global" and poincare_list is None:
             raise TypeError("Since conservation is 'global', poincare_list "
                             "cannot be NoneType")
@@ -132,7 +137,7 @@ class ErrorEstimate:
 
         """
 
-        # Populating data dicitionaries with the key: self.estimates_kw
+        # Populating data dictionaries with the key: self.estimates_kw
         self.init_estimates_data_keyword()
 
         print("Performing velocity reconstruction...", end="")
