@@ -117,11 +117,7 @@ class TrueError(ExactSolution):
     def true_error(self) -> float:
 
         # Get hold of reconstructed pressure and create list of coefficients
-        if self.estimates.p_recon_method in ["keilegavlen", "cochez"]:
-            p = self.d[self.estimates.estimates_kw]["recon_p"]
-        else:
-            p = self.d[self.estimates.estimates_kw]["postprocessed_p"]
-
+        p = self.d[self.estimates.estimates_kw]["recon_p"]
         p = utils.poly2col(p)
 
         # Obtain elements and declare integration method
@@ -135,7 +131,7 @@ class TrueError(ExactSolution):
             gradp_exact_y = self.gradp("fun")[1](x[0], x[1])
 
             # gradp reconstructed in x and y
-            if self.estimates.p_recon_method in ["keilegavlen", "cochez"]:
+            if self.estimates.p_degree == 1:
                 gradp_recon_x = p[0] * np.ones_like(x[0])
                 gradp_recon_y = p[1] * np.ones_like(x[1])
             else:
