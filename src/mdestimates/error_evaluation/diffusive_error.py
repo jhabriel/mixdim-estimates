@@ -121,11 +121,11 @@ class DiffusiveError(mde.ErrorEstimate):
         # error, we need at integration methods of order 2 to compute the exact integrals
         elements = utils.get_quadpy_elements(g, g_rot)
         if g.dim == 1:
-            method = qp.c1.newton_cotes_closed(3)
+            method = qp.c1.newton_cotes_closed(5)
         elif g.dim == 2:
-            method = qp.t2.get_good_scheme(3)
+            method = qp.t2.get_good_scheme(5)
         else:
-            method = qp.t3.get_good_scheme(3)
+            method = qp.t3.get_good_scheme(5)
 
         # Obtain coefficients
         p = utils.poly2col(recon_p)
@@ -309,15 +309,28 @@ class DiffusiveError(mde.ErrorEstimate):
                 # Get edges of fracture faces
                 edge_nodes, _, face_edges = utils.edge_mappings(g_h)
                 frac_faces_edges = sps.find(face_edges.T[frac_faces].T)[0]
+                edges_of_frac_faces = frac_faces_edges.reshape((frac_faces.size, g_h.dim))
                 edge_nodes_flat = sps.find(edge_nodes)[0]
                 ne: int = np.shape(edge_nodes)[1]  # number of edges
-                edges_of_frac_faces = frac_faces_edges.reshape((frac_faces.size, g_h.dim))
                 nodes_of_edge = edge_nodes_flat.reshape((ne, 2))  # (ne, 2)
+                n0 = nodes_of_edge[:, 0]  # (ne,) set of first nodes of edges
+                n1 = nodes_of_edge[:, 1]  # (ne,) set of second nodes of edges
+                face_n0 = n0[edges_of_frac_faces]
+                face_n1 = n1[edges_of_frac_faces]
                 # Obtain coordinates of the nodes of the fracture faces and the coordinates
                 # of the fracture faces edge centers
                 if rotated_coo:
                     gh_rot = mde.RotatedGrid(g_h)
                     lagran_coo_nodes = gh_rot.nodes[:, nodes_of_frac_faces]
+                    lagran_coo_edges = 0.5 * (
+                            gh_rot.nodes[:, face_n0]
+                            + gh_rot.nodes[:, face_n1]
+                    )
+                    lagran_coo = np.dstack((lagran_coo_nodes, lagran_coo_edges))
+                else:
+                    lagran_coo_nodes = g_h.nodes[:, nodes_of_frac_faces]
+                    lagran_coo_edges = 0.5 * (g_h.nodes[:, face_n0] + g_h.nodes[:, face_n1])
+                    lagran_coo = np.dstack((lagran_coo_nodes, lagran_coo_edges))
 
             else:
                 # Get nodes of the fracture faces
