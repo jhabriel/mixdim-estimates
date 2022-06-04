@@ -193,19 +193,9 @@ for mesh_size in mesh_sizes:
         errors[method]["true_error"].append(true_error)
         errors[method]["i_eff"].append(i_eff)
 
-#%% Obtain relative efficiency indices
-true_errors = np.empty((len(mesh_sizes), len(recon_methods)))
-for mesh_idx, _ in enumerate(mesh_sizes):
-    for mthd_idx, method in enumerate(recon_methods):
-        true_errors[mesh_idx, mthd_idx] = errors[method]["true_error"][mesh_idx]
-min_true_errors = np.min(true_errors, axis=1)
-
-for method in recon_methods:
-    errors[method]["rel_i_eff"] = list(errors[method]["majorant"] / min_true_errors)
-
 #%% Plotting
 plt.rcParams.update({'font.size': 14})
-tab10 = colors.ListedColormap(plt.cm.tab10.colors[:6])
+tab10 = colors.ListedColormap(plt.cm.tab10.colors[:3])
 fig, (ax1, ax2) = plt.subplots(
     nrows=1,
     ncols=2,
@@ -313,18 +303,6 @@ ax2.plot(
 
 ax2.plot(
     np.log2(1/np.array(mesh_sizes)),
-    np.array(errors["cochez"]["rel_i_eff"]),
-    linewidth=4,
-    linestyle="-",
-    color=tab10.colors[0],
-    alpha=0.5,
-    marker=".",
-    markersize="10",
-    label=r"$I_{\mathrm{rel},\mathrm{PR1}}$",
-)
-
-ax2.plot(
-    np.log2(1/np.array(mesh_sizes)),
     np.array(errors["keilegavlen"]["i_eff"]),
     linewidth=2,
     linestyle="--",
@@ -332,18 +310,6 @@ ax2.plot(
     marker=".",
     markersize="10",
     label=r"$I_{\mathrm{PR2}}$",
-)
-
-ax2.plot(
-    np.log2(1/np.array(mesh_sizes)),
-    np.array(errors["keilegavlen"]["rel_i_eff"]),
-    linewidth=4,
-    linestyle="-",
-    alpha=0.5,
-    color=tab10.colors[1],
-    marker=".",
-    markersize="10",
-    label=r"$I_{\mathrm{rel},\mathrm{PR2}}$",
 )
 
 ax2.plot(
@@ -356,19 +322,6 @@ ax2.plot(
     markersize="10",
     label=r"$I_{\mathrm{PR3}}$",
 )
-
-ax2.plot(
-    np.log2(1/np.array(mesh_sizes)),
-    np.array(errors["vohralik"]["rel_i_eff"]),
-    linewidth=4,
-    linestyle="-",
-    alpha=0.5,
-    marker=".",
-    markersize="10",
-    color=tab10.colors[2],
-    label=r"$I_{\mathrm{rel},\mathrm{PR3}}$",
-)
-
 
 ax2.set_xlabel(r"$\mathrm{log_2}\left(1/h\right)$")
 ax2.set_ylabel(r"$\mathrm{Efficiency~index}$")
