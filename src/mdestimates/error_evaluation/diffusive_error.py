@@ -303,7 +303,22 @@ class DiffusiveError(mde.ErrorEstimate):
                 lagran_coo = g_h.nodes[:, nodes_of_frac_faces]
         else:
             if g_h.dim == 3:
-                raise NotImplementedError("P2 elements not implemented for 3D")
+                # Get nodes of fracture faces
+                frac_faces_nodes = sps.find(g_h.face_nodes.T[frac_faces].T)[0]
+                nodes_of_frac_faces = frac_faces_nodes.reshape((frac_faces.size, g_h.dim))
+                # Get edges of fracture faces
+                edge_nodes, _, face_edges = utils.edge_mappings(g_h)
+                frac_faces_edges = sps.find(face_edges.T[frac_faces].T)[0]
+                edge_nodes_flat = sps.find(edge_nodes)[0]
+                ne: int = np.shape(edge_nodes)[1]  # number of edges
+                edges_of_frac_faces = frac_faces_edges.reshape((frac_faces.size, g_h.dim))
+                nodes_of_edge = edge_nodes_flat.reshape((ne, 2))  # (ne, 2)
+                # Obtain coordinates of the nodes of the fracture faces and the coordinates
+                # of the fracture faces edge centers
+                if rotated_coo:
+                    gh_rot = mde.RotatedGrid(g_h)
+                    lagran_coo_nodes = gh_rot.nodes[:, nodes_of_frac_faces]
+
             else:
                 # Get nodes of the fracture faces
                 frac_faces_nodes = sps.find(g_h.face_nodes.T[frac_faces].T)[0]
