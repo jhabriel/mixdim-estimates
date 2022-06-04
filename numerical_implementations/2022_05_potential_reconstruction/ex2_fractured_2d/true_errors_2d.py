@@ -246,11 +246,7 @@ class TrueErrors2D(ExactSolution2D):
     def pressure_error_squared_2d(self) -> np.ndarray:
 
         # Get hold of reconstructed pressure and create list of coefficients
-        if self.estimates.p_recon_method in ["keilegavlen", "cochez"]:
-            p = self.d2d[self.estimates.estimates_kw]["recon_p"]
-        else:
-            p = self.d2d[self.estimates.estimates_kw]["recon_p"]
-
+        p = self.d2d[self.estimates.estimates_kw]["recon_p"]
         p = utils.poly2col(p)
 
         # Obtain elements and declare integration method
@@ -289,11 +285,7 @@ class TrueErrors2D(ExactSolution2D):
     def pressure_error_squared_1d(self) -> np.ndarray:
 
         # Get hold of reconstructed pressure and create list of coefficients
-        if self.estimates.p_recon_method in ["keilegavlen", "cochez"]:
-            p = self.d1d[self.estimates.estimates_kw]["recon_p"]
-        else:
-            p = self.d1d[self.estimates.estimates_kw]["recon_p"]
-
+        p = self.d1d[self.estimates.estimates_kw]["recon_p"]
         p = utils.poly2col(p)
 
         # Obtain elements and declare integration method
