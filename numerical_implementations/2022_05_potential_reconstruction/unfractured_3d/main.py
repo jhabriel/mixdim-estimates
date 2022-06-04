@@ -11,7 +11,7 @@ import mdestimates.estimates_utils as utils
 
 #%% Study parameters
 recon_methods = ["cochez", "keilegavlen", "vohralik"]
-mesh_sizes = [0.2, 0.15, 0.1, 0.08, 0.06, 0.05]
+mesh_sizes = [0.2, 0.15, 0.1, 0.08, 0.06]
 errors = {method: {} for method in recon_methods}
 for method in recon_methods:
     errors[method]["majorant"] = []
