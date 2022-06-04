@@ -1,7 +1,7 @@
 import numpy as np
 import porepy as pp
-import scipy.sparse as sps
 import matplotlib.pyplot as plt
+import matplotlib.colors as colors
 import mdestimates as mde
 import pypardiso
 
@@ -193,90 +193,104 @@ for mesh_size in mesh_sizes:
         errors[method]["true_error"].append(true_error)
         errors[method]["i_eff"].append(i_eff)
 
+#%% Obtain relative efficiency indices
+true_errors = np.empty((len(mesh_sizes), len(recon_methods)))
+for mesh_idx, _ in enumerate(mesh_sizes):
+    for mthd_idx, method in enumerate(recon_methods):
+        true_errors[mesh_idx, mthd_idx] = errors[method]["true_error"][mesh_idx]
+min_true_errors = np.min(true_errors, axis=1)
+
+for method in recon_methods:
+    errors[method]["rel_i_eff"] = list(errors[method]["majorant"] / min_true_errors)
+
 #%% Plotting
-plt.rcParams.update({'font.size': 13})
+plt.rcParams.update({'font.size': 14})
+tab10 = colors.ListedColormap(plt.cm.tab10.colors[:6])
 fig, (ax1, ax2) = plt.subplots(
     nrows=1,
     ncols=2,
-    gridspec_kw={'width_ratios': [2, 1]},
+    gridspec_kw={'width_ratios': [3, 2]},
     figsize=(11, 5)
 )
 
 ax1.plot(
     np.log2(1/np.array(mesh_sizes)),
     np.log2(np.array(errors["cochez"]["majorant"])),
-    linewidth=3,
-    linestyle="-",
-    color="red",
+    linewidth=2,
+    linestyle="--",
+    color=tab10.colors[0],
     marker=".",
     markersize="10",
-    label="Majorant PR1",
+    label=r"$\mathfrak{M}_{\mathrm{PR1}}$",
 )
 
 ax1.plot(
     np.log2(1/np.array(mesh_sizes)),
     np.log2(np.array(errors["cochez"]["true_error"])),
-    linewidth=2,
-    linestyle="--",
-    color="red",
+    linewidth=4,
+    linestyle="-",
+    alpha=0.5,
+    color=tab10.colors[0],
     marker=".",
     markersize="10",
-    label="True error PR1",
+    label=r"$\mathfrak{T}_{\mathrm{PR1}}$",
 )
 
 ax1.plot(
     np.log2(1/np.array(mesh_sizes)),
     np.log2(np.array(errors["keilegavlen"]["majorant"])),
-    linewidth=3,
-    linestyle="-",
-    color="blue",
+    linewidth=2,
+    linestyle="--",
+    color=tab10.colors[1],
     marker=".",
     markersize="10",
-    label="Majorant PR2",
+    label=r"$\mathfrak{M}_{\mathrm{PR2}}$",
 )
 
 ax1.plot(
     np.log2(1/np.array(mesh_sizes)),
     np.log2(np.array(errors["keilegavlen"]["true_error"])),
-    linewidth=2,
-    linestyle="--",
-    color="blue",
+    linewidth=4,
+    linestyle="-",
+    color=tab10.colors[1],
+    alpha=0.5,
     marker=".",
     markersize="10",
-    label="True error PR2",
+    label=r"$\mathfrak{T}_{\mathrm{PR2}}$",
 )
 
 ax1.plot(
     np.log2(1/np.array(mesh_sizes)),
     np.log2(np.array(errors["vohralik"]["majorant"])),
-    linewidth=3,
-    linestyle="-",
-    color="green",
+    linewidth=2,
+    linestyle="--",
+    color=tab10.colors[2],
     marker=".",
     markersize="10",
-    label="Majorant PR3",
+    label=r"$\mathfrak{M}_{\mathrm{PR3}}$",
 )
 
 ax1.plot(
     np.log2(1/np.array(mesh_sizes)),
     np.log2(np.array(errors["vohralik"]["true_error"])),
-    linewidth=2,
-    linestyle="--",
-    color="green",
+    linewidth=4,
+    linestyle="-",
+    color=tab10.colors[2],
+    alpha=0.5,
     marker=".",
     markersize="10",
-    label="True error PR3",
+    label=r"$\mathfrak{T}_{\mathrm{PR3}}$",
 )
 
 # Plot reference line
-x1 = 0
-y1 = 2
-y2 = -2
+x1 = 7
+y1 = -8
+y2 = -4.5
 x2 = x1 - y2 + y1
 ax1.plot(
     [x1, x2],
     [y1, y2],
-    linewidth=3,
+    linewidth=2,
     linestyle="-",
     color="black",
     label="Linear"
@@ -289,40 +303,77 @@ ax1.legend()
 ax2.plot(
     np.log2(1/np.array(mesh_sizes)),
     np.array(errors["cochez"]["i_eff"]),
-    linewidth=3,
+    linewidth=2,
+    linestyle="--",
+    color=tab10.colors[0],
+    marker=".",
+    markersize="9",
+    label=r"$I_{\mathrm{PR1}}$",
+)
+
+ax2.plot(
+    np.log2(1/np.array(mesh_sizes)),
+    np.array(errors["cochez"]["rel_i_eff"]),
+    linewidth=4,
     linestyle="-",
-    color="red",
+    color=tab10.colors[0],
+    alpha=0.5,
     marker=".",
     markersize="10",
-    label="PR1",
+    label=r"$I_{\mathrm{rel},\mathrm{PR1}}$",
 )
 
 ax2.plot(
     np.log2(1/np.array(mesh_sizes)),
     np.array(errors["keilegavlen"]["i_eff"]),
-    linewidth=3,
-    linestyle="-",
-    color="blue",
+    linewidth=2,
+    linestyle="--",
+    color=tab10.colors[1],
     marker=".",
     markersize="10",
-    label="PR2",
+    label=r"$I_{\mathrm{PR2}}$",
+)
+
+ax2.plot(
+    np.log2(1/np.array(mesh_sizes)),
+    np.array(errors["keilegavlen"]["rel_i_eff"]),
+    linewidth=4,
+    linestyle="-",
+    alpha=0.5,
+    color=tab10.colors[1],
+    marker=".",
+    markersize="10",
+    label=r"$I_{\mathrm{rel},\mathrm{PR2}}$",
 )
 
 ax2.plot(
     np.log2(1/np.array(mesh_sizes)),
     np.array(errors["vohralik"]["i_eff"]),
-    linewidth=3,
-    linestyle="-",
-    color="green",
+    linewidth=2,
+    linestyle="--",
+    color=tab10.colors[2],
     marker=".",
     markersize="10",
-    label="PR3",
+    label=r"$I_{\mathrm{PR3}}$",
 )
+
+ax2.plot(
+    np.log2(1/np.array(mesh_sizes)),
+    np.array(errors["vohralik"]["rel_i_eff"]),
+    linewidth=4,
+    linestyle="-",
+    alpha=0.5,
+    marker=".",
+    markersize="10",
+    color=tab10.colors[2],
+    label=r"$I_{\mathrm{rel},\mathrm{PR3}}$",
+)
+
 
 ax2.set_xlabel(r"$\mathrm{log_2}\left(1/h\right)$")
 ax2.set_ylabel(r"$\mathrm{Efficiency~index}$")
 ax2.legend()
 
 plt.tight_layout()
-plt.savefig("unfractured.pdf")
+plt.savefig("fractured_2d.pdf")
 plt.show()
