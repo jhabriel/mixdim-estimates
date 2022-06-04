@@ -404,7 +404,7 @@ class DiffusiveError(mde.ErrorEstimate):
         else:
             point_val_rot = utils.eval_p2(trace_pressure, point_edge_coo_rot)
 
-        np.testing.assert_almost_equal(point_val, point_val_rot, decimal=12)
+        np.testing.assert_almost_equal(point_val, point_val_rot, decimal=9)
 
         return trace_pressure
 
@@ -535,9 +535,20 @@ class DiffusiveError(mde.ErrorEstimate):
         cells_of_frac_faces, _, _ = sps.find(g_h.cell_faces[frac_faces].T)
         p_1d = d_h[self.estimates_kw]["recon_p"]
         p_1d = p_1d[cells_of_frac_faces]
-        coo_frac_faces = gh_rot.face_centers[:, frac_faces].T
-        coo_frac_faces = coo_frac_faces[np.newaxis, :, :]
-        trace_p = utils.eval_p1(p_1d, coo_frac_faces)
+        if self.p_degree == 1:
+            coo_frac_faces = gh_rot.face_centers[:, frac_faces].T
+            coo_frac_faces = coo_frac_faces[np.newaxis, :, :]
+            trace_p = utils.eval_p1(p_1d, coo_frac_faces)
+        else:
+            coo_frac_faces = gh_rot.face_centers[:, frac_faces].T
+            coo_frac_faces = coo_frac_faces[np.newaxis, :, :]
+
+            coo_frac_cc = gh_rot.cell_centers[:, frac_faces].T
+            coo_frac_cc = coo_frac_cc[np.newaxis, :, :]
+
+            coo_frac = np.dstack((coo_frac_faces, coo_frac_cc))
+
+            trace_p = utils.eval_p2(p_1d, coo_frac)
 
         # Obtain the pressure of the 0D grid
         p_0d = d_l[self.estimates_kw]["recon_p"]
