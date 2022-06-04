@@ -175,10 +175,7 @@ class TrueError(ExactSolution):
     def true_error(self) -> float:
 
         # Get hold of reconstructed pressure and create list of coefficients
-        if self.estimates.p_recon_method in ["keilegavlen", "cochez"]:
-            p = self.d[self.estimates.estimates_kw]["recon_p"]
-        else:
-            p = self.d[self.estimates.estimates_kw]["postprocessed_p"]
+        p = self.d[self.estimates.estimates_kw]["recon_p"]
 
         p = utils.poly2col(p)
 
@@ -201,7 +198,7 @@ class TrueError(ExactSolution):
             # gradp(x,y,z)|K = [ c1x + 2c4y + c5z + c6 ]
             #                  [ c2x + c5y + 2c7z + c8 ]
             #
-            if self.estimates.p_recon_method in ["keilegavlen", "cochez"]:
+            if self.estimates.p_degree == 1:
                 gradp_recon_x = p[0] * np.ones_like(x[0])
                 gradp_recon_y = p[1] * np.ones_like(x[1])
                 gradp_recon_z = p[2] * np.ones_like(x[2])
