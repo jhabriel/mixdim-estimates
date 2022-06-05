@@ -543,7 +543,7 @@ class DiffusiveError(mde.ErrorEstimate):
             coo_frac_faces = gh_rot.face_centers[:, frac_faces].T
             coo_frac_faces = coo_frac_faces[np.newaxis, :, :]
 
-            coo_frac_cc = gh_rot.cell_centers[:, frac_faces].T
+            coo_frac_cc = gh_rot.cell_centers[:, cells_of_frac_faces].T
             coo_frac_cc = coo_frac_cc[np.newaxis, :, :]
 
             coo_frac = np.dstack((coo_frac_faces, coo_frac_cc))
