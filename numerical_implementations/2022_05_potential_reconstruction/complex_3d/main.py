@@ -147,9 +147,6 @@ for mesh_size in mesh_sizes:
         d[pp.STATE][subdomain_variable] = pressure
         d[pp.STATE][flux_variable] = flux
 
-    if mesh_size == 0.5:
-        exporter.write_vtu(["pressure"])
-
     for method in recon_methods:
 
         # %% Obtain error estimates (and transfer them to d[pp.STATE])
@@ -164,6 +161,9 @@ for mesh_size in mesh_sizes:
         errors[method]["majorant"].append(majorant)
         print(f"Majorant: {majorant}")
         print(50 * "-")
+
+        if mesh_size == 0.5 and method == "vohralik":
+            exporter.write_vtu(["pressure", "diffusive_error", "residual_error"])
 
 #%% Plotting
 plt.rcParams.update({'font.size': 14})
