@@ -1,4 +1,6 @@
-# Running mdestimates within a conda environment
+# Running mixdim-estimates using conda
+
+This is set of instructions on how to set up a `conda` environment to install an run the `mixdim-estimates` package.
 
 ## Set up a conda environment 
 
@@ -16,48 +18,56 @@ conda config --add channels conda-forge
 ```
 4. Create a new conda environment
 ```
-conda create --name mdenv python=3.9
+conda create --name mdenv python=3.10
 ```
 5. Activate your environment
 ```
 conda activate mdenv
 ```
-6. Install a few important libraries
-```
-conda install git jupyter notebook
-```
 
-## Install quadpy
-Unfortunately, `quadpy` is now proprietary. However, we can install the latest open source version.
+## Install critical packages using conda
+
+Some libraries **must** be installed using `conda`. The rest can be installed using `pip`
 ```
-conda install conda-forge::quadpy==0.16.10
+conda install numpy=1.21.2 scipy=1.7.3 quadpy=0.16.10 'matplotlib<3.6' jupyter notebook
 ```
 
 ## Install PorePy
-1. Head to a folder where you wish to clone PorePy, clone it, and checkout commit `67b32246`:
-```
-git clone https://github.com/pmgbergen/porepy.git
-cd porepy
-git fetch --all
-git checkout 67b32246
-```
-2. Install PorePy requirements using conda
-```
-conda install --file requirements_dev.txt
-```
-3. Install PorePy using pip
-```
-pip install --user -e .
-```
-4. Check your PorePy installation
-```
-pytest
-```
 
-## Install mdestimates
-Head to the same folder you've installed PorePy, clone the development version of `mixdim-estimates` and install using pip:
-```
-git clone https://github.com/jhabriel/mixdim-estimates.git
-cd mixdim-estimates
-pip install --user -e .
-```
+1. Go to `https://github.com/pmgbergen/porepy.git` and manually download (as a zip) the entire PorePy repository corresponding to commit `67b32246`. This is a somewhat old version of PorePy, we are now currently working on updating `mdestimates` to be in sync with the latest PorePy version.
+2. Rename the folder to `porepy_mde` and move it inside a folder named `summer_school_mixdim`.
+3. In your terminal, go inside the `porepy_mde` folder.
+4. Install the remaining required libraries using `pip`:
+   ```
+   pip install -r -requirements_dev.txt
+   ```
+5. Now, install PorePy in user-editable mode:
+   ```
+   pip install --user -e .
+   ```
+
+## Install `mdestimates`
+
+1. Head to the `summer_school_mixdim` folder once again.
+2. Clone the `mdestimates` repository:
+   ```
+   git clone https://github.com/jhabriel/mixdim-estimates.git
+   ```
+3. Navigate inside the `mixdim-estimates` folder
+   ```
+   cd mixdim-estimates
+   ```
+4. Install `mdestimates` in user-editable mode:
+   ```
+   pip install --user -e .
+   ```
+
+## Run the tutorial
+
+1. In your terminal, type
+   ```
+   jupyter notebook
+   ```
+   This should open your default browser.
+2. Go to `tutorials` and open `basic_tutorial.ipynb`.
+3. You should be able to run the notebook withouth any errors.
